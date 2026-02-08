@@ -27,21 +27,20 @@
 
   body {
     background-color: #030712;
-    background-image: radial-gradient(circle at 50% 0%, rgba(6, 182, 212, 0.15) 0%, transparent 50%), linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
-    background-size: 100% 100%, 40px 40px, 40px 40px;
+    background-image: radial-gradient(circle at 50% 0%, rgba(6, 182, 212, 0.15), transparent 50%);
     font-family: 'Inter', system-ui, sans-serif;
-    overflow-x: hidden;
+    color: white;
   }
 }
 
-/* Perspective Grid Floor */
+/* Perspective Grid Floor - Simplified */
 .cyber-grid {
   position: absolute;
   bottom: 0;
   left: 0;
   width: 100%;
   height: 50%;
-  background: linear-gradient(transparent 50%, rgba(6, 182, 212, 0.1) 100%), repeating-linear-gradient(90deg, rgba(6, 182, 212, 0.05) 0px, rgba(6, 182, 212, 0.05) 1px, transparent 1px, transparent 40px);
+  background: rgba(6, 182, 212, 0.05);
   transform: perspective(1000px) rotateX(10deg) translateY(100px) scale(1.5);
   pointer-events: none;
   z-index: -1;
@@ -51,33 +50,35 @@
 
 @layer components {
   .glass-panel {
-    @apply bg-slate-900/60 backdrop-blur-md border border-slate-700/50 shadow-xl;
+    @apply bg-slate-900 backdrop-blur-md border border-slate-700 shadow-xl;
   }
 
   .cyber-card {
-    @apply relative overflow-hidden bg-slate-900/80 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl transition-all duration-300;
+    @apply relative overflow-hidden bg-slate-900 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl transition-all duration-300;
   }
 
   .cyber-card::before {
     content: '';
-    @apply absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-cyan-500 to-transparent opacity-50;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, #06b6d4, transparent);
+    opacity: 0.5;
   }
 
   .cyber-button {
     @apply relative overflow-hidden px-6 py-3 rounded-lg font-bold uppercase tracking-wider transition-all duration-300;
-    background: linear-gradient(45deg, transparent 5%, rgba(6, 182, 212, 0.1) 5%);
+    background: #030712;
     border: 1px solid rgba(6, 182, 212, 0.3);
     color: #06b6d4;
-    box-shadow: 6px 0 0 rgba(6, 182, 212, 0.1);
   }
 
   .cyber-button:hover {
-    @apply bg-cyan-500/10 text-cyan-300 shadow-[0_0_20px_rgba(6, 182, 212, 0.4)];
+    @apply bg-cyan-900 text-cyan-300;
     border-color: #06b6d4;
-  }
-
-  .cyber-button:active {
-    @apply scale-95;
+    box-shadow: 0 0 20px rgba(6, 182, 212, 0.4);
   }
 }
 
@@ -86,20 +87,12 @@
     text-shadow: 0 0 10px rgba(6, 182, 212, 0.7);
   }
 
-  .border-glow {
-    box-shadow: 0 0 10px rgba(6, 182, 212, 0.3), inset 0 0 5px rgba(6, 182, 212, 0.1);
-  }
-
   .animate-scan {
     animation: scan 4s linear infinite;
   }
 
   .animate-pulse-fast {
     animation: pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-  }
-
-  .animate-float {
-    animation: float 6s ease-in-out infinite;
   }
 }
 
@@ -113,19 +106,7 @@
   }
 }
 
-@keyframes float {
-
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-
-  50% {
-    transform: translateY(-10px);
-  }
-}
-
-/* Custom Scrollbar for Terminal */
+/* Scrollbar */
 .terminal-scrollbar::-webkit-scrollbar {
   width: 6px;
 }
@@ -139,11 +120,7 @@
   border-radius: 3px;
 }
 
-.terminal-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #06b6d4;
-}
-
-/* CRT Scanline Effect */
+/* CRT Scanline - Simplified */
 .scanlines::before {
   content: " ";
   display: block;
@@ -152,8 +129,7 @@
   left: 0;
   bottom: 0;
   right: 0;
-  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+  background: rgba(0, 0, 0, 0.1);
   z-index: 100;
-  background-size: 100% 2px, 3px 100%;
   pointer-events: none;
 }
