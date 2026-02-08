@@ -5,7 +5,7 @@ interface StatCardProps {
     label: string;
     value: string;
     subValue?: string;
-    color: "cyan" | "purple" | "rose" | "emerald";
+    color: "cyan" | "purple" | "rose" | "emerald" | "red" | "blue" | "green" | "orange";
     trend?: "up" | "down" | "neutral";
 }
 
@@ -15,13 +15,23 @@ export function StatCard({ icon: Icon, label, value, subValue, color, trend }: S
         purple: "text-purple-400 border-purple-500/30 bg-purple-500/5",
         rose: "text-rose-400 border-rose-500/30 bg-rose-500/5",
         emerald: "text-emerald-400 border-emerald-500/30 bg-emerald-500/5",
+        // Fallbacks
+        red: "text-rose-400 border-rose-500/30 bg-rose-500/5",
+        blue: "text-cyan-400 border-cyan-500/30 bg-cyan-500/5",
+        green: "text-emerald-400 border-emerald-500/30 bg-emerald-500/5",
+        orange: "text-orange-400 border-orange-500/30 bg-orange-500/5",
     };
 
-    const glowColors = {
+    const glowColors: Record<string, string> = {
         cyan: "shadow-[0_0_20px_-5px_rgba(34,211,238,0.3)]",
         purple: "shadow-[0_0_20px_-5px_rgba(168,85,247,0.3)]",
         rose: "shadow-[0_0_20px_-5px_rgba(251,113,133,0.3)]",
         emerald: "shadow-[0_0_20px_-5px_rgba(52,211,153,0.3)]",
+        // Fallbacks
+        red: "shadow-[0_0_20px_-5px_rgba(251,113,133,0.3)]",
+        blue: "shadow-[0_0_20px_-5px_rgba(34,211,238,0.3)]",
+        green: "shadow-[0_0_20px_-5px_rgba(52,211,153,0.3)]",
+        orange: "shadow-[0_0_20px_-5px_rgba(251,146,60,0.3)]",
     };
 
     return (
