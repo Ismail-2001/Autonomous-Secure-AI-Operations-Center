@@ -1,0 +1,98 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: asoc-postgres
+    environment:
+      POSTGRES_DB: asoc
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis for caching and message queue
+  redis:
+    image: redis:7-alpine
+    container_name: asoc-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # Open Policy Agent
+  opa:
+    image: openpolicyagent/opa:latest
+    container_name: asoc-opa
+    ports:
+      - "8181:8181"
+    command:
+      - "run"
+      - "--server"
+      - "--addr=0.0.0.0:8181"
+      - "/policies"
+    volumes:
+      - ./guardrails/policies:/policies
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "http://localhost:8181/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # A-SOC Backend (Python)
+  asoc-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: asoc-backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      opa:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/asoc
+      REDIS_URL: redis://redis:6379/0
+      OPA_URL: http://opa:8181
+      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./agents:/app/agents
+      - ./core:/app/core
+      - ./guardrails:/app/guardrails
+
+  # Next.js Dashboard
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    container_name: asoc-dashboard
+    depends_on:
+      - asoc-backend
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://asoc-backend:8000
+
+volumes:
+  postgres_data:
+
+networks:
+  default:
+    name: asoc-network
