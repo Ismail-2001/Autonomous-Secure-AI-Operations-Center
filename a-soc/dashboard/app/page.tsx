@@ -15,10 +15,13 @@ interface ThreatEvent {
 }
 
 interface AgentUpdate {
+  id?: string;
+  timestamp: string;
   agent: string;
   status: string;
   message: string;
   severity: string;
+  is_background?: boolean;
 }
 
 interface ApprovalRequest {
@@ -35,10 +38,12 @@ interface GraphData {
 
 export default function Dashboard() {
   const [logs, setLogs] = useState<AgentUpdate[]>([]);
+  const [backgroundLogs, setBackgroundLogs] = useState<AgentUpdate[]>([]);
   const [running, setRunning] = useState(false);
   const [ws, setWs] = useState<WebSocket | null>(null);
   const [approvalRequest, setApprovalRequest] = useState<ApprovalRequest | null>(null);
   const [blastRadius, setBlastRadius] = useState<GraphData | null>(null);
+  const [activeTab, setActiveTab] = useState<'incidents' | 'telemetry'>('incidents');
 
   // Stats
   const [stats, setStats] = useState({
@@ -49,8 +54,8 @@ export default function Dashboard() {
   });
 
   useEffect(() => {
-    // Connect to Python backend via WebSocket
-    const socket = new WebSocket("ws://localhost:9002/ws/threat-feed");
+    // Connect to Python backend via WebSocket on 9003
+    const socket = new WebSocket("ws://localhost:9003/ws/threat-feed");
 
     socket.onopen = () => {
       console.log("Connected to A-SOC Python Backend");
@@ -72,14 +77,21 @@ export default function Dashboard() {
       }
 
       if (data.agent) {
-        setLogs((prev) => [data, ...prev]);
-
-        // Update stats based on incoming agent activity
-        if (data.severity === "high" || data.severity === "critical") {
-          setStats(prev => ({ ...prev, activeThreats: prev.activeThreats + 1 }));
+        if (data.is_background) {
+          setBackgroundLogs(prev => [data, ...prev].slice(0, 50));
+        } else {
+          setLogs((prev) => [data, ...prev]);
+          setActiveTab('incidents'); // Switch to incidents tab when real action happens
         }
-        if (data.status === "success" || data.status === "logged") {
-          setStats(prev => ({ ...prev, resolved: prev.resolved + 1, activeThreats: Math.max(0, prev.activeThreats - 1) }));
+
+        // Update stats based on incoming agent activity (only for non-background)
+        if (!data.is_background) {
+          if (data.severity === "high" || data.severity === "critical") {
+            setStats(prev => ({ ...prev, activeThreats: prev.activeThreats + 1 }));
+          }
+          if (data.status === "success" || data.status === "logged") {
+            setStats(prev => ({ ...prev, resolved: prev.resolved + 1, activeThreats: Math.max(0, prev.activeThreats - 1) }));
+          }
         }
       }
     };
@@ -94,7 +106,8 @@ export default function Dashboard() {
   const runSimulation = () => {
     if (ws && ws.readyState === WebSocket.OPEN) {
       setRunning(true);
-      setLogs([]); // Clear previous logs
+      setLogs([]); // Clear previous incident logs
+      setBlastRadius(null);
       ws.send("START_SIMULATION"); // Trigger Python backend
     }
   };
@@ -202,63 +215,116 @@ export default function Dashboard() {
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-        {/* Live Threat Feed */}
+        {/* Live Threat Feed & Tabs */}
         <div className="lg:col-span-2 space-y-4">
           <div className="flex items-center justify-between mb-2">
-            <h2 className="text-xl font-semibold flex items-center gap-2">
-              <Eye className="w-5 h-5 text-blue-400" />
-              Live Operator Feed
-            </h2>
-            <span className="text-xs text-slate-500 animate-pulse">Receiving telemetry...</span>
+            <div className="flex gap-4">
+              <button
+                onClick={() => setActiveTab('incidents')}
+                className={`text-xl font-semibold flex items-center gap-2 transition-all pb-2 border-b-2 ${activeTab === 'incidents' ? 'text-blue-400 border-blue-400' : 'text-slate-500 border-transparent hover:text-slate-300'}`}
+              >
+                <AlertTriangle className="w-5 h-5" />
+                Incident Insights
+              </button>
+              <button
+                onClick={() => setActiveTab('telemetry')}
+                className={`text-xl font-semibold flex items-center gap-2 transition-all pb-2 border-b-2 ${activeTab === 'telemetry' ? 'text-cyan-400 border-cyan-400' : 'text-slate-500 border-transparent hover:text-slate-300'}`}
+              >
+                <Activity className="w-5 h-5" />
+                System Telemetry
+              </button>
+            </div>
+            <span className="text-xs text-slate-500 animate-pulse">
+              {activeTab === 'incidents' ? 'Monitoring Critical Assets...' : 'Analyzing Benign Activity...'}
+            </span>
           </div>
 
-          <div className="bg-slate-900/50 backdrop-blur-xl border border-slate-800 rounded-2xl p-6 min-h-[500px] max-h-[600px] overflow-y-auto">
-            {logs.length === 0 ? (
-              <div className="text-center text-slate-500 mt-20">
-                <Shield className="w-16 h-16 mx-auto mb-4 opacity-20" />
-                <p>Waiting for simulation start...</p>
-              </div>
-            ) : (
-              logs.map((log, i) => (
-                <div key={i} className={`mb-4 p-4 rounded-lg border-l-4 bg-slate-800/40 animate-fade-in ${log.severity === 'critical' ? 'border-red-500' :
-                  log.severity === 'high' ? 'border-orange-500' :
-                    log.severity === 'medium' ? 'border-yellow-500' :
-                      'border-blue-500'
-                  }`}>
-                  <div className="flex justify-between items-start">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-sm bg-slate-900 px-2 py-1 rounded text-slate-300">
-                        {log.agent} Agent
-                      </span>
-                      <span className="text-xs text-slate-500">Just now</span>
+          <div className="bg-slate-900/50 backdrop-blur-xl border border-slate-800 rounded-2xl p-6 min-h-[500px] max-h-[600px] overflow-y-auto custom-scrollbar">
+            {activeTab === 'incidents' ? (
+              logs.length === 0 ? (
+                <div className="text-center text-slate-500 mt-20">
+                  <Shield className="w-16 h-16 mx-auto mb-4 opacity-20" />
+                  <p>Cyber-fortress Secure. Waiting for threat events...</p>
+                </div>
+              ) : (
+                logs.map((log, i) => (
+                  <div key={i} className={`mb-4 p-4 rounded-lg border-l-4 bg-slate-800/40 animate-fade-in ${log.severity === 'critical' ? 'border-red-500' :
+                    log.severity === 'high' ? 'border-orange-500' :
+                      log.severity === 'medium' ? 'border-yellow-500' :
+                        'border-blue-500'
+                    }`}>
+                    <div className="flex justify-between items-start">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-sm bg-slate-900 px-2 py-1 rounded text-slate-300">
+                          {log.agent} Agent
+                        </span>
+                        <span className="text-xs text-slate-500">{new Date(log.timestamp).toLocaleTimeString()}</span>
+                      </div>
+                      <span className={`text-xs uppercase font-bold ${log.severity === 'critical' ? 'text-red-400' :
+                        log.severity === 'high' ? 'text-orange-400' :
+                          log.severity === 'medium' ? 'text-yellow-400' :
+                            'text-blue-400'
+                        }`}>{log.status}</span>
                     </div>
-                    <span className={`text-xs uppercase font-bold ${log.severity === 'critical' ? 'text-red-400' :
-                      log.severity === 'high' ? 'text-orange-400' :
-                        log.severity === 'medium' ? 'text-yellow-400' :
-                          'text-blue-400'
-                      }`}>{log.status}</span>
+                    <p className="mt-2 text-slate-200 text-lg">{log.message}</p>
                   </div>
-                  <p className="mt-2 text-slate-200 text-lg">{log.message}</p>
+                ))
+              )
+            ) : (
+              backgroundLogs.map((log, i) => (
+                <div key={i} className="mb-2 p-3 bg-slate-900/30 rounded border border-slate-800 flex items-center gap-3 animate-fade-in-right">
+                  <span className="text-[10px] text-cyan-600 font-mono w-20 shrink-0">
+                    [{new Date(log.timestamp).toLocaleTimeString()}]
+                  </span>
+                  <span className="text-slate-400 text-sm font-mono truncate">{log.message}</span>
+                  <div className="ml-auto flex gap-1">
+                    <div className="w-1 h-1 bg-cyan-900/50 rounded-full"></div>
+                    <div className="w-1 h-1 bg-cyan-900/50 rounded-full"></div>
+                  </div>
                 </div>
               ))
             )}
           </div>
         </div>
 
-        {/* Agent Status Panel */}
-        <div className="bg-slate-900/50 backdrop-blur-xl border border-slate-800 rounded-2xl p-6">
-          <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
-            <Activity className="w-5 h-5 text-cyan-400" />
-            System Status
-          </h2>
+        {/* Status & Intel Side panel */}
+        <div className="space-y-6">
+          <div className="bg-slate-900/50 backdrop-blur-xl border border-slate-800 rounded-2xl p-6">
+            <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
+              <Activity className="w-5 h-5 text-cyan-400" />
+              Agent Core Status
+            </h2>
 
-          <div className="space-y-4">
-            <AgentStatus name="Telemetry" status={running ? "ingesting" : "standby"} load={running ? 85 : 12} />
-            <AgentStatus name="Detection" status={running ? "analyzing" : "standby"} load={running ? 92 : 5} />
-            <AgentStatus name="Supervisor" status={running ? "governing" : "standby"} load={running ? 45 : 2} />
-            <AgentStatus name="Forensics" status={running ? "investigating" : "standby"} load={running ? 78 : 0} />
-            <AgentStatus name="Response" status={running ? "executing" : "standby"} load={running ? 65 : 0} />
-            <AgentStatus name="Compliance" status={running ? "auditing" : "standby"} load={running ? 98 : 0} />
+            <div className="space-y-4">
+              <AgentStatus name="Telemetry" status={running ? "ingesting" : "standby"} load={running ? 85 : 12} />
+              <AgentStatus name="Detection" status={running ? "analyzing" : "standby"} load={running ? 92 : 5} />
+              <AgentStatus name="Supervisor" status={running ? "governing" : "standby"} load={running ? 45 : 2} />
+              <AgentStatus name="Forensics" status={running ? "investigating" : "standby"} load={running ? 78 : 0} />
+              <AgentStatus name="Response" status={running ? "executing" : "standby"} load={running ? 65 : 0} />
+              <AgentStatus name="Compliance" status={running ? "auditing" : "standby"} load={running ? 98 : 0} />
+            </div>
+          </div>
+
+          {/* Strategic Intelligence Card */}
+          <div className="bg-gradient-to-br from-slate-900/80 to-blue-900/20 backdrop-blur-xl border border-blue-500/20 rounded-2xl p-6 relative overflow-hidden group">
+            <div className="absolute -right-4 -top-4 w-24 h-24 bg-blue-500/10 rounded-full blur-3xl group-hover:bg-blue-500/20 transition-all"></div>
+            <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-blue-300">
+              <Zap className="w-4 h-4" />
+              Strategic Intel
+            </h3>
+            <div className="space-y-3">
+              <div className="text-xs p-3 rounded bg-slate-950/50 border border-slate-800">
+                <p className="text-blue-400 font-bold mb-1">CVE-2024-GLOBAL</p>
+                <p className="text-slate-400">Emerging Zero-Day reported in IAM policy evaluation loops. Monitor closely.</p>
+              </div>
+              <div className="text-xs p-3 rounded bg-slate-950/50 border border-slate-800">
+                <p className="text-orange-400 font-bold mb-1">THREAT ACTOR: AP-9</p>
+                <p className="text-slate-400">Increase in brute-force patterns from IP range 192.168.1.0/24.</p>
+              </div>
+            </div>
+            <button className="w-full mt-4 py-2 rounded bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 text-xs font-bold border border-blue-500/30 transition-all">
+              FETCH LATEST INTEL
+            </button>
           </div>
         </div>
       </div>

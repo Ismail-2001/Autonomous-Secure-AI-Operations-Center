@@ -56,6 +56,10 @@ async def health_check():
         "active_connections": len(manager.active_connections)
     }
 
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(background_telemetry())
+
 @app.websocket("/ws/threat-feed")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
@@ -91,6 +95,30 @@ async def websocket_endpoint(websocket: WebSocket):
         if current_task: current_task.cancel()
 
 import random
+
+async def background_telemetry():
+    """Simulate continuous benign log flow."""
+    benign_messages = [
+        "VPC Flow: Traffic allowed from 10.0.0.5 to 10.0.0.8 (Port 443)",
+        "IAM: User 'dev-operator' assumed role 'ReadOnlyAccess'",
+        "CloudTrail: GetBucketEncryption on 'assets-prod'",
+        "CloudWatch: Metric 'CPUUtilization' within threshold for 'web-server-01'",
+        "K8s: Pod 'auth-api-5f8d' healthy heart-beat received",
+        "S3: PutObject to 'audit-logs' by 'system-service'",
+        "GuardDuty: No new threats detected in last 5 minutes",
+        "Config: Resource 'sg-0abc123' compliant with policy 'restricted-ssh'"
+    ]
+    while True:
+        await manager.broadcast({
+            "id": str(uuid.uuid4()),
+            "timestamp": datetime.utcnow().isoformat(),
+            "agent": "Telemetry",
+            "status": "scanning",
+            "message": random.choice(benign_messages),
+            "severity": "low",
+            "is_background": True
+        })
+        await asyncio.sleep(random.uniform(2, 5))
 
 async def run_simulation(permission_event: asyncio.Event):
     """Run a randomized secure SOC cycle and stream updates to the UI, pausing for approval."""
