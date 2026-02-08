@@ -1,9 +1,18 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { Shield, Activity, AlertTriangle, CheckCircle, Clock, Eye, Zap, Play } from "lucide-react";
-import { AttackGraph } from "../components/AttackGraph";
+import { useState, useEffect } from "react";
+import {
+  Shield, Activity, AlertTriangle, CheckCircle, Clock, Zap, Play,
+  Menu, Search, User, Bell, ChevronRight, Calculator, Terminal,
+  Cpu, Lock, Database, Globe
+} from "lucide-react";
 
+import { AttackGraph } from "../components/AttackGraph";
+import { StatCard } from "../components/StatCard";
+import { TerminalFeed } from "../components/TerminalFeed";
+import { AgentGrid } from "../components/AgentGrid";
+
+// Types
 interface ThreatEvent {
   id: string;
   timestamp: string;
@@ -44,6 +53,7 @@ export default function Dashboard() {
   const [approvalRequest, setApprovalRequest] = useState<ApprovalRequest | null>(null);
   const [blastRadius, setBlastRadius] = useState<GraphData | null>(null);
   const [activeTab, setActiveTab] = useState<'incidents' | 'telemetry'>('incidents');
+  const [currentTime, setCurrentTime] = useState<string>("");
 
   // Stats
   const [stats, setStats] = useState({
@@ -54,18 +64,20 @@ export default function Dashboard() {
   });
 
   useEffect(() => {
+    // Clock
+    const timer = setInterval(() => setCurrentTime(new Date().toLocaleTimeString()), 1000);
+
     // Connect to Python backend via WebSocket on 9004
     const socket = new WebSocket("ws://localhost:9004/ws/threat-feed");
 
     socket.onopen = () => {
       console.log("Connected to A-SOC Python Backend");
-      setStats(prev => ({ ...prev, agentsActive: 6 })); // Assume all 6 agents active
+      setStats(prev => ({ ...prev, agentsActive: 6 }));
     };
 
     socket.onmessage = (event) => {
       const data = JSON.parse(event.data);
 
-      // Handle Approval Request
       if (data.type === "APPROVAL_REQUIRED") {
         setApprovalRequest(data);
         return;
@@ -81,10 +93,9 @@ export default function Dashboard() {
           setBackgroundLogs(prev => [data, ...prev].slice(0, 50));
         } else {
           setLogs((prev) => [data, ...prev]);
-          setActiveTab('incidents'); // Switch to incidents tab when real action happens
+          setActiveTab('incidents');
         }
 
-        // Update stats based on incoming agent activity (only for non-background)
         if (!data.is_background) {
           if (data.severity === "high" || data.severity === "critical") {
             setStats(prev => ({ ...prev, activeThreats: prev.activeThreats + 1 }));
@@ -100,15 +111,16 @@ export default function Dashboard() {
 
     return () => {
       socket.close();
+      clearInterval(timer);
     };
   }, []);
 
   const runSimulation = () => {
     if (ws && ws.readyState === WebSocket.OPEN) {
       setRunning(true);
-      setLogs([]); // Clear previous incident logs
+      setLogs([]);
       setBlastRadius(null);
-      ws.send("START_SIMULATION"); // Trigger Python backend
+      ws.send("START_SIMULATION");
     }
   };
 
@@ -119,328 +131,243 @@ export default function Dashboard() {
     }
   };
 
-  const getSeverityColor = (severity: string) => {
-    switch (severity) {
-      case "critical":
-        return "bg-red-500/20 text-red-400 border-red-500/50 glow-red animate-pulse";
-      case "high":
-        return "bg-orange-500/20 text-orange-400 border-orange-500/50";
-      case "medium":
-        return "bg-yellow-500/20 text-yellow-400 border-yellow-500/50 glow-yellow";
-      case "low":
-        return "bg-blue-500/20 text-blue-400 border-blue-500/50";
-      default:
-        return "bg-gray-500/20 text-gray-400 border-gray-500/50";
-    }
-  };
-
   return (
-    <div className="min-h-screen bg-slate-950 p-6 font-mono text-slate-200">
-      {/* Header */}
-      <header className="mb-8 flex justify-between items-center">
-        <div className="flex items-center gap-4">
-          <div className="p-3 bg-blue-500/10 rounded-xl border border-blue-500/30 glow">
-            <Shield className="w-8 h-8 text-blue-400" />
-          </div>
-          <div>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
-              A-SOC Dashboard
-            </h1>
-            <p className="text-slate-400 text-sm flex items-center gap-2">
-              <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-              Connected: Python Ecosystem v0.1.0
-            </p>
-          </div>
-        </div>
+    <div className="min-h-screen bg-[#020617] text-slate-200 font-sans selection:bg-cyan-500/30 overflow-hidden relative">
+      <div className="absolute inset-0 cyber-grid opacity-30 pointer-events-none"></div>
+      <div className="absolute inset-0 scanlines opacity-50 pointer-events-none"></div>
 
-        <button
-          onClick={runSimulation}
-          disabled={running}
-          className={`px-6 py-3 rounded-lg font-bold flex items-center gap-2 transition-all ${running
-            ? "bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700"
-            : "bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-500/20 border border-blue-400"
-            }`}
-        >
-          {running ? <Activity className="animate-spin" /> : <Play />}
-          {running ? "Monitoring Active..." : "Start Simulation"}
-        </button>
-      </header>
+      {/* Layout Grid */}
+      <div className="flex h-screen">
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <StatCard
-          icon={<AlertTriangle className="w-6 h-6" />}
-          label="Active Threats"
-          value={stats.activeThreats.toString()}
-          color="red"
-        />
-        <StatCard
-          icon={<CheckCircle className="w-6 h-6" />}
-          label="Resolved Today"
-          value={stats.resolved.toString()}
-          color="green"
-        />
-        <StatCard
-          icon={<Clock className="w-6 h-6" />}
-          label="Avg Response Time"
-          value="1.2s" // Hardcoded for demo speed
-          color="blue"
-        />
-        <StatCard
-          icon={<Zap className="w-6 h-6" />}
-          label="Agents Active"
-          value={`${stats.agentsActive}/6`}
-          color="cyan"
-        />
-      </div>
-
-      {/* Incident Visualization (Premium Feature) */}
-      {blastRadius && (
-        <div className="mb-8 animate-fade-in-up">
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-xl font-bold flex items-center gap-2 text-white">
-              <Activity className="w-5 h-5 text-orange-500" />
-              Incident Blast Radius
-            </h2>
-            <span className="text-xs text-orange-400 font-mono border border-orange-500/30 px-2 py-1 rounded bg-orange-500/10">
-              CRITICAL ANALYSIS
+        {/* Sidebar */}
+        <aside className="w-20 lg:w-64 bg-slate-900/50 backdrop-blur-xl border-r border-slate-800 flex flex-col z-20 transition-all duration-300">
+          <div className="p-6 flex items-center gap-3 border-b border-slate-800/50">
+            <div className="p-2 bg-cyan-500/10 rounded-lg border border-cyan-500/20">
+              <Shield className="w-6 h-6 text-cyan-400 animate-pulse-slow" />
+            </div>
+            <span className="font-bold text-xl tracking-tighter text-white hidden lg:block">
+              A-SOC <span className="text-cyan-500">PRO</span>
             </span>
           </div>
-          <div className="h-[350px] w-full bg-slate-900/50 backdrop-blur-xl border border-slate-800 rounded-2xl overflow-hidden relative shadow-2xl shadow-orange-500/5">
-            <AttackGraph data={blastRadius} />
-          </div>
-        </div>
-      )}
 
-      {/* Main Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-        {/* Live Threat Feed & Tabs */}
-        <div className="lg:col-span-2 space-y-4">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex gap-4">
+          <nav className="flex-1 p-4 space-y-2">
+            {[
+              { icon: Activity, label: "Live Monitoring", active: true },
+              { icon: Database, label: "Asset Inventory", active: false },
+              { icon: Terminal, label: "Forensics Lab", active: false },
+              { icon: Globe, label: "Threat Intel", active: false },
+              { icon: Lock, label: "Governance", active: false },
+            ].map((item, i) => (
               <button
-                onClick={() => setActiveTab('incidents')}
-                className={`text-xl font-semibold flex items-center gap-2 transition-all pb-2 border-b-2 ${activeTab === 'incidents' ? 'text-blue-400 border-blue-400' : 'text-slate-500 border-transparent hover:text-slate-300'}`}
+                key={i}
+                className={`w-full flex items-center gap-4 p-3 rounded-lg transition-all group ${item.active
+                  ? "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 shadow-[0_0_15px_-5px_rgba(6,182,212,0.3)]"
+                  : "text-slate-500 hover:bg-slate-800 hover:text-slate-200"}`}
               >
-                <AlertTriangle className="w-5 h-5" />
-                Incident Insights
+                <item.icon className="w-5 h-5" />
+                <span className="hidden lg:block font-medium text-sm">{item.label}</span>
+                {item.active && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_5px_cyan] hidden lg:block"></div>}
               </button>
+            ))}
+          </nav>
+
+          <div className="p-4 border-t border-slate-800/50">
+            <div className="bg-slate-950/50 rounded-xl p-4 border border-slate-800">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-cyan-500 to-blue-600"></div>
+                <div className="hidden lg:block">
+                  <p className="text-sm font-bold text-white">Chief Operator</p>
+                  <p className="text-xs text-slate-500">SEC-OPS LEVEL 5</p>
+                </div>
+              </div>
+              <div className="text-[10px] text-slate-500 font-mono hidden lg:block">
+                SESSION ID: {Math.random().toString(36).substring(7).toUpperCase()}
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        {/* Main Content */}
+        <main className="flex-1 flex flex-col relative z-10 overflow-hidden">
+
+          {/* Top Bar */}
+          <header className="h-16 border-b border-slate-800 bg-slate-900/30 backdrop-blur-sm flex items-center justify-between px-8">
+            <div className="flex items-center gap-4 text-slate-400 text-sm">
+              <span className="flex items-center gap-2 px-3 py-1 rounded-full bg-slate-800/50 border border-slate-700">
+                <Clock className="w-3 h-3 text-cyan-400" />
+                <span className="font-mono text-cyan-100">{currentTime}</span>
+              </span>
+              <span className="hidden md:flex items-center gap-2 px-3 py-1 rounded-full bg-slate-800/50 border border-slate-700">
+                <Globe className="w-3 h-3 text-emerald-400" />
+                US-EAST-1
+              </span>
+            </div>
+
+            <div className="flex items-center gap-4">
               <button
-                onClick={() => setActiveTab('telemetry')}
-                className={`text-xl font-semibold flex items-center gap-2 transition-all pb-2 border-b-2 ${activeTab === 'telemetry' ? 'text-cyan-400 border-cyan-400' : 'text-slate-500 border-transparent hover:text-slate-300'}`}
+                onClick={runSimulation}
+                disabled={running}
+                className={`cyber-button flex items-center gap-2 text-sm !py-2 !px-4 ${running ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
-                <Activity className="w-5 h-5" />
-                System Telemetry
+                {running ? <Activity className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+                {running ? "SYSTEM ACTIVE" : "INITIATE SIMULATION"}
+              </button>
+              <div className="w-px h-6 bg-slate-800"></div>
+              <button className="relative p-2 text-slate-400 hover:text-white transition-colors">
+                <Bell className="w-5 h-5" />
+                <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
               </button>
             </div>
-            <span className="text-xs text-slate-500 animate-pulse">
-              {activeTab === 'incidents' ? 'Monitoring Critical Assets...' : 'Analyzing Benign Activity...'}
-            </span>
-          </div>
+          </header>
 
-          <div className="bg-slate-900/50 backdrop-blur-xl border border-slate-800 rounded-2xl p-6 min-h-[500px] max-h-[600px] overflow-y-auto custom-scrollbar">
-            {activeTab === 'incidents' ? (
-              logs.length === 0 ? (
-                <div className="text-center text-slate-500 mt-20">
-                  <Shield className="w-16 h-16 mx-auto mb-4 opacity-20" />
-                  <p>Cyber-fortress Secure. Waiting for threat events...</p>
+          {/* Dashboard Content */}
+          <div className="flex-1 p-8 overflow-y-auto no-scrollbar space-y-6">
+
+            {/* KPI Row */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <StatCard
+                icon={AlertTriangle}
+                label="Active Threats"
+                value={stats.activeThreats.toString()}
+                subValue="+200%"
+                color="red"
+              />
+              <StatCard
+                icon={CheckCircle}
+                label="Threats Neutralized"
+                value={stats.resolved.toString()}
+                subValue="Today"
+                color="emerald"
+              />
+              <StatCard
+                icon={Clock}
+                label="Mean Time to Respond"
+                value="1.2s"
+                subValue="-0.4s"
+                color="cyan"
+              />
+              <StatCard
+                icon={Cpu}
+                label="AI Agents Online"
+                value={`${stats.agentsActive}/6`}
+                subValue="Optimal"
+                color="purple"
+              />
+            </div>
+
+            {/* Central Visuals Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[450px]">
+              {/* Attack Graph */}
+              <div className="lg:col-span-8 cyber-card">
+                <div className="absolute top-4 left-4 z-10">
+                  <h3 className="text-white font-bold flex items-center gap-2">
+                    <Activity className="w-4 h-4 text-orange-400" />
+                    BLAST RADIUS VISUALIZATION
+                  </h3>
+                  <p className="text-slate-500 text-xs font-mono uppercase mt-1">Real-time vector analysis</p>
                 </div>
-              ) : (
-                logs.map((log, i) => (
-                  <div key={i} className={`mb-4 p-4 rounded-lg border-l-4 bg-slate-800/40 animate-fade-in ${log.severity === 'critical' ? 'border-red-500' :
-                    log.severity === 'high' ? 'border-orange-500' :
-                      log.severity === 'medium' ? 'border-yellow-500' :
-                        'border-blue-500'
-                    }`}>
-                    <div className="flex justify-between items-start">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-sm bg-slate-900 px-2 py-1 rounded text-slate-300">
-                          {log.agent} Agent
-                        </span>
-                        <span className="text-xs text-slate-500">{new Date(log.timestamp).toLocaleTimeString()}</span>
-                      </div>
-                      <span className={`text-xs uppercase font-bold ${log.severity === 'critical' ? 'text-red-400' :
-                        log.severity === 'high' ? 'text-orange-400' :
-                          log.severity === 'medium' ? 'text-yellow-400' :
-                            'text-blue-400'
-                        }`}>{log.status}</span>
+                {blastRadius ? (
+                  <div className="w-full h-full p-4">
+                    <AttackGraph data={blastRadius} />
+                  </div>
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center flex-col gap-4 opacity-30">
+                    <Globe className="w-24 h-24 text-cyan-500 animate-pulse" />
+                    <p className="font-mono text-cyan-500 tracking-widest">AWAITING TELEMETRY...</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Right Panel: Agent Status */}
+              <div className="lg:col-span-4 flex flex-col gap-6">
+                <div className="flex-1 cyber-card p-4">
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-white font-bold text-sm uppercase tracking-wider">Agent Health</h3>
+                    <div className="flex gap-1">
+                      <div className="w-2 h-2 rounded-full bg-cyan-500"></div>
+                      <div className="w-2 h-2 rounded-full bg-slate-700"></div>
                     </div>
-                    <p className="mt-2 text-slate-200 text-lg">{log.message}</p>
                   </div>
-                ))
-              )
-            ) : (
-              backgroundLogs.map((log, i) => (
-                <div key={i} className="mb-2 p-3 bg-slate-900/30 rounded border border-slate-800 flex items-center gap-3 animate-fade-in-right">
-                  <span className="text-[10px] text-cyan-600 font-mono w-20 shrink-0">
-                    [{new Date(log.timestamp).toLocaleTimeString()}]
-                  </span>
-                  <span className="text-slate-400 text-sm font-mono truncate">{log.message}</span>
-                  <div className="ml-auto flex gap-1">
-                    <div className="w-1 h-1 bg-cyan-900/50 rounded-full"></div>
-                    <div className="w-1 h-1 bg-cyan-900/50 rounded-full"></div>
-                  </div>
+                  {/* We'll inline grid here for simplicity or import AgentGrid if available */}
+                  <AgentGrid running={running} />
                 </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* Status & Intel Side panel */}
-        <div className="space-y-6">
-          <div className="bg-slate-900/50 backdrop-blur-xl border border-slate-800 rounded-2xl p-6">
-            <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
-              <Activity className="w-5 h-5 text-cyan-400" />
-              Agent Core Status
-            </h2>
-
-            <div className="space-y-4">
-              <AgentStatus name="Telemetry" status={running ? "ingesting" : "standby"} load={running ? 85 : 12} />
-              <AgentStatus name="Detection" status={running ? "analyzing" : "standby"} load={running ? 92 : 5} />
-              <AgentStatus name="Supervisor" status={running ? "governing" : "standby"} load={running ? 45 : 2} />
-              <AgentStatus name="Forensics" status={running ? "investigating" : "standby"} load={running ? 78 : 0} />
-              <AgentStatus name="Response" status={running ? "executing" : "standby"} load={running ? 65 : 0} />
-              <AgentStatus name="Compliance" status={running ? "auditing" : "standby"} load={running ? 98 : 0} />
-            </div>
-          </div>
-
-          {/* Strategic Intelligence Card */}
-          <div className="bg-gradient-to-br from-slate-900/80 to-blue-900/20 backdrop-blur-xl border border-blue-500/20 rounded-2xl p-6 relative overflow-hidden group">
-            <div className="absolute -right-4 -top-4 w-24 h-24 bg-blue-500/10 rounded-full blur-3xl group-hover:bg-blue-500/20 transition-all"></div>
-            <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-blue-300">
-              <Zap className="w-4 h-4" />
-              Strategic Intel
-            </h3>
-            <div className="space-y-3">
-              <div className="text-xs p-3 rounded bg-slate-950/50 border border-slate-800">
-                <p className="text-blue-400 font-bold mb-1">CVE-2024-GLOBAL</p>
-                <p className="text-slate-400">Emerging Zero-Day reported in IAM policy evaluation loops. Monitor closely.</p>
-              </div>
-              <div className="text-xs p-3 rounded bg-slate-950/50 border border-slate-800">
-                <p className="text-orange-400 font-bold mb-1">THREAT ACTOR: AP-9</p>
-                <p className="text-slate-400">Increase in brute-force patterns from IP range 192.168.1.0/24.</p>
               </div>
             </div>
-            <button className="w-full mt-4 py-2 rounded bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 text-xs font-bold border border-blue-500/30 transition-all">
-              FETCH LATEST INTEL
-            </button>
+
+            {/* Bottom Row: Terminal Feeds */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[400px]">
+              <TerminalFeed
+                title="INCIDENT LOG STREAM"
+                logs={logs}
+                color="red"
+                icon={AlertTriangle}
+              />
+              <TerminalFeed
+                title="SYSTEM TELEMETRY (BACKGROUND)"
+                logs={backgroundLogs}
+                color="cyan"
+                icon={Terminal}
+              />
+            </div>
+
           </div>
-        </div>
+        </main>
       </div>
 
-      {/* Approval Modal */}
+      {/* Approval Modal Overlay */}
       {approvalRequest && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
-          <div className="bg-slate-900 border border-red-500/50 rounded-2xl p-8 max-w-md w-full shadow-2xl shadow-red-500/20 relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-orange-500 to-red-600 animate-pulse"></div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="relative w-full max-w-lg cyber-card border-red-500/50 shadow-[0_0_50px_-10px_rgba(239,68,68,0.5)]">
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-red-600 to-orange-600 animate-scan"></div>
 
-            <div className="flex items-center gap-4 mb-6">
-              <div className="p-4 bg-red-500/10 rounded-full border border-red-500/30 animate-pulse-glow">
-                <AlertTriangle className="w-8 h-8 text-red-500" />
+            <div className="p-8">
+              <div className="flex items-start gap-6">
+                <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 animate-pulse">
+                  <AlertTriangle className="w-10 h-10" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold text-white tracking-tight">Authorization Required</h2>
+                  <p className="text-red-400 font-mono text-xs uppercase tracking-wider mt-1">Severity Level: CRITICAL</p>
+                  <p className="text-slate-400 mt-4 text-sm leading-relaxed">
+                    The autonomous supervisor has intercepted a high-risk action proposed by the Response Agent. Manual authorization is required to proceed.
+                  </p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-xl font-bold text-white">Action Approval Required</h3>
-                <p className="text-red-400 text-sm font-semibold">High Risk Activity Detected</p>
+
+              <div className="mt-8 space-y-3 bg-red-950/20 p-4 rounded-lg border border-red-500/20 font-mono text-sm">
+                <div className="flex justify-between border-b border-red-500/10 pb-2">
+                  <span className="text-slate-500">PROPOSED ACTION</span>
+                  <span className="text-white font-bold">{approvalRequest.action}</span>
+                </div>
+                <div className="flex justify-between border-b border-red-500/10 pb-2">
+                  <span className="text-slate-500">TARGET RESOURCE</span>
+                  <span className="text-white">{approvalRequest.target}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">RISK SCORE</span>
+                  <span className="text-red-400 font-bold">{(approvalRequest.risk_score * 100).toFixed(1)}%</span>
+                </div>
+              </div>
+
+              <div className="mt-8 flex gap-4">
+                <button
+                  onClick={() => setApprovalRequest(null)}
+                  className="flex-1 py-3 px-4 rounded-lg border border-slate-700 text-slate-400 hover:text-white hover:bg-slate-800 transition-all font-bold uppercase tracking-wider text-sm"
+                >
+                  Deny Action
+                </button>
+                <button
+                  onClick={approveAction}
+                  className="flex-1 py-3 px-4 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold uppercase tracking-wider text-sm shadow-lg shadow-red-500/20 flex justify-center items-center gap-2 group"
+                >
+                  <span>Authorize</span>
+                  <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                </button>
               </div>
             </div>
-
-            <div className="space-y-4 mb-8 bg-slate-950/50 p-4 rounded-xl border border-slate-800">
-              <div className="flex justify-between">
-                <span className="text-slate-400">Action Type</span>
-                <span className="text-white font-mono font-bold">{approvalRequest.action}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Target Resource</span>
-                <span className="text-white font-mono">{approvalRequest.target}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Risk Score</span>
-                <span className="text-red-400 font-bold">{(approvalRequest.risk_score * 100).toFixed(0)}/100</span>
-              </div>
-            </div>
-
-            <div className="flex gap-4">
-              <button
-                onClick={() => setApprovalRequest(null)}
-                className="flex-1 py-3 px-4 rounded-lg bg-slate-800 text-slate-300 font-semibold hover:bg-slate-700 transition-all font-mono"
-              >
-                DENY
-              </button>
-              <button
-                onClick={approveAction}
-                className="flex-1 py-3 px-4 rounded-lg bg-gradient-to-r from-red-600 to-orange-600 text-white font-bold hover:from-red-500 hover:to-orange-500 transition-all shadow-lg shadow-red-500/25 flex items-center justify-center gap-2 font-mono"
-              >
-                <CheckCircle className="w-5 h-5" />
-                AUTHORIZE
-              </button>
-            </div>
-
-            <p className="text-center text-xs text-slate-500 mt-6 flex items-center justify-center gap-1">
-              <Shield className="w-3 h-3" />
-              Logged to Immutable Audit Trail
-            </p>
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-function StatCard({
-  icon,
-  label,
-  value,
-  color,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  color: string;
-}) {
-  const colorClasses = {
-    red: "bg-red-500/10 border-red-500/30 text-red-400",
-    green: "bg-green-500/10 border-green-500/30 text-green-400",
-    blue: "bg-blue-500/10 border-blue-500/30 text-blue-400",
-    cyan: "bg-cyan-500/10 border-cyan-500/30 text-cyan-400",
-  };
-
-  return (
-    <div className="bg-slate-900/50 backdrop-blur-xl border border-slate-800 rounded-2xl p-6 transition-all hover:scale-105 hover:shadow-lg hover:shadow-cyan-500/10">
-      <div className={`inline-flex p-3 rounded-xl border mb-4 ${colorClasses[color as keyof typeof colorClasses]}`}>
-        {icon}
-      </div>
-      <div className="text-3xl font-bold mb-1 tracking-tight">{value}</div>
-      <div className="text-sm text-slate-400 uppercase tracking-wider font-semibold">{label}</div>
-    </div>
-  );
-}
-
-function AgentStatus({ name, status, load }: { name: string; status: string; load: number }) {
-  return (
-    <div className="p-4 bg-slate-800/30 rounded-xl border border-slate-700/50 hover:border-slate-600 transition-all">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <div className={`w-2 h-2 rounded-full ${load > 50 ? 'bg-green-400 animate-pulse-glow' : 'bg-slate-500'}`}></div>
-          <span className="font-medium text-slate-200">{name}</span>
-        </div>
-        <span className="text-xs text-cyan-400 uppercase font-mono">{status}</span>
-      </div>
-      <div className="space-y-2">
-        <div className="flex justify-between text-xs text-slate-500 font-mono">
-          <span>LOAD</span>
-          <span>{load}%</span>
-        </div>
-        <div className="w-full bg-slate-700/30 rounded-full h-1.5 overflow-hidden">
-          <div
-            className={`h-full rounded-full transition-all duration-1000 ${load > 80 ? 'bg-gradient-to-r from-orange-500 to-red-500' :
-              load > 40 ? 'bg-gradient-to-r from-blue-500 to-cyan-500' :
-                'bg-slate-600'
-              }`}
-            style={{ width: `${load}%` }}
-          ></div>
-        </div>
-      </div>
     </div>
   );
 }
