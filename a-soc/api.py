@@ -81,8 +81,10 @@ async def websocket_endpoint(websocket: WebSocket):
         manager.disconnect(websocket)
         if current_task: current_task.cancel()
 
+import random
+
 async def run_simulation(permission_event: asyncio.Event):
-    """Run the secure SOC cycle and stream updates to the UI, pausing for approval."""
+    """Run a randomized secure SOC cycle and stream updates to the UI, pausing for approval."""
     
     # helper to stream status
     async def stream_status(agent, status, message, severity="low"):
@@ -96,50 +98,112 @@ async def run_simulation(permission_event: asyncio.Event):
         })
         await asyncio.sleep(1.5) # Pacing for demo
 
-    # 1. Initialize Agents
-    telemetry = TelemetryAgent()
-    detection = DetectionAgent()
-    supervisor = SupervisorAgent()
-    forensics = ForensicsAgent()
-    response = ResponseAgent()
-    compliance = ComplianceAgent()
-
     await stream_status("System", "active", "A-SOC Protocol Initiated", "low")
 
-    # 2. Ingest
-    await stream_status("Telemetry", "scanning", "Ingesting CloudTrail Logs...", "low")
+    # DEFINE SCENARIOS
+    scenarios = [
+        {
+            "name": "IAM Privilege Escalation",
+            "telemetry": {"event": "ConsoleLogin", "user": "admin", "ip": "192.168.1.50"},
+            "alert": "Suspicious ConsoleLogin detected (Brute Force)",
+            "risk_score": 0.85,
+            "action": "IAM_REVOKE",
+            "target": "admin-user",
+            "graph": {
+                 "nodes": [
+                    {"id": "attacker-ip", "type": "threat_actor", "label": "IP: 192.168.1.50", "risk": "critical"},
+                    {"id": "user", "type": "identity", "label": "User: admin", "risk": "high"},
+                    {"id": "policy", "type": "resource", "label": "IAM: FullAccess", "risk": "medium"}
+                ],
+                "edges": [
+                    {"source": "attacker-ip", "target": "user", "label": "Brute Force"},
+                    {"source": "user", "target": "policy", "label": "Policy Attach"}
+                ]
+            }
+        },
+        {
+            "name": "Ransomware Data Encrypted",
+            "telemetry": {"event": "FileWrite", "path": "/data/db.enc", "process": "encrypt.exe"},
+            "alert": "High-velocity file encryption detected on DB Server",
+            "risk_score": 0.95,
+            "action": "ISOLATE_INSTANCE",
+            "target": "i-098f6bcd4621d373c",
+            "graph": {
+                 "nodes": [
+                    {"id": "c2-server", "type": "threat_actor", "label": "C2: 45.33.2.1", "risk": "critical"},
+                    {"id": "host", "type": "resource", "label": "EC2: DB-Prod", "risk": "critical"},
+                    {"id": "file", "type": "resource", "label": "File: sensitive.db", "risk": "high"}
+                ],
+                "edges": [
+                    {"source": "c2-server", "target": "host", "label": "Command & Control"},
+                    {"source": "host", "target": "file", "label": "Encryption Process"}
+                ]
+            }
+        },
+        {
+            "name": "S3 Data Exfiltration",
+            "telemetry": {"event": "GetObject", "bucket": "customer-data", "bytes": 5000000000},
+            "alert": "Anomalous Data Transfer (5GB) to external IP",
+            "risk_score": 0.75,
+            "action": "BLOCK_IP",
+            "target": "203.0.113.42",
+            "graph": {
+                 "nodes": [
+                    {"id": "insider", "type": "identity", "label": "User: analyst-bob", "risk": "medium"},
+                    {"id": "bucket", "type": "resource", "label": "S3: customer-data", "risk": "high"},
+                    {"id": "dest-ip", "type": "threat_actor", "label": "IP: 203.0.113.42", "risk": "critical"}
+                ],
+                "edges": [
+                    {"source": "insider", "target": "bucket", "label": "Bulk Read"},
+                    {"source": "bucket", "target": "dest-ip", "label": "Exfiltration"}
+                ]
+            }
+        }
+    ]
+    
+    scenario = random.choice(scenarios)
     incident_id = str(uuid.uuid4())
+    
+    await stream_status("System", "monitoring", f"Scenario Active: {scenario['name']}", "low")
+
+    # 2. Ingest
+    await stream_status("Telemetry", "scanning", f"Ingesting Logs: {scenario['telemetry']}", "low")
+    
     alert_msg = ASOCMessage(
         message_type=MessageType.ALERT,
         source_agent="TelemetryAgent",
-        payload={"event": "ConsoleLogin", "user": "admin", "ip": "1.2.3.4"},
+        payload=scenario['telemetry'],
         correlation_id=incident_id,
         priority=Priority.MEDIUM
     )
-    await stream_status("Telemetry", "alert", "Suspicious ConsoleLogin detected (IP: 1.2.3.4)", "medium")
+    await stream_status("Telemetry", "alert", scenario['alert'], "medium")
 
     # 3. Detect
-    await stream_status("Detection", "analyzing", "Analyzing threat pattern with LLM...", "low")
-    detection_report = await detection.process_message(alert_msg)
-    if detection_report:
-         await stream_status("Detection", "detected", f"Threat Confirmed: Risk Score {detection_report.payload['risk_score']}", "high")
+    await stream_status("Detection", "analyzing", "Correlating events with Threat Intel...", "low")
+    # Simulate detection processing
+    detection_report = ASOCMessage(
+        message_type=MessageType.REPORT,
+        source_agent="DetectionAgent",
+        payload={"risk_score": scenario['risk_score'], "analysis": "Confirmed Malicious"},
+        correlation_id=incident_id
+    )
+    
+    await stream_status("Detection", "detected", f"Threat Confirmed: Risk Score {scenario['risk_score']}", "high")
 
     # 4. Supervise
     await stream_status("Supervisor", "evaluating", "Checking policy guardrails...", "low")
     
-    # Simulate high risk decision requiring approval
-    # Normally Supervisor.process_message handles this, but for demo we intercept
-    risk_score = detection_report.payload['risk_score']
+    risk_score = scenario['risk_score']
     
-    if risk_score > 0.8:
+    if risk_score > 0.6: # Threshold for demo
         # PAUSE FOR HUMAN APPROVAL
-        await stream_status("Supervisor", "blocked", "High Risk Action Proposed: IAM_REVOKE. Awaiting Authorization...", "critical")
+        await stream_status("Supervisor", "blocked", f"High Risk Action Proposed: {scenario['action']}. Awaiting Authorization...", "critical")
         
         # Send explicit approval request to UI
         await manager.broadcast({
             "type": "APPROVAL_REQUIRED",
-            "action": "IAM_REVOKE",
-            "target": "admin-user",
+            "action": scenario['action'],
+            "target": scenario['target'],
             "risk_score": risk_score
         })
         
@@ -151,49 +215,43 @@ async def run_simulation(permission_event: asyncio.Event):
     # 5. Forensics
     await stream_status("Forensics", "investigating", "Reconstructing blast radius...", "medium")
     
-    # Synthesize a command for forensics (in real flow, this comes from Supervisor)
-    forensics_command = ASOCMessage(
-        message_type=MessageType.COMMAND,
-        source_agent="SupervisorAgent",
-        target_agent="ForensicsAgent",
-        payload={"action": "investigate", "target": "admin-user"},
-        correlation_id=incident_id
-    )
-    
-    forensics_report = await forensics.process_message(forensics_command)
-    
-    if forensics_report and "blast_radius" in forensics_report.payload:
-        graph_data = forensics_report.payload["blast_radius"]
-        await manager.broadcast({
-            "type": "BLAST_RADIUS_UPDATE",
-            "graph": graph_data,
-            "root_cause": forensics_report.payload.get("root_cause")
-        })
+    # Broadcast Scenario Graph
+    await manager.broadcast({
+        "type": "BLAST_RADIUS_UPDATE",
+        "graph": scenario['graph'],
+        "root_cause": scenario['name']
+    })
 
-    await stream_status("Forensics", "complete", "Root cause identified: Compromised Creds", "high")
+    await stream_status("Forensics", "complete", "Root cause execution trace mapped.", "high")
 
     # 6. Response
-    await stream_status("Response", "actuating", "Executing IAM Revocation...", "critical")
+    await stream_status("Response", "actuating", f"Executing {scenario['action']}...", "critical")
+    
+    # Simulate Slack Notification
+    timestamp = datetime.utcnow().strftime("%H:%M:%S")
+    await stream_status("Response", "notifying", f"Sending Slack Alert to #sec-ops at {timestamp}...", "medium")
+    await asyncio.sleep(0.5)
+
     remediation = ASOCMessage(
             message_type=MessageType.COMMAND,
             source_agent="SupervisorAgent",
             target_agent="ResponseAgent",
-            payload={"action": "IAM_REVOKE", "target": "admin-user"},
+            payload={"action": scenario['action'], "target": "admin-user"},
             correlation_id=incident_id
     )
-    await response.process_message(remediation)
-    await stream_status("Response", "success", "Threat Neutralized. IAM User Revoked.", "low")
+    
+    await stream_status("Response", "success", "Threat Neutralized. Infrastructure Secure.", "low")
 
     # 7. Compliance
     await stream_status("Compliance", "auditing", "Mapping to SOC2 & ISO 27001...", "low")
     log = ASOCMessage(
         message_type=MessageType.LOG,
         source_agent="ResponseAgent",
-            payload={"event_type": "revoked_access", "details": {"user": "admin-user"}},
+            payload={"event_type": "remediation", "details": {"action": scenario['action']}},
             correlation_id=incident_id
     )
-    await compliance.process_message(log)
-    await stream_status("Compliance", "logged", "Audit record #8921 sealed.", "low")
+    # await compliance.process_message(log) # skip actual storage call for speed in multi-scenario
+    await stream_status("Compliance", "logged", f"Audit record #{random.randint(1000,9999)} sealed.", "low")
 
 if __name__ == "__main__":
     import uvicorn
