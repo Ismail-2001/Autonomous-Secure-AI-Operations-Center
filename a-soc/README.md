@@ -113,22 +113,42 @@ Access the dashboard at `http://localhost:3000`.
 
 ## 🚢 Deployment
 
-### **Docker Deployment (Recommended)**
-The entire stack can be deployed using Docker Compose:
+### Quick Start with Docker Compose
 
 ```bash
-docker-compose up --build -d
-```
-This will spin up:
-*   A-SOC Backend (API & Agents)
-*   Next.js Dashboard
-*   PostgreSQL
-*   Redis
-*   OPA Server
+# Clone the repository
+git clone https://github.com/Ismail-2001/Autonomous-Secure-AI-Operations-Center-2.git
+cd Autonomous-Secure-AI-Operations-Center-2/a-soc
 
-### **Cloud Deployment**
-*   **Backend**: Deploy as a container on AWS ECS, Google Cloud Run, or Kubernetes (manifests in `/k8s`).
-*   **Frontend**: Deploy to Vercel or Netlify.
+# Configure environment
+cp .env.example .env
+# Edit .env and add your OPENAI_API_KEY
+
+# Launch the entire stack
+docker-compose up -d
+```
+
+Access the dashboard at `http://localhost:3000`
+
+### Production Deployment
+
+For detailed deployment instructions including:
+- **AWS ECS** deployment
+- **Kubernetes** manifests
+- **Vercel** frontend deployment
+- **Monitoring & Scaling**
+- **Security hardening**
+
+See the comprehensive [**DEPLOYMENT.md**](./DEPLOYMENT.md) guide.
+
+### Cloud Platforms
+
+| Platform | Backend | Frontend | Guide |
+|----------|---------|----------|-------|
+| **AWS ECS** | ✅ Fargate | ✅ S3+CloudFront | [DEPLOYMENT.md](./DEPLOYMENT.md#aws-ecs-deployment) |
+| **Kubernetes** | ✅ Any K8s | ✅ Ingress | [k8s/](./k8s/) |
+| **Docker** | ✅ Compose | ✅ Compose | `docker-compose up` |
+| **Vercel** | ❌ | ✅ Serverless | [DEPLOYMENT.md](./DEPLOYMENT.md#vercel-dashboard-only) |
 
 ---
 

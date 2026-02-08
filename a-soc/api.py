@@ -47,6 +47,15 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for Kubernetes probes"""
+    return {
+        "status": "healthy",
+        "service": "asoc-backend",
+        "active_connections": len(manager.active_connections)
+    }
+
 @app.websocket("/ws/threat-feed")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
