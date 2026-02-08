@@ -37,10 +37,10 @@ export function StatCard({ icon: Icon, label, value, subValue, color, trend }: S
     return (
         <div className={`cyber-card p-6 flex items-center justify-between group hover:scale-[1.02] transition-transform ${glowColors[color]}`}>
             <div className="relative z-10">
-                <h3 className="text-slate-400 text-xs font-mono uppercase tracking-widest mb-1">{label}</h3>
+                <h3 className="text-slate-300 text-xs font-mono uppercase tracking-widest mb-1">{label}</h3>
                 <div className="text-3xl font-bold text-white tracking-tight flex items-baseline gap-2">
                     {value}
-                    {subValue && <span className="text-sm font-normal text-slate-500">{subValue}</span>}
+                    {subValue && <span className="text-sm font-normal text-slate-400">{subValue}</span>}
                 </div>
 
                 {/* Decorative corner accents */}

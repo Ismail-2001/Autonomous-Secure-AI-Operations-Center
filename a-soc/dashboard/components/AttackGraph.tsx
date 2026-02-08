@@ -137,7 +137,7 @@ export function AttackGraph({ data }: { data: GraphData }) {
                         <div className="mb-8 pointer-events-none">
                             {getIcon(node.type)}
                         </div>
-                        <div className="mt-8 bg-slate-900/80 px-2 py-1 rounded text-[10px] text-slate-300 border border-slate-700 whitespace-nowrap backdrop-blur-sm">
+                        <div className="mt-8 bg-slate-900/90 px-2 py-1 rounded text-[10px] text-cyan-100 border border-cyan-500/30 whitespace-nowrap backdrop-blur-sm shadow-lg">
                             {node.label}
                         </div>
                     </div>

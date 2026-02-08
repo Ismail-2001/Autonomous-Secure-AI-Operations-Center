@@ -56,15 +56,15 @@ export function AgentGrid({ running }: { running: boolean }) {
 
                         <div className="flex justify-between items-start relative z-10">
                             <Icon className={`w-6 h-6 ${running && load > 80 ? "animate-bounce" : ""}`} />
-                            <div className="text-[10px] uppercase font-mono tracking-widest opacity-70">
+                            <div className="text-[10px] uppercase font-mono tracking-widest opacity-90 text-cyan-200">
                                 PID: {Math.floor(Math.random() * 9000 + 1000)}
                             </div>
                         </div>
 
                         <div className="relative z-10 mt-auto">
                             <div className="flex justify-between items-end mb-2">
-                                <span className="font-bold text-sm tracking-wide">{agent.name}</span>
-                                <span className="font-mono text-xs">{load.toFixed(0)}% LOAD</span>
+                                <span className="font-bold text-sm tracking-wide text-white">{agent.name}</span>
+                                <span className="font-mono text-xs text-cyan-300">{load.toFixed(0)}% LOAD</span>
                             </div>
 
                             {/* Progress Bar */}

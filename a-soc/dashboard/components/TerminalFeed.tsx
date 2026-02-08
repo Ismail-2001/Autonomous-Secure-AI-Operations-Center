@@ -65,7 +65,7 @@ export function TerminalFeed({ logs, title, color = "cyan", icon: Icon = Shield 
                 ) : (
                     logs.map((log, i) => (
                         <div key={i} className="group flex gap-3 animate-fade-in-up hover:bg-slate-900/50 p-1 -mx-1 rounded transition-colors">
-                            <span className="text-slate-600 w-20 shrink-0 select-none">
+                            <span className="text-cyan-600 w-20 shrink-0 select-none font-bold">
                                 [{new Date(log.timestamp).toLocaleTimeString([], { hour12: false })}]
                             </span>
 
@@ -73,7 +73,7 @@ export function TerminalFeed({ logs, title, color = "cyan", icon: Icon = Shield 
                                 <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] uppercase font-bold mr-2 ${severityColor(log.severity)}`}>
                                     {log.agent}::{log.status}
                                 </span>
-                                <span className="text-slate-300 group-hover:text-white transition-colors">
+                                <span className="text-slate-100 font-mono tracking-wide group-hover:text-white transition-colors">
                                     {log.message}
                                 </span>
                             </div>
