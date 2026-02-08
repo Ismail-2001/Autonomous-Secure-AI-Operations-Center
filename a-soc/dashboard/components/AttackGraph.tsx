@@ -24,13 +24,28 @@ interface GraphData {
 export function AttackGraph({ data }: { data: GraphData }) {
     if (!data) return null;
 
-    // Manual layout for demo beauty
-    const positions: Record<string, { x: number; y: number }> = {
+    // Fixed positions for known core nodes, fallback to grid/random for others
+    const basePositions: Record<string, { x: number; y: number }> = {
         "attacker-ip": { x: 100, y: 150 },
+        "user": { x: 300, y: 150 },
         "compromised-user": { x: 300, y: 150 },
-        "s3-bucket": { x: 500, y: 100 },
-        "ec2-instance": { x: 500, y: 200 },
+        "insider": { x: 300, y: 150 },
+        "c2-server": { x: 100, y: 150 },
     };
+
+    // Calculate dynamic positions for any nodes not in basePositions
+    const positions: Record<string, { x: number; y: number }> = { ...basePositions };
+
+    data.nodes.forEach((node, i) => {
+        if (!positions[node.id]) {
+            // Assign a position on the right side if it's likely a resource/target
+            const offset = i * 40;
+            positions[node.id] = {
+                x: 500,
+                y: 80 + (i * 70)
+            };
+        }
+    });
 
     const getIcon = (type: string) => {
         switch (type) {
@@ -63,8 +78,8 @@ export function AttackGraph({ data }: { data: GraphData }) {
 
                 {/* Edges */}
                 {data.edges.map((edge, i) => {
-                    const start = positions[edge.source] || { x: 0, y: 0 };
-                    const end = positions[edge.target] || { x: 0, y: 0 };
+                    const start = positions[edge.source] || { x: 300, y: 150 };
+                    const end = positions[edge.target] || { x: 300, y: 150 };
                     return (
                         <g key={i} className="animate-fade-in" style={{ animationDelay: `${i * 0.5}s` }}>
                             <line
@@ -93,7 +108,7 @@ export function AttackGraph({ data }: { data: GraphData }) {
 
                 {/* Nodes */}
                 {data.nodes.map((node, i) => {
-                    const pos = positions[node.id] || { x: 0, y: 0 };
+                    const pos = positions[node.id] || { x: 300, y: 150 };
                     return (
                         <g key={node.id} className="animate-pop-in" style={{ animationDelay: `${i * 0.2}s` }}>
                             {/* Risk Glow */}
@@ -101,20 +116,14 @@ export function AttackGraph({ data }: { data: GraphData }) {
 
                             {/* Main Node */}
                             <circle cx={pos.x} cy={pos.y} r="20" className={`stroke-2 ${getColor(node.risk)} fill-slate-900`} />
-
-                            {/* Icon wrapper - foreignObject is complex across browsers, using simpler circle fill or just rely on CSS overlay */}
                         </g>
                     );
                 })}
             </svg>
 
-            {/* HTML Overlay for Icons and Labels (easier than SVG foreignObject) */}
+            {/* HTML Overlay for Icons and Labels */}
             {data.nodes.map((node, i) => {
-                const pos = positions[node.id] || { x: 0, y: 0 };
-                // Scale percentages roughly assuming 600x300 viewBox mapping to container
-                // This is a simplification. For production, use better coordinate mapping.
-                // Using strict pixel mapping for demo if container is fixed size or use %
-
+                const pos = positions[node.id] || { x: 300, y: 150 };
                 return (
                     <div
                         key={node.id}
@@ -137,3 +146,4 @@ export function AttackGraph({ data }: { data: GraphData }) {
         </div>
     );
 }
+

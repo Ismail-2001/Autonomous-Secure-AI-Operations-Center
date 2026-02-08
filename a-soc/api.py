@@ -24,7 +24,7 @@ app = FastAPI(title="A-SOC API")
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["http://localhost:3000", "http://localhost:3001"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -83,7 +83,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 permission_event.set() 
                 await manager.broadcast({
                     "id": str(uuid.uuid4()),
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.utcnow().isoformat() + "Z",
                     "agent": "System",
                     "status": "approved",
                     "message": "Human operator authorized action.",
@@ -111,7 +111,7 @@ async def background_telemetry():
     while True:
         await manager.broadcast({
             "id": str(uuid.uuid4()),
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.utcnow().isoformat() + "Z",
             "agent": "Telemetry",
             "status": "scanning",
             "message": random.choice(benign_messages),
@@ -127,7 +127,7 @@ async def run_simulation(permission_event: asyncio.Event):
     async def stream_status(agent, status, message, severity="low"):
         await manager.broadcast({
             "id": str(uuid.uuid4()),
-            "timestamp":  datetime.utcnow().isoformat(),
+            "timestamp":  datetime.utcnow().isoformat() + "Z",
             "agent": agent,  
             "status": status,
             "message": message,
@@ -273,7 +273,7 @@ async def run_simulation(permission_event: asyncio.Event):
             message_type=MessageType.COMMAND,
             source_agent="SupervisorAgent",
             target_agent="ResponseAgent",
-            payload={"action": scenario['action'], "target": "admin-user"},
+            payload={"action": scenario['action'], "target": scenario['target']},
             correlation_id=incident_id
     )
     

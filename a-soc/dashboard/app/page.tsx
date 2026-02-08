@@ -54,8 +54,8 @@ export default function Dashboard() {
   });
 
   useEffect(() => {
-    // Connect to Python backend via WebSocket on 9003
-    const socket = new WebSocket("ws://localhost:9003/ws/threat-feed");
+    // Connect to Python backend via WebSocket on 9004
+    const socket = new WebSocket("ws://localhost:9004/ws/threat-feed");
 
     socket.onopen = () => {
       console.log("Connected to A-SOC Python Backend");
