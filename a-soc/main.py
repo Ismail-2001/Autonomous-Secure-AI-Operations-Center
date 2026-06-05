@@ -1,7 +1,10 @@
 import asyncio
+import logging
 import sys
 import uuid
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 # Add the a-soc directory to the Python path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -16,7 +19,7 @@ from agents.telemetry.telemetry_agent import TelemetryAgent
 
 
 async def simulate_threat_cycle():
-    print("\n--- 🕵️ A-SOC AUTONOMOUS SECURITY CYCLE STARTING ---\n")
+    logger.info("--- A-SOC AUTONOMOUS SECURITY CYCLE STARTING ---")
 
     # 1. Initialize Agents
     telemetry = TelemetryAgent()
@@ -27,7 +30,7 @@ async def simulate_threat_cycle():
     compliance = ComplianceAgent()
 
     # 2. Simulate Log Ingestion (Telemetry)
-    print("[1] Telemetry Agent: Ingesting AWS CloudTrail logs...")
+    logger.info("[1] Telemetry Agent: Ingesting AWS CloudTrail logs...")
     incident_id = str(uuid.uuid4())
     alert_msg = ASOCMessage(
         message_type=MessageType.ALERT,
@@ -38,21 +41,21 @@ async def simulate_threat_cycle():
     )
 
     # 3. Threat Analysis (Detection)
-    print("[2] Detection Agent: Analyzing threat with LLM reasoning...")
+    logger.info("[2] Detection Agent: Analyzing threat with LLM reasoning...")
     detection_report = await detection.process_message(alert_msg)
 
     # 4. Policy Enforcement (Supervisor)
     if detection_report:
-        print(f"[3] Supervisor Agent: Evaluating risk ({detection_report.payload['risk_score']})...")
+        logger.info("[3] Supervisor Agent: Evaluating risk (%s)...", detection_report.payload["risk_score"])
         command_to_forensics = await supervisor.process_message(detection_report)
 
         # 5. Root Cause Analysis (Forensics)
         if command_to_forensics:
-            print("[4] Forensics Agent: Reconstructing attack timeline...")
+            logger.info("[4] Forensics Agent: Reconstructing attack timeline...")
             forensics_report = await forensics.process_message(command_to_forensics)
 
             # 6. Automated Remediation (Response)
-            print("[5] Response Agent: Executing remediation (IAM_REVOKE)...")
+            logger.info("[5] Response Agent: Executing remediation (IAM_REVOKE)...")
             remediation_cmd = ASOCMessage(
                 message_type=MessageType.COMMAND,
                 source_agent="SupervisorAgent",
@@ -63,7 +66,7 @@ async def simulate_threat_cycle():
             await response.process_message(remediation_cmd)
 
             # 7. Compliance Audit (Compliance)
-            print("[6] Compliance Agent: Mapping incident to SOC2 controls...")
+            logger.info("[6] Compliance Agent: Mapping incident to SOC2 controls...")
             audit_log = ASOCMessage(
                 message_type=MessageType.LOG,
                 source_agent="ResponseAgent",
@@ -72,8 +75,9 @@ async def simulate_threat_cycle():
             )
             await compliance.process_message(audit_log)
 
-    print("\n--- ✅ THREAT NEUTRALIZED & AUDITED ---\n")
+    logger.info("--- THREAT NEUTRALIZED & AUDITED ---")
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     asyncio.run(simulate_threat_cycle())

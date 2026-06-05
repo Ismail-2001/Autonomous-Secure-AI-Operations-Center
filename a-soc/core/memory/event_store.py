@@ -2,11 +2,14 @@ import asyncio
 import hashlib
 import hmac
 import json
+import logging
 import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List
+
+logger = logging.getLogger(__name__)
 
 
 class EventStore:
@@ -62,7 +65,7 @@ class EventStore:
                     events.append(json.loads(line))
             return events
         except Exception as e:
-            print(f"Error reading event store: {e}")
+            logger.error("Error reading event store: %s", e)
 
         return []
 
@@ -107,7 +110,7 @@ class EventStore:
             sliced = events[offset : offset + limit]
             return {"events": sliced, "total": total, "limit": limit, "offset": offset}
         except Exception as e:
-            print(f"Error searching event store: {e}")
+            logger.error("Error searching event store: %s", e)
             return {"events": [], "total": 0, "limit": limit, "offset": offset}
 
     async def get_timeline(

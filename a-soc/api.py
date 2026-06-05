@@ -1,5 +1,6 @@
 import asyncio
 import hmac
+import logging
 import os
 import random
 import sys
@@ -21,6 +22,8 @@ from agents.base.message import ASOCMessage, MessageType, Priority
 
 # Notification agent for Slack/Teams
 from agents.notifications.notification_agent import NotificationAgent
+
+logger = logging.getLogger(__name__)
 
 notification_agent = NotificationAgent()
 
@@ -337,7 +340,7 @@ async def run_simulation(permission_event: asyncio.Event):
         final_state = await asoc_graph.ainvoke(initial_state)
         detected_score = final_state.get("risk_score", scenario["risk_score"])
     except Exception as e:
-        print(f"LangGraph execution failed: {e}")
+        logger.error("LangGraph execution failed: %s", e)
         detected_score = scenario["risk_score"]
 
     await stream_status("Detection", "detected", f"Threat Confirmed: Risk Score {detected_score}", "high")

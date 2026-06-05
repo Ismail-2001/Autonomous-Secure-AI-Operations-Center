@@ -1,5 +1,9 @@
 # A-SOC System Architecture
 
+![Architecture Diagram](docs/architecture.svg)
+
+> *Interactive SVG diagram above — zoom and pan for details.*
+
 ## High-Level Architecture
 
 ```
