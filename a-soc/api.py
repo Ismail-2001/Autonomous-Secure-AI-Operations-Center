@@ -8,8 +8,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import Depends, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from prometheus_fastapi_instrumentator import Instrumentator
 from pydantic import BaseModel, Field
 
@@ -20,7 +21,7 @@ from agents.notifications.notification_agent import NotificationAgent
 from core.auth import require_api_token, require_ws_token
 from core.circuit_breaker import CircuitBreaker
 from core.database import PostgresEventStore, close_db_pool, get_db_pool
-from core.logging import get_logger, set_incident_id, set_trace_id
+from core.logging import get_logger, get_request_id, set_incident_id, set_request_id, set_trace_id
 from core.message_bus import close_message_bus, get_message_bus
 from core.rate_limiter import check_rate_limit
 
@@ -63,18 +64,22 @@ class HuntingQuery(BaseModel):
     offset: int = Field(default=0, ge=0)
 
 
-# ── Connection Manager (thread-safe) ──
+# ── Connection Manager (thread-safe with heartbeat) ──
 
 
 class ConnectionManager:
-    def __init__(self):
+    def __init__(self, ping_interval: int = 30):
         self._connections: List[WebSocket] = []
         self._lock = asyncio.Lock()
+        self._ping_interval = ping_interval
+        self._reaper_task: Optional[asyncio.Task] = None
 
     async def connect(self, websocket: WebSocket) -> None:
         await websocket.accept()
         async with self._lock:
             self._connections.append(websocket)
+        if self._reaper_task is None:
+            self._reaper_task = asyncio.create_task(self._reap_stale())
 
     async def disconnect(self, websocket: WebSocket) -> None:
         async with self._lock:
@@ -96,6 +101,25 @@ class ConnectionManager:
                     self._connections.remove(conn)
                 except ValueError:
                     pass
+
+    async def _reap_stale(self) -> None:
+        while True:
+            await asyncio.sleep(self._ping_interval)
+            dead: List[WebSocket] = []
+            async with self._lock:
+                for conn in self._connections:
+                    try:
+                        await conn.send_json({"type": "PING"})
+                    except Exception:
+                        dead.append(conn)
+                for conn in dead:
+                    try:
+                        self._connections.remove(conn)
+                    except ValueError:
+                        pass
+            if not self._connections:
+                self._reaper_task = None
+                break
 
 
 manager = ConnectionManager()
@@ -144,6 +168,39 @@ app.add_middleware(
     allow_methods=["GET", "POST"],
     allow_headers=["Authorization", "Content-Type"],
 )
+
+# ── Request ID Middleware ──
+
+
+@app.middleware("http")
+async def request_id_middleware(request: Request, call_next):
+    rid = request.headers.get("X-Request-ID", "")
+    set_request_id(rid)
+    set_trace_id()
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = get_request_id()
+    return response
+
+
+# ── Global Exception Handlers ──
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": exc.detail, "status_code": exc.status_code, "request_id": get_request_id()},
+    )
+
+
+@app.exception_handler(Exception)
+async def generic_exception_handler(request: Request, exc: Exception):
+    logger.error("unhandled_exception", error=str(exc))
+    return JSONResponse(
+        status_code=500,
+        content={"error": "Internal server error", "status_code": 500, "request_id": get_request_id()},
+    )
+
 
 # ── Circuit Breakers ──
 db_circuit_breaker = CircuitBreaker("postgres", failure_threshold=3, recovery_timeout=15.0)
@@ -267,12 +324,14 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(default=""
     permission_event = asyncio.Event()
     client_id = str(id(websocket))
     tid = set_trace_id()
+    current_task: Optional[asyncio.Task] = None
 
     try:
-        current_task: Optional[asyncio.Task] = None
-
         while True:
             data = await websocket.receive_text()
+
+            if data == "PONG":
+                continue
 
             if data == "START_SIMULATION":
                 if current_task:

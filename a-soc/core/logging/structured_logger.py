@@ -7,6 +7,7 @@ from typing import Any, Dict, Optional
 
 _trace_id: ContextVar[str] = ContextVar("trace_id", default="")
 _incident_id: ContextVar[str] = ContextVar("incident_id", default="")
+_request_id: ContextVar[str] = ContextVar("request_id", default="")
 
 
 def set_trace_id(trace_id: Optional[str] = None) -> str:
@@ -27,6 +28,16 @@ def get_incident_id() -> str:
     return _incident_id.get() or ""
 
 
+def set_request_id(request_id: Optional[str] = None) -> str:
+    rid = request_id or str(uuid.uuid4())
+    _request_id.set(rid)
+    return rid
+
+
+def get_request_id() -> str:
+    return _request_id.get() or ""
+
+
 class JSONFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         log_entry: Dict[str, Any] = {
@@ -36,6 +47,7 @@ class JSONFormatter(logging.Formatter):
             "message": record.getMessage(),
             "trace_id": get_trace_id(),
             "incident_id": get_incident_id(),
+            "request_id": get_request_id(),
         }
         if record.exc_info and record.exc_info[0]:
             log_entry["exception"] = self.formatException(record.exc_info)
