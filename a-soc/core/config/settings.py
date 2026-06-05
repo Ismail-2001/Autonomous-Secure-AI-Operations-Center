@@ -19,6 +19,16 @@ class Settings(BaseSettings):
     AWS_ACCESS_KEY_ID: Optional[SecretStr] = None
     AWS_SECRET_ACCESS_KEY: Optional[SecretStr] = None
 
+    # GCP Settings
+    GCP_PROJECT_ID: Optional[str] = None
+    GCP_CREDENTIALS_PATH: Optional[str] = None
+
+    # Azure Settings
+    AZURE_TENANT_ID: Optional[str] = None
+    AZURE_CLIENT_ID: Optional[str] = None
+    AZURE_CLIENT_SECRET: Optional[SecretStr] = None
+    AZURE_SUBSCRIPTION_ID: Optional[str] = None
+
     # Database Settings
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/asoc"
     REDIS_URL: str = "redis://localhost:6379/0"
@@ -35,6 +45,10 @@ class Settings(BaseSettings):
     # Notifications
     SLACK_WEBHOOK_URL: Optional[str] = None
     TEAMS_WEBHOOK_URL: Optional[str] = None
+    JIRA_URL: Optional[str] = None
+    JIRA_EMAIL: Optional[str] = None
+    JIRA_API_TOKEN: Optional[SecretStr] = None
+    JIRA_PROJECT_KEY: Optional[str] = None
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

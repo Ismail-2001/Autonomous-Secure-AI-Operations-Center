@@ -103,12 +103,28 @@ services:
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
       AWS_REGION: ${AWS_REGION:-us-east-1}
       
+      # GCP (Optional)
+      GCP_PROJECT_ID: ${GCP_PROJECT_ID}
+      GCP_CREDENTIALS_PATH: ${GCP_CREDENTIALS_PATH}
+      
+      # Azure (Optional)
+      AZURE_TENANT_ID: ${AZURE_TENANT_ID}
+      AZURE_CLIENT_ID: ${AZURE_CLIENT_ID}
+      AZURE_CLIENT_SECRET: ${AZURE_CLIENT_SECRET}
+      AZURE_SUBSCRIPTION_ID: ${AZURE_SUBSCRIPTION_ID}
+      
       # WebSocket Auth Token
       WS_API_TOKEN: ${WS_API_TOKEN:-dev-token}
       
-      # Slack (Optional)
+      # Slack / Teams (Optional)
       SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL}
       TEAMS_WEBHOOK_URL: ${TEAMS_WEBHOOK_URL}
+      
+      # JIRA (Optional)
+      JIRA_URL: ${JIRA_URL}
+      JIRA_EMAIL: ${JIRA_EMAIL}
+      JIRA_API_TOKEN: ${JIRA_API_TOKEN}
+      JIRA_PROJECT_KEY: ${JIRA_PROJECT_KEY}
       
     ports:
       - "9002:9002"

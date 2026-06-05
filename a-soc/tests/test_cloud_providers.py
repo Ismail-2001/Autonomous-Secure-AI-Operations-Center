@@ -2,7 +2,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from agents.telemetry.cloud_providers import AWSCloudTrailProvider, CloudEvent
+from agents.telemetry.cloud_providers import AWSCloudTrailProvider, AzureCloudProvider, CloudEvent, GCPCloudProvider
 
 
 class TestCloudEvent:
@@ -96,3 +96,79 @@ class TestAWSCloudTrailProvider:
         events = await provider.fetch_events(max_results=2)
         assert len(events) == 2
         assert events[0].event_id.startswith("mock-")
+
+
+@pytest.mark.asyncio
+class TestGCPCloudProvider:
+    async def test_fetch_events_returns_mock_when_no_client(self):
+        provider = GCPCloudProvider()
+        events = await provider.fetch_events(max_results=3)
+        assert len(events) == 3
+        assert all(isinstance(e, CloudEvent) for e in events)
+        assert all(e.event_id.startswith("gcp-mock-") for e in events)
+
+    async def test_mock_events_have_gcp_fields(self):
+        provider = GCPCloudProvider()
+        events = await provider.fetch_events(max_results=1)
+        assert "google." in events[0].event_name
+        assert events[0].user_identity.get("type") == "serviceAccount"
+
+    async def test_health_check_returns_false_without_creds(self):
+        provider = GCPCloudProvider()
+        healthy = await provider.health_check()
+        assert healthy is False
+
+    async def test_fetch_events_with_mock_client(self):
+        provider = GCPCloudProvider(project_id="test-project")
+        mock_client = MagicMock()
+        provider._client = mock_client
+        provider._healthy = True
+        events = await provider.fetch_events(max_results=2)
+        assert len(events) == 2
+        assert all(e.event_id.startswith("gcp-mock-") for e in events)
+
+    async def test_fetch_events_fallback_to_mock_on_error(self):
+        provider = GCPCloudProvider(project_id="test-project")
+        provider._get_client = MagicMock(return_value=None)
+        events = await provider.fetch_events(max_results=2)
+        assert len(events) == 2
+        assert events[0].event_id.startswith("gcp-mock-")
+
+
+@pytest.mark.asyncio
+class TestAzureCloudProvider:
+    async def test_fetch_events_returns_mock_when_no_client(self):
+        provider = AzureCloudProvider()
+        events = await provider.fetch_events(max_results=3)
+        assert len(events) == 3
+        assert all(isinstance(e, CloudEvent) for e in events)
+        assert all(e.event_id.startswith("azure-mock-") for e in events)
+
+    async def test_mock_events_have_azure_fields(self):
+        provider = AzureCloudProvider()
+        events = await provider.fetch_events(max_results=1)
+        assert "MICROSOFT." in events[0].event_name
+        assert events[0].user_identity.get("type") == "AzureAD"
+
+    async def test_health_check_returns_false_without_creds(self):
+        provider = AzureCloudProvider()
+        healthy = await provider.health_check()
+        assert healthy is False
+
+    async def test_fetch_events_with_mock_client(self):
+        provider = AzureCloudProvider(
+            tenant_id="test-tenant", client_id="test-client", client_secret="test-secret", subscription_id="test-sub"
+        )
+        mock_client = MagicMock()
+        provider._client = mock_client
+        provider._healthy = True
+        events = await provider.fetch_events(max_results=2)
+        assert len(events) == 2
+        assert all(e.event_id.startswith("azure-mock-") for e in events)
+
+    async def test_fetch_events_fallback_to_mock_on_error(self):
+        provider = AzureCloudProvider(tenant_id="test-tenant")
+        provider._get_client = MagicMock(return_value=None)
+        events = await provider.fetch_events(max_results=2)
+        assert len(events) == 2
+        assert events[0].event_id.startswith("azure-mock-")

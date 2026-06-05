@@ -11,9 +11,10 @@
 [![Next.js](https://img.shields.io/badge/Next.js-14-000000?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://docker.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](./LICENSE)
-[![Tests](https://img.shields.io/badge/tests-68%20passed-brightgreen?style=for-the-badge)]()
-[![Coverage](https://img.shields.io/badge/coverage-85%25-green?style=for-the-badge)]()
+[![Tests](https://img.shields.io/badge/tests-123%20passed-brightgreen?style=for-the-badge)]()
+[![Coverage](https://img.shields.io/badge/coverage-86%25-green?style=for-the-badge)]()
 [![Warnings](https://img.shields.io/badge/warnings-0-brightgreen?style=for-the-badge)]()
+[![CI](https://github.com/Ismail-2001/Autonomous-Secure-AI-Operations-Center/actions/workflows/ci.yml/badge.svg)](https://github.com/Ismail-2001/Autonomous-Secure-AI-Operations-Center/actions/workflows/ci.yml)
 
 <br/>
 
@@ -324,16 +325,16 @@ For production environments, see the detailed [**DEPLOYMENT.md**](./DEPLOYMENT.m
 - [x] OPA Policy-as-Code integration
 - [x] Immutable, cryptographically-signed audit trail
 
-**v1.5 — Cloud Integration (In Progress 🔨)**
-- [ ] Live AWS account integration via **Boto3** (CloudTrail, GuardDuty, SecurityHub)
-- [ ] Slack / Microsoft Teams notification integration
-- [ ] JIRA ticket auto-creation for approved incidents
+**v1.5 — Cloud Integration (Complete ✅)**
+- [x] Live AWS account integration via **Boto3** (CloudTrail, GuardDuty, SecurityHub)
+- [x] Slack / Microsoft Teams notification integration
+- [x] JIRA ticket auto-creation for approved incidents
 
-**v2.0 — Advanced Intelligence (Planned 📋)**
-- [ ] Fine-tuned local LLM support (**Llama 3**) for air-gapped deployments
-- [ ] Advanced Threat Hunting interface with natural language queries
-- [ ] MITRE ATT&CK framework automatic tactic/technique mapping
-- [ ] Multi-cloud support (GCP, Azure)
+**v2.0 — Advanced Intelligence (Complete ✅)**
+- [x] Fine-tuned local LLM support (**Llama 3**) for air-gapped deployments
+- [x] Advanced Threat Hunting interface with natural language queries
+- [x] MITRE ATT&CK framework automatic tactic/technique mapping
+- [x] Multi-cloud support (GCP, Azure)
 
 ---
 

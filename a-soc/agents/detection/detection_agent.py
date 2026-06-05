@@ -3,24 +3,47 @@ from typing import Optional
 from agents.base.agent import BaseAgent
 from agents.base.message import ASOCMessage, MessageType, Priority
 from core.llm.providers import LLMProvider, MockProvider, create_llm_provider
+from core.mitre.mapper import MitreTechnique, mitre_mapper
 
 
 class DetectionAgent(BaseAgent):
     def __init__(self, provider: Optional[LLMProvider] = None):
-        super().__init__(name="DetectionAgent", description="Anomaly detection + LLM reasoning over security logs")
+        super().__init__(
+            name="DetectionAgent", description="Anomaly detection + LLM reasoning + MITRE ATT&CK over security logs"
+        )
         self._provider = provider or create_llm_provider()
+
+    def _enrich_mitre(self, event_data: dict, llm_technique: Optional[str] = None) -> Optional[MitreTechnique]:
+        mapped = mitre_mapper.map_event(event_data)
+        if mapped:
+            return mapped
+        if llm_technique:
+            return mitre_mapper.map_by_event_name(llm_technique)
+        return None
 
     async def analyze_threat(self, event_data: dict) -> ASOCMessage:
         try:
             result = await self._provider.analyze(event_data)
             self.logger.info(f"Analysis complete via {self._provider.name}: risk={result.risk_score}")
+
+            mitre = self._enrich_mitre(event_data, result.attack_technique)
+            mitre_info = {}
+            if mitre:
+                mitre_info = {
+                    "technique_id": mitre.id,
+                    "technique_name": mitre.name,
+                    "tactic": mitre.tactic,
+                    "description": mitre.description,
+                }
+
             return ASOCMessage(
                 message_type=MessageType.ALERT,
                 source_agent=self.name,
                 payload={
                     "risk_score": result.risk_score,
                     "reasoning": result.reasoning,
-                    "attack_technique": result.attack_technique,
+                    "attack_technique": result.attack_technique or (mitre.id if mitre else None),
+                    "mitre": mitre_info,
                     "original_event": event_data,
                 },
                 priority=Priority.HIGH if result.risk_score > 0.7 else Priority.MEDIUM,
@@ -29,12 +52,25 @@ class DetectionAgent(BaseAgent):
             self.logger.error(f"LLM analysis failed: {e}. Using mock fallback.")
             fallback = MockProvider()
             result = await fallback.analyze(event_data)
+
+            mitre = self._enrich_mitre(event_data, result.attack_technique)
+            mitre_info = {}
+            if mitre:
+                mitre_info = {
+                    "technique_id": mitre.id,
+                    "technique_name": mitre.name,
+                    "tactic": mitre.tactic,
+                    "description": mitre.description,
+                }
+
             return ASOCMessage(
                 message_type=MessageType.ALERT,
                 source_agent=self.name,
                 payload={
                     "risk_score": result.risk_score,
                     "reasoning": result.reasoning,
+                    "attack_technique": result.attack_technique or (mitre.id if mitre else None),
+                    "mitre": mitre_info,
                     "original_event": event_data,
                 },
                 priority=Priority.HIGH,

@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from agents.notifications.notification_agent import (
+    JiraProvider,
     NotificationAgent,
     SlackWebhookProvider,
     TeamsWebhookProvider,
@@ -161,3 +162,153 @@ class TestNotificationAgent:
         result = await agent.process_message(msg)
         assert result is None
         mock_provider.send.assert_not_called()
+
+
+@pytest.mark.asyncio
+class TestJiraProvider:
+    async def test_send_success(self):
+        provider = JiraProvider(
+            url="https://test.atlassian.net",
+            email="bot@test.com",
+            api_token="fake-token",
+            project_key="SEC",
+        )
+        with patch.object(provider, "_post", new_callable=AsyncMock, return_value=True):
+            result = await provider.send(
+                title="Critical Incident",
+                message="S3 data exfiltration detected",
+                severity="critical",
+                fields={"Incident": "INC-001", "Action": "BLOCK_IP"},
+            )
+            assert result is True
+
+    async def test_send_success_no_fields(self):
+        provider = JiraProvider(
+            url="https://test.atlassian.net",
+            email="bot@test.com",
+            api_token="fake-token",
+            project_key="SEC",
+        )
+        with patch.object(provider, "_post", new_callable=AsyncMock, return_value=True):
+            result = await provider.send(
+                title="Low Severity Alert",
+                message="Routine check",
+                severity="low",
+            )
+            assert result is True
+
+    async def test_send_handles_http_error(self):
+        provider = JiraProvider(
+            url="https://test.atlassian.net",
+            email="bot@test.com",
+            api_token="fake-token",
+            project_key="SEC",
+        )
+        with patch.object(provider, "_post", new_callable=AsyncMock, return_value=False):
+            result = await provider.send(
+                title="Failed Alert",
+                message="Should fail",
+                severity="high",
+            )
+            assert result is False
+
+    async def test_post_success(self):
+        provider = JiraProvider(
+            url="https://test.atlassian.net",
+            email="bot@test.com",
+            api_token="fake-token",
+            project_key="SEC",
+        )
+        with patch("httpx.AsyncClient") as mock_client:
+            mock_instance = MagicMock()
+            mock_client.return_value.__aenter__.return_value = mock_instance
+            mock_response = MagicMock()
+            mock_response.raise_for_status.return_value = None
+            mock_response.json.return_value = {"key": "SEC-42", "id": "10001"}
+            mock_instance.post = AsyncMock(return_value=mock_response)
+
+            result = await provider._post({"fields": {"summary": "Test"}})
+            assert result is True
+
+    async def test_post_failure(self):
+        provider = JiraProvider(
+            url="https://test.atlassian.net",
+            email="bot@test.com",
+            api_token="fake-token",
+            project_key="SEC",
+        )
+        with patch("httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_client.return_value.__aenter__.return_value = mock_instance
+            mock_instance.post.side_effect = Exception("JIRA API unavailable")
+
+            result = await provider._post({"fields": {"summary": "Test"}})
+            assert result is False
+
+    async def test_send_uses_correct_priority_mapping(self):
+        provider = JiraProvider(
+            url="https://test.atlassian.net",
+            email="bot@test.com",
+            api_token="fake-token",
+            project_key="SEC",
+        )
+        with patch.object(provider, "_post", new_callable=AsyncMock, return_value=True) as mock_post:
+            await provider.send(
+                title="Critical Alert",
+                message="Critical issue",
+                severity="critical",
+            )
+            call_args = mock_post.call_args[0][0]
+            assert call_args["fields"]["priority"]["name"] == "Highest"
+            assert "a-soc" in call_args["fields"]["labels"]
+            assert "severity-critical" in call_args["fields"]["labels"]
+
+    async def test_send_medium_severity(self):
+        provider = JiraProvider(
+            url="https://test.atlassian.net",
+            email="bot@test.com",
+            api_token="fake-token",
+            project_key="SEC",
+        )
+        with patch.object(provider, "_post", new_callable=AsyncMock, return_value=True) as mock_post:
+            await provider.send(
+                title="Medium Alert",
+                message="Medium issue",
+                severity="medium",
+            )
+            call_args = mock_post.call_args[0][0]
+            assert call_args["fields"]["priority"]["name"] == "Medium"
+
+    async def test_send_uses_correct_project_key(self):
+        provider = JiraProvider(
+            url="https://test.atlassian.net",
+            email="bot@test.com",
+            api_token="fake-token",
+            project_key="SOC",
+        )
+        with patch.object(provider, "_post", new_callable=AsyncMock, return_value=True) as mock_post:
+            await provider.send(
+                title="SOC Alert",
+                message="Test",
+                severity="high",
+            )
+            call_args = mock_post.call_args[0][0]
+            assert call_args["fields"]["project"]["key"] == "SOC"
+
+    async def test_send_title_truncated_at_255(self):
+        provider = JiraProvider(
+            url="https://test.atlassian.net",
+            email="bot@test.com",
+            api_token="fake-token",
+            project_key="SEC",
+        )
+        with patch.object(provider, "_post", new_callable=AsyncMock, return_value=True) as mock_post:
+            long_title = "A" * 500
+            await provider.send(
+                title=long_title,
+                message="Test",
+                severity="low",
+            )
+            call_args = mock_post.call_args[0][0]
+            assert len(call_args["fields"]["summary"]) == 255
+            assert call_args["fields"]["summary"] == "A" * 255

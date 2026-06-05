@@ -11,6 +11,7 @@ class MessageType(str, Enum):
     COMMAND = "command"
     QUERY = "query"
     RESPONSE = "response"
+    REPORT = "report"
     LOG = "log"
 
 
