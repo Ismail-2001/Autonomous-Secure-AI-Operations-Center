@@ -1,63 +1,123 @@
 import asyncio
-import hmac
-import logging
 import os
 import random
 import sys
-import time
 import uuid
-from collections import defaultdict
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
-from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from prometheus_fastapi_instrumentator import Instrumentator
+from pydantic import BaseModel, Field
 
-# Add the a-soc directory (parent of api.py) to sys.path
 sys.path.append(str(Path(__file__).parent))
 
 from agents.base.message import ASOCMessage, MessageType, Priority
-
-# Notification agent for Slack/Teams
 from agents.notifications.notification_agent import NotificationAgent
+from core.database import PostgresEventStore, close_db_pool, get_db_pool
+from core.logging import get_logger, set_incident_id, set_trace_id
+from core.message_bus import close_message_bus, get_message_bus
 
-logger = logging.getLogger(__name__)
+logger = get_logger("asoc.api")
 
 notification_agent = NotificationAgent()
 
-from core.memory.event_store import event_store
+# Use PostgresEventStore if available, fall back to JSONL EventStore
+try:
+    _event_store = PostgresEventStore()
+    _test_conn = __import__("os").getenv("DATABASE_URL", "")
+    if not _test_conn or "localhost" in _test_conn:
+        raise RuntimeError("no db")
+    _event_store  # pragma: no cover
+except Exception:
+    from core.memory.event_store import EventStore as _fallback_store
+
+    _event_store = _fallback_store()
+
+event_store = _event_store
+
+CORS_ALLOW_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
+WS_API_TOKEN = os.getenv("WS_API_TOKEN", "dev-token")
 
 
-class RateLimiter:
-    def __init__(self, max_calls: int = 10, window: float = 10.0):
-        self.max_calls = max_calls
-        self.window = window
-        self.calls: dict[str, list[float]] = defaultdict(list)
+# ── Pydantic Input Validation ──
 
-    async def check(self, client_id: str) -> bool:
-        now = time.monotonic()
-        self.calls[client_id] = [t for t in self.calls[client_id] if now - t < self.window]
-        if len(self.calls[client_id]) >= self.max_calls:
-            return False
-        self.calls[client_id].append(now)
-        return True
+class SimulationStart(BaseModel):
+    scenario: Optional[str] = Field(None, max_length=100)
 
 
-rate_limiter = RateLimiter()
+class ApprovalAction(BaseModel):
+    incident_id: str = Field(..., min_length=1, max_length=64)
+    approved: bool = True
 
+
+class HuntingQuery(BaseModel):
+    q: str = Field(default="", max_length=500)
+    source: str = Field(default="", max_length=100)
+    event_type: str = Field(default="", max_length=50)
+    start_time: str = Field(default="", max_length=30)
+    end_time: str = Field(default="", max_length=30)
+    limit: int = Field(default=50, ge=1, le=500)
+    offset: int = Field(default=0, ge=0)
+
+
+# ── Connection Manager (thread-safe) ──
+
+class ConnectionManager:
+    def __init__(self):
+        self._connections: List[WebSocket] = []
+        self._lock = asyncio.Lock()
+
+    async def connect(self, websocket: WebSocket) -> None:
+        await websocket.accept()
+        async with self._lock:
+            self._connections.append(websocket)
+
+    async def disconnect(self, websocket: WebSocket) -> None:
+        async with self._lock:
+            try:
+                self._connections.remove(websocket)
+            except ValueError:
+                pass
+
+    async def broadcast(self, message: dict) -> None:
+        async with self._lock:
+            dead: List[WebSocket] = []
+            for conn in self._connections:
+                try:
+                    await conn.send_json(message)
+                except Exception:
+                    dead.append(conn)
+            for conn in dead:
+                try:
+                    self._connections.remove(conn)
+                except ValueError:
+                    pass
+
+
+manager = ConnectionManager()
+instrumentator = Instrumentator()
+
+
+# ── Lifespan ──
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    asyncio.create_task(background_telemetry())
+    logger.info("app_starting")
+    instrumentator.instrument(app).expose(app)
+    bg = asyncio.create_task(background_telemetry())
     yield
+    bg.cancel()
+    await close_db_pool()
+    await close_message_bus()
+    logger.info("app_stopped")
 
 
 app = FastAPI(title="A-SOC API", lifespan=lifespan)
 
-# CORS — driven by env var, default to localhost:3000
-CORS_ALLOW_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ALLOW_ORIGINS,
@@ -66,79 +126,72 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
 )
 
-WS_API_TOKEN = os.getenv("WS_API_TOKEN", "dev-token")
 
-
-class ConnectionManager:
-    def __init__(self):
-        self.active_connections: List[WebSocket] = []
-
-    async def connect(self, websocket: WebSocket):
-        await websocket.accept()
-        self.active_connections.append(websocket)
-
-    def disconnect(self, websocket: WebSocket):
-        self.active_connections.remove(websocket)
-
-    async def broadcast(self, message: dict):
-        for connection in self.active_connections:
-            await connection.send_json(message)
-
-
-manager = ConnectionManager()
-
+# ── Health ──
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint for Kubernetes probes"""
-    return {"status": "healthy", "service": "asoc-backend", "active_connections": len(manager.active_connections)}
+    db_ok = False
+    bus_ok = False
+    try:
+        pool = await get_db_pool()
+        async with pool.pool.acquire() as conn:
+            await conn.fetchval("SELECT 1")
+        db_ok = True
+    except Exception:
+        pass
+    try:
+        bus = await get_message_bus()
+        bus_ok = await bus.health_check()
+    except Exception:
+        pass
+    return {
+        "status": "healthy",
+        "service": "asoc-backend",
+        "active_connections": len(manager._connections),
+        "database": "connected" if db_ok else "unavailable",
+        "message_bus": "connected" if bus_ok else "unavailable",
+    }
 
 
-# ── Threat Hunting REST API ──────────────────────────────────────────────
-
+# ── Threat Hunting API ──
 
 @app.get("/api/hunting/events")
 async def hunting_events(
-    q: str = Query(default="", description="Search query"),
-    source: str = Query(default="", alias="agent", description="Filter by agent name"),
-    event_type: str = Query(default="", description="Filter by event type"),
-    start_time: str = Query(default="", description="ISO timestamp start filter"),
-    end_time: str = Query(default="", description="ISO timestamp end filter"),
+    q: str = Query(default="", max_length=500),
+    source: str = Query(default="", max_length=100, alias="agent"),
+    event_type: str = Query(default="", max_length=50),
+    start_time: str = Query(default="", max_length=30),
+    end_time: str = Query(default="", max_length=30),
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
 ):
     result = await event_store.search_events(
-        query=q,
-        agent=source,
-        event_type=event_type,
-        start_time=start_time,
-        end_time=end_time,
-        limit=limit,
-        offset=offset,
+        query=q, agent=source, event_type=event_type,
+        start_time=start_time, end_time=end_time, limit=limit, offset=offset,
     )
     return {"status": "ok", **result}
 
 
 @app.get("/api/hunting/timeline")
 async def hunting_timeline(
-    q: str = Query(default="", description="Search query"),
-    source: str = Query(default="", alias="agent", description="Filter by agent name"),
-    start_time: str = Query(default="", description="ISO timestamp start filter"),
-    end_time: str = Query(default="", description="ISO timestamp end filter"),
+    q: str = Query(default="", max_length=500),
+    source: str = Query(default="", max_length=100, alias="agent"),
+    start_time: str = Query(default="", max_length=30),
+    end_time: str = Query(default="", max_length=30),
     bucket: str = Query(default="hour", pattern="^(minute|hour|day)$"),
 ):
     buckets = await event_store.get_timeline(
-        query=q, agent=source, start_time=start_time, end_time=end_time, bucket=bucket
+        query=q, agent=source, start_time=start_time, end_time=end_time, bucket=bucket,
     )
     return {"status": "ok", "buckets": buckets, "bucket_size": bucket}
 
 
-# ── WebSocket ─────────────────────────────────────────────────────────────
-
+# ── WebSocket ──
 
 @app.websocket("/ws/threat-feed")
 async def websocket_endpoint(websocket: WebSocket, token: str = Query(default="")):
-    # Authentication
+    import hmac
     if not hmac.compare_digest(token, WS_API_TOKEN):
         await websocket.close(code=4001, reason="Unauthorized")
         return
@@ -146,16 +199,12 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(default=""
     await manager.connect(websocket)
     permission_event = asyncio.Event()
     client_id = str(id(websocket))
+    tid = set_trace_id()
 
     try:
-        current_task = None
+        current_task: Optional[asyncio.Task] = None
 
         while True:
-            # Rate limiting check
-            if not await rate_limiter.check(client_id):
-                await websocket.send_json({"error": "Rate limit exceeded. Try again later."})
-                continue
-
             data = await websocket.receive_text()
 
             if data == "START_SIMULATION":
@@ -166,40 +215,37 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(default=""
 
             elif data == "APPROVE_ACTION":
                 permission_event.set()
-                await manager.broadcast(
-                    {
-                        "id": str(uuid.uuid4()),
-                        "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
-                        "agent": "System",
-                        "status": "approved",
-                        "message": "Human operator authorized action.",
-                        "severity": "low",
-                    }
-                )
+                await manager.broadcast({
+                    "id": str(uuid.uuid4()),
+                    "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
+                    "agent": "System",
+                    "status": "approved",
+                    "message": "Human operator authorized action.",
+                    "severity": "low",
+                })
 
             elif data == "STOP_SIMULATION":
                 if current_task:
                     current_task.cancel()
                     current_task = None
-                await manager.broadcast(
-                    {
-                        "id": str(uuid.uuid4()),
-                        "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
-                        "agent": "System",
-                        "status": "idle",
-                        "message": "Simulation stopped by operator.",
-                        "severity": "low",
-                    }
-                )
+                await manager.broadcast({
+                    "id": str(uuid.uuid4()),
+                    "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
+                    "agent": "System",
+                    "status": "idle",
+                    "message": "Simulation stopped by operator.",
+                    "severity": "low",
+                })
 
     except WebSocketDisconnect:
-        manager.disconnect(websocket)
+        await manager.disconnect(websocket)
         if current_task:
             current_task.cancel()
 
 
+# ── Background Telemetry ──
+
 async def background_telemetry():
-    """Simulate continuous benign log flow."""
     benign_messages = [
         "VPC Flow: Traffic allowed from 10.0.0.5 to 10.0.0.8 (Port 443)",
         "IAM: User 'dev-operator' assumed role 'ReadOnlyAccess'",
@@ -211,202 +257,108 @@ async def background_telemetry():
         "Config: Resource 'sg-0abc123' compliant with policy 'restricted-ssh'",
     ]
     while True:
-        await manager.broadcast(
-            {
-                "id": str(uuid.uuid4()),
-                "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
-                "agent": "Telemetry",
-                "status": "scanning",
-                "message": random.choice(benign_messages),
-                "severity": "low",
-                "is_background": True,
-            }
-        )
+        await manager.broadcast({
+            "id": str(uuid.uuid4()),
+            "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
+            "agent": "Telemetry",
+            "status": "scanning",
+            "message": random.choice(benign_messages),
+            "severity": "low",
+            "is_background": True,
+        })
         await asyncio.sleep(random.uniform(2, 5))
 
 
-from core.orchestration.workflow import AgentState, create_asoc_graph
-
-asoc_graph = create_asoc_graph()
-
+# ── Simulation ──
 
 async def run_simulation(permission_event: asyncio.Event):
-    """Run a randomized secure SOC cycle via LangGraph, streaming updates to the UI."""
-
     async def stream_status(agent, status, message, severity="low"):
-        await manager.broadcast(
-            {
-                "id": str(uuid.uuid4()),
-                "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
-                "agent": agent,
-                "status": status,
-                "message": message,
-                "severity": severity,
-            }
-        )
+        await manager.broadcast({
+            "id": str(uuid.uuid4()),
+            "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
+            "agent": agent,
+            "status": status,
+            "message": message,
+            "severity": severity,
+        })
         await asyncio.sleep(1.5)
 
     await stream_status("System", "active", "A-SOC Protocol Initiated", "low")
 
     scenarios = [
-        {
-            "name": "IAM Privilege Escalation",
-            "telemetry": {"event": "ConsoleLogin", "user": "admin", "ip": "192.168.1.50"},
-            "alert": "Suspicious ConsoleLogin detected (Brute Force)",
-            "risk_score": 0.85,
-            "action": "IAM_REVOKE",
-            "target": "admin-user",
-            "graph": {
-                "nodes": [
-                    {"id": "attacker-ip", "type": "threat_actor", "label": "IP: 192.168.1.50", "risk": "critical"},
-                    {"id": "user", "type": "identity", "label": "User: admin", "risk": "high"},
-                    {"id": "policy", "type": "resource", "label": "IAM: FullAccess", "risk": "medium"},
-                ],
-                "edges": [
-                    {"source": "attacker-ip", "target": "user", "label": "Brute Force"},
-                    {"source": "user", "target": "policy", "label": "Policy Attach"},
-                ],
-            },
-        },
-        {
-            "name": "Ransomware Data Encrypted",
-            "telemetry": {"event": "FileWrite", "path": "/data/db.enc", "process": "encrypt.exe"},
-            "alert": "High-velocity file encryption detected on DB Server",
-            "risk_score": 0.95,
-            "action": "ISOLATE_INSTANCE",
-            "target": "i-098f6bcd4621d373c",
-            "graph": {
-                "nodes": [
-                    {"id": "c2-server", "type": "threat_actor", "label": "C2: 45.33.2.1", "risk": "critical"},
-                    {"id": "host", "type": "resource", "label": "EC2: DB-Prod", "risk": "critical"},
-                    {"id": "file", "type": "resource", "label": "File: sensitive.db", "risk": "high"},
-                ],
-                "edges": [
-                    {"source": "c2-server", "target": "host", "label": "Command & Control"},
-                    {"source": "host", "target": "file", "label": "Encryption Process"},
-                ],
-            },
-        },
-        {
-            "name": "S3 Data Exfiltration",
-            "telemetry": {"event": "GetObject", "bucket": "customer-data", "bytes": 5000000000},
-            "alert": "Anomalous Data Transfer (5GB) to external IP",
-            "risk_score": 0.75,
-            "action": "BLOCK_IP",
-            "target": "203.0.113.42",
-            "graph": {
-                "nodes": [
-                    {"id": "insider", "type": "identity", "label": "User: analyst-bob", "risk": "medium"},
-                    {"id": "bucket", "type": "resource", "label": "S3: customer-data", "risk": "high"},
-                    {"id": "dest-ip", "type": "threat_actor", "label": "IP: 203.0.113.42", "risk": "critical"},
-                ],
-                "edges": [
-                    {"source": "insider", "target": "bucket", "label": "Bulk Read"},
-                    {"source": "bucket", "target": "dest-ip", "label": "Exfiltration"},
-                ],
-            },
-        },
+        {"name": "IAM Privilege Escalation", "telemetry": {"event": "ConsoleLogin", "user": "admin", "ip": "192.168.1.50"}, "alert": "Suspicious ConsoleLogin detected (Brute Force)", "risk_score": 0.85, "action": "IAM_REVOKE", "target": "admin-user", "graph": {"nodes": [{"id": "attacker-ip", "type": "threat_actor", "label": "IP: 192.168.1.50", "risk": "critical"}, {"id": "user", "type": "identity", "label": "User: admin", "risk": "high"}, {"id": "policy", "type": "resource", "label": "IAM: FullAccess", "risk": "medium"}], "edges": [{"source": "attacker-ip", "target": "user", "label": "Brute Force"}, {"source": "user", "target": "policy", "label": "Policy Attach"}]}},
+        {"name": "Ransomware Data Encrypted", "telemetry": {"event": "FileWrite", "path": "/data/db.enc", "process": "encrypt.exe"}, "alert": "High-velocity file encryption detected on DB Server", "risk_score": 0.95, "action": "ISOLATE_INSTANCE", "target": "i-098f6bcd4621d373c", "graph": {"nodes": [{"id": "c2-server", "type": "threat_actor", "label": "C2: 45.33.2.1", "risk": "critical"}, {"id": "host", "type": "resource", "label": "EC2: DB-Prod", "risk": "critical"}, {"id": "file", "type": "resource", "label": "File: sensitive.db", "risk": "high"}], "edges": [{"source": "c2-server", "target": "host", "label": "Command & Control"}, {"source": "host", "target": "file", "label": "Encryption Process"}]}},
+        {"name": "S3 Data Exfiltration", "telemetry": {"event": "GetObject", "bucket": "customer-data", "bytes": 5000000000}, "alert": "Anomalous Data Transfer (5GB) to external IP", "risk_score": 0.75, "action": "BLOCK_IP", "target": "203.0.113.42", "graph": {"nodes": [{"id": "insider", "type": "identity", "label": "User: analyst-bob", "risk": "medium"}, {"id": "bucket", "type": "resource", "label": "S3: customer-data", "risk": "high"}, {"id": "dest-ip", "type": "threat_actor", "label": "IP: 203.0.113.42", "risk": "critical"}], "edges": [{"source": "insider", "target": "bucket", "label": "Bulk Read"}, {"source": "bucket", "target": "dest-ip", "label": "Exfiltration"}]}},
     ]
 
     scenario = random.choice(scenarios)
     incident_id = str(uuid.uuid4())
+    set_incident_id(incident_id)
 
     await stream_status("System", "monitoring", f"Scenario Active: {scenario['name']}", "low")
-
-    # Ingest telemetry
     await stream_status("Telemetry", "scanning", f"Ingesting Logs: {scenario['telemetry']}", "low")
 
     alert_msg = ASOCMessage(
-        message_type=MessageType.ALERT,
-        source_agent="TelemetryAgent",
-        payload=scenario["telemetry"],
-        correlation_id=incident_id,
-        priority=Priority.MEDIUM,
+        message_type=MessageType.ALERT, source_agent="TelemetryAgent",
+        payload=scenario["telemetry"], correlation_id=incident_id, priority=Priority.MEDIUM,
     )
     await stream_status("Telemetry", "alert", scenario["alert"], "medium")
 
-    # Run detection through LangGraph
+    # Publish to message bus
+    try:
+        bus = await get_message_bus()
+        await bus.publish("telemetry", {"event": scenario["telemetry"], "incident_id": incident_id})
+    except Exception as e:
+        logger.error("message_bus_publish_failed", error=str(e))
+
+    # Detection
     await stream_status("Detection", "analyzing", "Correlating events with Threat Intel...", "low")
 
-    initial_state: AgentState = {
-        "messages": [alert_msg],
-        "incident_id": incident_id,
-        "risk_score": 0.0,
-        "next_step": "telemetry",
-        "is_authorized": False,
-    }
-
-    try:
-        final_state = await asoc_graph.ainvoke(initial_state)
-        detected_score = final_state.get("risk_score", scenario["risk_score"])
-    except Exception as e:
-        logger.error("LangGraph execution failed: %s", e)
-        detected_score = scenario["risk_score"]
+    from agents.detection.detection_agent import DetectionAgent
+    da = DetectionAgent()
+    detection_result = await da.analyze_threat(scenario["telemetry"])
+    detected_score = detection_result.payload["risk_score"] if detection_result else scenario["risk_score"]
 
     await stream_status("Detection", "detected", f"Threat Confirmed: Risk Score {detected_score}", "high")
 
-    # Supervise (approval gate)
+    # Supervisor
     await stream_status("Supervisor", "evaluating", "Checking policy guardrails...", "low")
 
-    risk_score = detected_score
-
-    if risk_score > 0.6:
-        await stream_status(
-            "Supervisor",
-            "blocked",
-            f"High Risk Action Proposed: {scenario['action']}. Awaiting Authorization...",
-            "critical",
-        )
-        await manager.broadcast(
-            {
-                "type": "APPROVAL_REQUIRED",
-                "action": scenario["action"],
-                "target": scenario["target"],
-                "risk_score": risk_score,
-            }
-        )
+    if detected_score > 0.6:
+        await stream_status("Supervisor", "blocked", f"High Risk Action Proposed: {scenario['action']}. Awaiting Authorization...", "critical")
+        await manager.broadcast({"type": "APPROVAL_REQUIRED", "action": scenario["action"], "target": scenario["target"], "risk_score": detected_score})
         await permission_event.wait()
         await stream_status("Supervisor", "authorized", "Action Authorized. Proceeding...", "low")
 
-    # Forensics blast radius
+    # Forensics
     await stream_status("Forensics", "investigating", "Reconstructing blast radius...", "medium")
-    await manager.broadcast(
-        {
-            "type": "BLAST_RADIUS_UPDATE",
-            "graph": scenario["graph"],
-            "root_cause": scenario["name"],
-        }
-    )
+    await manager.broadcast({"type": "BLAST_RADIUS_UPDATE", "graph": scenario["graph"], "root_cause": scenario["name"]})
     await stream_status("Forensics", "complete", "Root cause execution trace mapped.", "high")
 
     # Response
     await stream_status("Response", "actuating", f"Executing {scenario['action']}...", "critical")
     await stream_status("Response", "notifying", "Sending alert via configured notification channels...", "medium")
     await notification_agent.send_alert(
-        title=f"A-SOC: {scenario['name']}",
-        message=f"Action: {scenario['action']} on {scenario['target']} | Risk Score: {risk_score}",
-        severity="critical" if risk_score > 0.8 else "high",
-        fields={
-            "Incident": incident_id,
-            "Action": scenario["action"],
-            "Target": scenario["target"],
-            "Risk Score": f"{risk_score:.2f}",
-        },
+        title=f"A-SOC: {scenario['name']}", message=f"Action: {scenario['action']} on {scenario['target']} | Risk Score: {detected_score}",
+        severity="critical" if detected_score > 0.8 else "high",
+        fields={"Incident": incident_id, "Action": scenario["action"], "Target": scenario["target"], "Risk Score": f"{detected_score:.2f}"},
     )
-    await asyncio.sleep(0.5)
+
     await stream_status("Response", "success", "Threat Neutralized. Infrastructure Secure.", "low")
 
     # Compliance
     await stream_status("Compliance", "auditing", "Mapping to SOC2 & ISO 27001...", "low")
-    await stream_status(
-        "Compliance",
-        "logged",
-        f"Audit record #{random.randint(1000, 9999)} sealed.",
-        "low",
-    )
+    await stream_status("Compliance", "logged", f"Audit record #{random.randint(1000, 9999)} sealed.", "low")
+
+    # Persist to event store
+    try:
+        await event_store.append_event("threat_cycle_complete", {"scenario": scenario["name"], "risk_score": detected_score, "action": scenario["action"]}, "System")
+    except Exception as e:
+        logger.error("event_store_append_failed", error=str(e))
+
+    logger.info("simulation_complete", scenario=scenario["name"], risk_score=detected_score, incident_id=incident_id)
 
 
 if __name__ == "__main__":
     import uvicorn
-
     uvicorn.run(app, host="0.0.0.0", port=9002)

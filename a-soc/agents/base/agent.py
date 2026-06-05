@@ -1,50 +1,53 @@
 import abc
-import logging
 from typing import Any, Dict, Optional
 
 from agents.base.message import ASOCMessage, MessageType
+from core.logging import get_logger
 
 
 class BaseAgent(abc.ABC):
     def __init__(self, name: str, description: str):
         self.name = name
         self.description = description
-        self.logger = logging.getLogger(f"asoc.agents.{name}")
-        self._setup_logging()
-
-    def _setup_logging(self):
-        handler = logging.StreamHandler()
-        formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-        handler.setFormatter(formatter)
-        self.logger.addHandler(handler)
-        self.logger.setLevel(logging.INFO)
+        self.logger = get_logger(f"asoc.agents.{name}")
 
     @abc.abstractmethod
-    async def process_message(self, message: ASOCMessage) -> Optional[ASOCMessage]:
-        """Process an incoming message and optionally return a response."""
+    async def process_message(self, message: ASOCMessage) -> Optional[ASOCMessage]: ...
 
     async def send_message(self, message: ASOCMessage):
-        """Simulate sending a message to the orchestrator/bus."""
-        self.logger.info(f"Sending message {message.message_id} from {self.name}")
-        # In a real implementation, this would push to a message bus like Redis/RabbitMQ
+        from core.message_bus import get_message_bus
+
+        self.logger.info("sending_message", message_id=message.message_id, target=message.target_agent)
+        try:
+            bus = await get_message_bus()
+            topic = message.target_agent or "broadcast"
+            await bus.publish(topic, {
+                "message_id": message.message_id,
+                "message_type": message.message_type.value,
+                "source_agent": message.source_agent,
+                "target_agent": message.target_agent,
+                "payload": message.payload,
+                "correlation_id": message.correlation_id,
+                "priority": message.priority.value if hasattr(message.priority, "value") else message.priority,
+            })
+        except Exception as e:
+            self.logger.error("send_message_failed", error=str(e), message_id=message.message_id)
 
     async def log_event(self, event_type: str, details: Dict[str, Any]):
-        """Log a security event to the immutable audit store (EventStore)."""
         log_msg = ASOCMessage(
-            message_type=MessageType.LOG, source_agent=self.name, payload={"event_type": event_type, "details": details}
+            message_type=MessageType.LOG,
+            source_agent=self.name,
+            payload={"event_type": event_type, "details": details},
         )
-        self.logger.info(f"Audit Log: {event_type} - {details}")
+        self.logger.info("audit_event", event_type=event_type, details=details)
 
-        # Persist to disk
         try:
-            from core.memory.event_store import event_store
+            from core.database import PostgresEventStore
 
-            await event_store.append_event(event_type, details, self.name)
-        except ImportError:
-            # Fallback for when running in diverse environments
-            pass
+            store = PostgresEventStore()
+            await store.append_event(event_type, details, self.name)
         except Exception as e:
-            self.logger.error(f"Failed to persist event: {e}")
+            self.logger.error("event_persist_failed", error=str(e), event_type=event_type)
 
         await self.send_message(log_msg)
 

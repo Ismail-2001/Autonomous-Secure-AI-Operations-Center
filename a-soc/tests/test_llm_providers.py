@@ -99,11 +99,15 @@ class TestCreateProvider:
 class TestOpenAIProvider:
     async def test_analyze_success(self):
         mock_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.content = (
+        mock_completion = MagicMock()
+        mock_choice = MagicMock()
+        mock_choice.message.content = (
             '{"threat_detected": true, "risk_score": 0.92, "reasoning": "Test", "attack_technique": "T1078"}'
         )
-        mock_client.ainvoke = AsyncMock(return_value=mock_response)
+        mock_completion.choices = [mock_choice]
+        mock_client.chat = MagicMock()
+        mock_client.chat.completions = MagicMock()
+        mock_client.chat.completions.create = AsyncMock(return_value=mock_completion)
 
         provider = OpenAIProvider(api_key="sk-test")
         provider._client = mock_client
@@ -115,9 +119,13 @@ class TestOpenAIProvider:
 
     async def test_analyze_throws_on_invalid_json(self):
         mock_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.content = "not json"
-        mock_client.ainvoke = AsyncMock(return_value=mock_response)
+        mock_completion = MagicMock()
+        mock_choice = MagicMock()
+        mock_choice.message.content = "not json"
+        mock_completion.choices = [mock_choice]
+        mock_client.chat = MagicMock()
+        mock_client.chat.completions = MagicMock()
+        mock_client.chat.completions.create = AsyncMock(return_value=mock_completion)
 
         provider = OpenAIProvider(api_key="sk-test")
         provider._client = mock_client
@@ -134,11 +142,14 @@ class TestOpenAIProvider:
 class TestAnthropicProvider:
     async def test_analyze_success(self):
         mock_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.content = (
+        mock_content_block = MagicMock()
+        mock_content_block.text = (
             '{"threat_detected": true, "risk_score": 0.88, "reasoning": "Test claude", "attack_technique": "T1098"}'
         )
-        mock_client.ainvoke = AsyncMock(return_value=mock_response)
+        mock_response = MagicMock()
+        mock_response.content = [mock_content_block]
+        mock_client.messages = MagicMock()
+        mock_client.messages.create = AsyncMock(return_value=mock_response)
 
         provider = AnthropicProvider(api_key="sk-ant-test")
         provider._client = mock_client
@@ -156,11 +167,15 @@ class TestAnthropicProvider:
 class TestOllamaProvider:
     async def test_analyze_success(self):
         mock_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.content = (
+        mock_completion = MagicMock()
+        mock_choice = MagicMock()
+        mock_choice.message.content = (
             '{"threat_detected": true, "risk_score": 0.72, "reasoning": "Local LLM analysis", "attack_technique": null}'
         )
-        mock_client.ainvoke = AsyncMock(return_value=mock_response)
+        mock_completion.choices = [mock_choice]
+        mock_client.chat = MagicMock()
+        mock_client.chat.completions = MagicMock()
+        mock_client.chat.completions.create = AsyncMock(return_value=mock_completion)
 
         provider = OllamaProvider(model="llama3")
         provider._client = mock_client

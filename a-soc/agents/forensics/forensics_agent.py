@@ -13,21 +13,20 @@ class ForensicsAgent(BaseAgent):
         super().__init__(name="ForensicsAgent", description="Performs root cause analysis and blast radius assessment")
 
     async def analyze_incident(self, incident_data: Dict[str, Any]) -> Dict[str, Any]:
-        self.logger.info(f"Starting forensics for incident: {incident_data.get('incident_id')}")
+        self.logger.info("forensics_started", incident_id=incident_data.get("incident_id"))
 
         query_text = json.dumps(incident_data.get("data", incident_data))
         query_vector = vector_provider.embed_text(query_text)
-        similar = await vector_provider.query(query_vector, top_k=3)
+        try:
+            similar = await vector_provider.query(query_vector, top_k=3)
+        except Exception as e:
+            self.logger.error("vector_query_failed", error=str(e))
+            similar = []
 
-        related_incidents = []
-        for record in similar:
-            related_incidents.append(
-                {
-                    "id": record.id,
-                    "similarity": round(record.score, 3),
-                    "root_cause": record.metadata.get("root_cause", "Unknown"),
-                }
-            )
+        related_incidents = [
+            {"id": r.id, "similarity": round(r.score, 3), "root_cause": r.metadata.get("root_cause", "Unknown")}
+            for r in similar
+        ]
 
         reconstruction = {
             "root_cause": "Compromised IAM credentials for 'test-user'",
@@ -40,12 +39,10 @@ class ForensicsAgent(BaseAgent):
             "confidence_score": 0.92,
             "similar_past_incidents": related_incidents,
         }
-
         return reconstruction
 
     async def process_message(self, message: ASOCMessage) -> Optional[ASOCMessage]:
-        self.logger.info(f"Processing forensics request: {message.payload}")
-
+        self.logger.info("processing_forensics", payload=message.payload)
         await self.log_event("forensics_started", {"target": message.payload.get("target")})
 
         blast_radius_graph = {
@@ -73,19 +70,13 @@ class ForensicsAgent(BaseAgent):
         await self.log_event("forensics_complete", analysis_result)
 
         return ASOCMessage(
-            message_type=MessageType.REPORT,
-            source_agent=self.name,
-            target_agent="SupervisorAgent",
-            payload=analysis_result,
-            correlation_id=message.correlation_id,
-            priority=Priority.HIGH,
+            message_type=MessageType.REPORT, source_agent=self.name, target_agent="SupervisorAgent",
+            payload=analysis_result, correlation_id=message.correlation_id, priority=Priority.HIGH,
         )
 
     async def _store_incident_vector(self, analysis: Dict[str, Any], incident_id: Optional[str] = None) -> None:
         try:
-            text_for_embedding = json.dumps(
-                {"root_cause": analysis.get("root_cause", ""), "evidence": analysis.get("evidence", [])}
-            )
+            text_for_embedding = json.dumps({"root_cause": analysis.get("root_cause", ""), "evidence": analysis.get("evidence", [])})
             vector = vector_provider.embed_text(text_for_embedding)
             record = VectorRecord(
                 id=incident_id or str(uuid.uuid4()),
@@ -99,6 +90,6 @@ class ForensicsAgent(BaseAgent):
                 },
             )
             await vector_provider.upsert([record])
-            self.logger.info(f"Stored incident vector: {record.id}")
+            self.logger.info("incident_vector_stored", vector_id=record.id)
         except Exception as e:
-            self.logger.error(f"Failed to store incident vector: {e}")
+            self.logger.error("incident_vector_failed", error=str(e))
