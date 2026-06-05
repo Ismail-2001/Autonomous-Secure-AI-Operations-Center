@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     # Vector DB
     PINECONE_API_KEY: Optional[SecretStr] = None
     PINECONE_ENVIRONMENT: Optional[str] = None
+    PINECONE_INDEX_NAME: str = "asoc-incidents"
 
     # Security
     OPA_URL: str = "http://localhost:8181"

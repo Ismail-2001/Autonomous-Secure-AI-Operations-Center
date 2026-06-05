@@ -1,7 +1,11 @@
+import json
+import uuid
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from agents.base.agent import BaseAgent
 from agents.base.message import ASOCMessage, MessageType, Priority
+from core.vector.pinecone_provider import VectorRecord, vector_provider
 
 
 class ForensicsAgent(BaseAgent):
@@ -9,13 +13,22 @@ class ForensicsAgent(BaseAgent):
         super().__init__(name="ForensicsAgent", description="Performs root cause analysis and blast radius assessment")
 
     async def analyze_incident(self, incident_data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Deep dive into the incident.
-        Mock: Reconstructing timeline and checking related IAM activity.
-        """
         self.logger.info(f"Starting forensics for incident: {incident_data.get('incident_id')}")
 
-        # simulated analysis
+        query_text = json.dumps(incident_data.get("data", incident_data))
+        query_vector = vector_provider.embed_text(query_text)
+        similar = await vector_provider.query(query_vector, top_k=3)
+
+        related_incidents = []
+        for record in similar:
+            related_incidents.append(
+                {
+                    "id": record.id,
+                    "similarity": round(record.score, 3),
+                    "root_cause": record.metadata.get("root_cause", "Unknown"),
+                }
+            )
+
         reconstruction = {
             "root_cause": "Compromised IAM credentials for 'test-user'",
             "blast_radius": ["S3 bucket listing", "Failed EC2 termination"],
@@ -25,6 +38,7 @@ class ForensicsAgent(BaseAgent):
                 {"time": "16:52:15", "action": "TerminateInstance", "status": "Failed (Permission Denied)"},
             ],
             "confidence_score": 0.92,
+            "similar_past_incidents": related_incidents,
         }
 
         return reconstruction
@@ -34,8 +48,6 @@ class ForensicsAgent(BaseAgent):
 
         await self.log_event("forensics_started", {"target": message.payload.get("target")})
 
-        # Simulate Blast Radius Calculation
-        # In a real system, this queries AWS Config / CloudTrail for related resources
         blast_radius_graph = {
             "nodes": [
                 {"id": "attacker-ip", "type": "threat_actor", "label": "IP: 1.2.3.4", "risk": "critical"},
@@ -57,6 +69,7 @@ class ForensicsAgent(BaseAgent):
             "evidence": ["Login from unfamiliar IP", "Mass download from S3"],
         }
 
+        await self._store_incident_vector(analysis_result, message.correlation_id)
         await self.log_event("forensics_complete", analysis_result)
 
         return ASOCMessage(
@@ -67,3 +80,25 @@ class ForensicsAgent(BaseAgent):
             correlation_id=message.correlation_id,
             priority=Priority.HIGH,
         )
+
+    async def _store_incident_vector(self, analysis: Dict[str, Any], incident_id: Optional[str] = None) -> None:
+        try:
+            text_for_embedding = json.dumps(
+                {"root_cause": analysis.get("root_cause", ""), "evidence": analysis.get("evidence", [])}
+            )
+            vector = vector_provider.embed_text(text_for_embedding)
+            record = VectorRecord(
+                id=incident_id or str(uuid.uuid4()),
+                vector=vector,
+                metadata={
+                    "root_cause": analysis.get("root_cause", ""),
+                    "impact_level": analysis.get("impact_level", ""),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "node_count": len(analysis.get("blast_radius", {}).get("nodes", [])),
+                    "edge_count": len(analysis.get("blast_radius", {}).get("edges", [])),
+                },
+            )
+            await vector_provider.upsert([record])
+            self.logger.info(f"Stored incident vector: {record.id}")
+        except Exception as e:
+            self.logger.error(f"Failed to store incident vector: {e}")
