@@ -1,7 +1,6 @@
 version: '3.8'
 
 services:
-  # PostgreSQL Database
   postgres:
     image: postgres:15-alpine
     container_name: asoc-postgres
@@ -20,8 +19,8 @@ services:
       retries: 5
     networks:
       - asoc-network
+    restart: unless-stopped
 
-  # Redis Cache
   redis:
     image: redis:7-alpine
     container_name: asoc-redis
@@ -36,8 +35,8 @@ services:
       retries: 5
     networks:
       - asoc-network
+    restart: unless-stopped
 
-  # Ollama (Local LLM - Llama 3)
   ollama:
     image: ollama/ollama:latest
     container_name: asoc-ollama
@@ -50,11 +49,18 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 60s
     networks:
       - asoc-network
     restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
 
-  # Open Policy Agent
   opa:
     image: openpolicyagent/opa:latest
     container_name: asoc-opa
@@ -74,58 +80,43 @@ services:
       retries: 3
     networks:
       - asoc-network
+    restart: unless-stopped
 
-  # A-SOC Backend API
   backend:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: asoc-backend
     environment:
-      # LLM Configuration
-      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
+      LLM_PROVIDER: ${LLM_PROVIDER:-local}
       LLM_MODEL: ${LLM_MODEL:-gpt-4}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
       LOCAL_LLM_MODEL: ${LOCAL_LLM_MODEL:-llama3}
       LOCAL_LLM_BASE_URL: ${LOCAL_LLM_BASE_URL:-http://ollama:11434}
-      
-      # Database
-      DATABASE_URL: postgresql://asoc_user:${POSTGRES_PASSWORD:-changeme123}@postgres:5432/asoc_db
+      DATABASE_URL: postgresql+asyncpg://asoc_user:${POSTGRES_PASSWORD:-changeme123}@postgres:5432/asoc_db
       REDIS_URL: redis://redis:6379/0
-      
-      # OPA
       OPA_URL: http://opa:8181
-      
-      # AWS (Optional - for real integrations)
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
       AWS_REGION: ${AWS_REGION:-us-east-1}
-      
-      # GCP (Optional)
       GCP_PROJECT_ID: ${GCP_PROJECT_ID}
       GCP_CREDENTIALS_PATH: ${GCP_CREDENTIALS_PATH}
-      
-      # Azure (Optional)
       AZURE_TENANT_ID: ${AZURE_TENANT_ID}
       AZURE_CLIENT_ID: ${AZURE_CLIENT_ID}
       AZURE_CLIENT_SECRET: ${AZURE_CLIENT_SECRET}
       AZURE_SUBSCRIPTION_ID: ${AZURE_SUBSCRIPTION_ID}
-      
-      # WebSocket Auth Token
-      WS_API_TOKEN: ${WS_API_TOKEN:-dev-token}
-      
-      # Slack / Teams (Optional)
+      WS_API_TOKEN: ${WS_API_TOKEN:-prod-token-change-me}
       SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL}
       TEAMS_WEBHOOK_URL: ${TEAMS_WEBHOOK_URL}
-      
-      # JIRA (Optional)
       JIRA_URL: ${JIRA_URL}
       JIRA_EMAIL: ${JIRA_EMAIL}
       JIRA_API_TOKEN: ${JIRA_API_TOKEN}
       JIRA_PROJECT_KEY: ${JIRA_PROJECT_KEY}
-      
+      PINECONE_API_KEY: ${PINECONE_API_KEY}
+      PINECONE_ENVIRONMENT: ${PINECONE_ENVIRONMENT:-us-west1-gcp}
+      PINECONE_INDEX_NAME: ${PINECONE_INDEX_NAME:-asoc-incidents}
     ports:
       - "9002:9002"
     depends_on:
@@ -135,17 +126,18 @@ services:
         condition: service_healthy
       opa:
         condition: service_healthy
-      ollama:
-        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9002/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
     volumes:
-      - ./data:/app/data
-      - ./logs:/app/logs
-    command: uvicorn api:app --host 0.0.0.0 --port 9002 --reload
+      - asoc_data:/app/data
     networks:
       - asoc-network
     restart: unless-stopped
 
-  # Next.js Dashboard
   dashboard:
     build:
       context: ./dashboard
@@ -157,7 +149,14 @@ services:
     ports:
       - "3000:3000"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
     networks:
       - asoc-network
     restart: unless-stopped
@@ -166,6 +165,7 @@ volumes:
   postgres_data:
   redis_data:
   ollama_data:
+  asoc_data:
 
 networks:
   asoc-network:

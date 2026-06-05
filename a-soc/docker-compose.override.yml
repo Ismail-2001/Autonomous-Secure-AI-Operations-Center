@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  backend:
+    command: uvicorn api:app --host 0.0.0.0 --port 9002 --reload
+    volumes:
+      - ./api.py:/app/api.py
+      - ./agents:/app/agents
+      - ./core:/app/core
+      - ./guardrails:/app/guardrails
+      - ./data:/app/data
+
+  dashboard:
+    command: npm run dev
+    volumes:
+      - ./dashboard/app:/app/app
+      - ./dashboard/components:/app/components
+      - ./dashboard/public:/app/public
