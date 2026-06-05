@@ -31,6 +31,54 @@ async def test_detection_agent_ignores_non_telemetry():
 
 
 @pytest.mark.asyncio
+async def test_detection_agent_with_custom_provider():
+    from unittest.mock import AsyncMock
+
+    from core.llm.providers import LLMResult
+
+    mock_provider = AsyncMock()
+    mock_provider.name = "test:mock"
+    mock_provider.analyze.return_value = LLMResult(
+        threat_detected=True,
+        risk_score=0.65,
+        reasoning="Custom provider analysis",
+        attack_technique="T1078",
+    )
+    agent = DetectionAgent(provider=mock_provider)
+    msg = ASOCMessage(
+        message_type=MessageType.ALERT,
+        source_agent="TelemetryAgent",
+        payload={"event": {"eventName": "ConsoleLogin"}},
+        priority=Priority.MEDIUM,
+    )
+    result = await agent.process_message(msg)
+    assert result is not None
+    assert result.payload["risk_score"] == 0.65
+    assert result.payload["attack_technique"] == "T1078"
+    mock_provider.analyze.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_detection_agent_provider_failure_falls_back_to_mock():
+    from unittest.mock import AsyncMock
+
+    mock_provider = AsyncMock()
+    mock_provider.name = "test:fail"
+    mock_provider.analyze.side_effect = Exception("API unavailable")
+    agent = DetectionAgent(provider=mock_provider)
+    msg = ASOCMessage(
+        message_type=MessageType.ALERT,
+        source_agent="TelemetryAgent",
+        payload={"event": {"eventName": "ConsoleLogin"}},
+        priority=Priority.MEDIUM,
+    )
+    result = await agent.process_message(msg)
+    assert result is not None
+    assert result.payload["risk_score"] == 0.85
+    assert result.payload["reasoning"] == "Suspicious ConsoleLogin from unusual IP address (1.2.3.4)"
+
+
+@pytest.mark.asyncio
 async def test_supervisor_routes_to_forensics():
     agent = SupervisorAgent()
     msg = ASOCMessage(

@@ -1,91 +1,44 @@
-import json
 from typing import Optional
 
 from agents.base.agent import BaseAgent
 from agents.base.message import ASOCMessage, MessageType, Priority
-from core.config.settings import settings
+from core.llm.providers import LLMProvider, MockProvider, create_llm_provider
 
 
 class DetectionAgent(BaseAgent):
-    def __init__(self):
+    def __init__(self, provider: Optional[LLMProvider] = None):
         super().__init__(name="DetectionAgent", description="Anomaly detection + LLM reasoning over security logs")
-        self.provider = settings.LLM_PROVIDER
-        self._llm = None
-
-    def _get_llm(self):
-        if self._llm is not None:
-            return self._llm
-        if self.provider == "openai" and settings.OPENAI_API_KEY:
-            from langchain_openai import ChatOpenAI
-
-            self._llm = ChatOpenAI(model="gpt-4", temperature=0, api_key=settings.OPENAI_API_KEY.get_secret_value())
-        elif self.provider == "anthropic" and settings.ANTHROPIC_API_KEY:
-            from langchain_anthropic import ChatAnthropic
-
-            self._llm = ChatAnthropic(
-                model="claude-3-opus-20240229", temperature=0, api_key=settings.ANTHROPIC_API_KEY.get_secret_value()
-            )
-        elif self.provider == "ollama" or self.provider == "local":
-            try:
-                from langchain_ollama import ChatOllama
-
-                self._llm = ChatOllama(model=settings.LOCAL_LLM_MODEL, temperature=0, num_predict=2048)
-            except ImportError:
-                self.logger.warning("langchain-ollama not installed. Install with: pip install langchain-ollama")
-                self._llm = None
-        return self._llm
+        self._provider = provider or create_llm_provider()
 
     async def analyze_threat(self, event_data: dict) -> ASOCMessage:
-        """Analyze event data using LLM reasoning with fallback to mock."""
-        llm = self._get_llm()
-
-        if llm:
-            try:
-                from langchain.schema import HumanMessage
-
-                prompt = f"""Analyze this AWS CloudTrail event for security threats.
-Event: {json.dumps(event_data, indent=2)}
-
-Return a JSON object with exactly these fields:
-- threat_detected: boolean
-- risk_score: float between 0.0 and 1.0
-- reasoning: string explaining the analysis
-- attack_technique: string (MITRE ATT&CK ID if applicable, or null)"""
-
-                response = await llm.ainvoke([HumanMessage(content=prompt)])
-                result = json.loads(response.content.strip())
-
-                return ASOCMessage(
-                    message_type=MessageType.ALERT,
-                    source_agent=self.name,
-                    payload={
-                        "risk_score": result.get("risk_score", 0.5),
-                        "reasoning": result.get("reasoning", "No reasoning provided"),
-                        "attack_technique": result.get("attack_technique"),
-                        "original_event": event_data,
-                    },
-                    priority=Priority.HIGH if result.get("risk_score", 0) > 0.7 else Priority.MEDIUM,
-                )
-            except Exception as e:
-                self.logger.error(f"LLM analysis failed: {e}. Falling back to mock.")
-
-        self.logger.info(f"Using mock analysis (no LLM configured for {self.provider})")
-        threat_detected = True
-        risk_score = 0.85
-        reasoning = "Suspicious ConsoleLogin from unusual IP address (1.2.3.4)"
-
-        if threat_detected:
+        try:
+            result = await self._provider.analyze(event_data)
+            self.logger.info(f"Analysis complete via {self._provider.name}: risk={result.risk_score}")
             return ASOCMessage(
                 message_type=MessageType.ALERT,
                 source_agent=self.name,
                 payload={
-                    "risk_score": risk_score,
-                    "reasoning": reasoning,
+                    "risk_score": result.risk_score,
+                    "reasoning": result.reasoning,
+                    "attack_technique": result.attack_technique,
+                    "original_event": event_data,
+                },
+                priority=Priority.HIGH if result.risk_score > 0.7 else Priority.MEDIUM,
+            )
+        except Exception as e:
+            self.logger.error(f"LLM analysis failed: {e}. Using mock fallback.")
+            fallback = MockProvider()
+            result = await fallback.analyze(event_data)
+            return ASOCMessage(
+                message_type=MessageType.ALERT,
+                source_agent=self.name,
+                payload={
+                    "risk_score": result.risk_score,
+                    "reasoning": result.reasoning,
                     "original_event": event_data,
                 },
                 priority=Priority.HIGH,
             )
-        return None
 
     async def process_message(self, message: ASOCMessage) -> Optional[ASOCMessage]:
         if message.message_type == MessageType.ALERT and message.source_agent == "TelemetryAgent":

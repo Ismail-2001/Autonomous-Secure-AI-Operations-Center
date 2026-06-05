@@ -6,6 +6,7 @@ langgraph
 langchain-openai
 langchain-anthropic
 langchain-community
+langchain-ollama
 boto3
 kubernetes
 sqlalchemy[asyncio]

@@ -37,6 +37,23 @@ services:
     networks:
       - asoc-network
 
+  # Ollama (Local LLM - Llama 3)
+  ollama:
+    image: ollama/ollama:latest
+    container_name: asoc-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - asoc-network
+    restart: unless-stopped
+
   # Open Policy Agent
   opa:
     image: openpolicyagent/opa:latest
@@ -67,9 +84,12 @@ services:
     environment:
       # LLM Configuration
       LLM_PROVIDER: ${LLM_PROVIDER:-openai}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      LOCAL_LLM_MODEL: ${LOCAL_LLM_MODEL:-llama3}
+      LOCAL_LLM_BASE_URL: ${LOCAL_LLM_BASE_URL:-http://ollama:11434}
       
       # Database
       DATABASE_URL: postgresql://asoc_user:${POSTGRES_PASSWORD:-changeme123}@postgres:5432/asoc_db
@@ -99,6 +119,8 @@ services:
         condition: service_healthy
       opa:
         condition: service_healthy
+      ollama:
+        condition: service_started
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
@@ -127,6 +149,7 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  ollama_data:
 
 networks:
   asoc-network:

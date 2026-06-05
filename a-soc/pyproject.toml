@@ -16,6 +16,7 @@ dependencies = [
     "langgraph",
     "langchain-openai",
     "langchain-anthropic",
+    "langchain-ollama",
     "boto3",
     "aiofiles",
     "httpx",

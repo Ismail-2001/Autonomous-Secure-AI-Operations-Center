@@ -160,7 +160,7 @@ See the comprehensive [**DEPLOYMENT.md**](./DEPLOYMENT.md) guide.
 *   [x] Blast Radius Visualization
 *   [x] Integration with real AWS Accounts (Boto3) — `AWSCloudTrailProvider` with mock fallback
 *   [x] Slack/Teams Notification Integration — `NotificationAgent` with webhook providers
-*   [ ] Fine-tuned local LLM support (Llama 3)
+*   [x] Fine-tuned local LLM support (Llama 3) — `OllamaProvider` with factory pattern and mock fallback
 *   [ ] Advanced Threat Hunting interface
 
 ---

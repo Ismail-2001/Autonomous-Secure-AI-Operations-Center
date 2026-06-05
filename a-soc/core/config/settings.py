@@ -7,9 +7,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     # LLM Settings
     LLM_PROVIDER: str = "openai"
+    LLM_MODEL: str = "gpt-4"
     OPENAI_API_KEY: Optional[SecretStr] = None
     ANTHROPIC_API_KEY: Optional[SecretStr] = None
     DEEPSEEK_API_KEY: Optional[SecretStr] = None
+    LOCAL_LLM_MODEL: str = "llama3"
+    LOCAL_LLM_BASE_URL: str = "http://localhost:11434"
 
     # AWS Settings
     AWS_REGION: str = "us-east-1"
