@@ -25,6 +25,14 @@ class DetectionAgent(BaseAgent):
             self._llm = ChatAnthropic(
                 model="claude-3-opus-20240229", temperature=0, api_key=settings.ANTHROPIC_API_KEY.get_secret_value()
             )
+        elif self.provider == "ollama" or self.provider == "local":
+            try:
+                from langchain_ollama import ChatOllama
+
+                self._llm = ChatOllama(model=settings.LOCAL_LLM_MODEL, temperature=0, num_predict=2048)
+            except ImportError:
+                self.logger.warning("langchain-ollama not installed. Install with: pip install langchain-ollama")
+                self._llm = None
         return self._llm
 
     async def analyze_threat(self, event_data: dict) -> ASOCMessage:
@@ -44,8 +52,8 @@ Return a JSON object with exactly these fields:
 - reasoning: string explaining the analysis
 - attack_technique: string (MITRE ATT&CK ID if applicable, or null)"""
 
-                response = await llm.agenerate([[HumanMessage(content=prompt)]])
-                result = json.loads(response.generations[0][0].text.strip())
+                response = await llm.ainvoke([HumanMessage(content=prompt)])
+                result = json.loads(response.content.strip())
 
                 return ASOCMessage(
                     message_type=MessageType.ALERT,

@@ -2,7 +2,7 @@ import abc
 import logging
 from typing import Any, Dict, Optional
 
-from .message import ASOCMessage, MessageType
+from agents.base.message import ASOCMessage, MessageType
 
 
 class BaseAgent(abc.ABC):

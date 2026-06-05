@@ -158,8 +158,8 @@ See the comprehensive [**DEPLOYMENT.md**](./DEPLOYMENT.md) guide.
 *   [x] Real-time WebSocket Feed
 *   [x] Human-in-the-Loop Approval Workflow
 *   [x] Blast Radius Visualization
-*   [ ] Integration with real AWS Accounts (Boto3)
-*   [ ] Slack/Teams Notification Integration
+*   [x] Integration with real AWS Accounts (Boto3) — `AWSCloudTrailProvider` with mock fallback
+*   [x] Slack/Teams Notification Integration — `NotificationAgent` with webhook providers
 *   [ ] Fine-tuned local LLM support (Llama 3)
 *   [ ] Advanced Threat Hunting interface
 

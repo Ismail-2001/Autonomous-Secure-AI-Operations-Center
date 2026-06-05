@@ -1,9 +1,11 @@
 import pytest
+
 from agents.base.message import ASOCMessage, MessageType, Priority
+from agents.compliance.compliance_agent import ComplianceAgent
 from agents.detection.detection_agent import DetectionAgent
 from agents.response.response_agent import ResponseAgent
-from agents.compliance.compliance_agent import ComplianceAgent
 from agents.supervisor.supervisor_agent import SupervisorAgent
+
 
 @pytest.mark.asyncio
 async def test_detection_agent_processes_telemetry_alert():
@@ -12,23 +14,21 @@ async def test_detection_agent_processes_telemetry_alert():
         message_type=MessageType.ALERT,
         source_agent="TelemetryAgent",
         payload={"event": {"eventName": "ConsoleLogin", "sourceIPAddress": "1.2.3.4"}},
-        priority=Priority.MEDIUM
+        priority=Priority.MEDIUM,
     )
     result = await agent.process_message(msg)
     assert result is not None
     assert result.message_type == MessageType.ALERT
     assert "risk_score" in result.payload
 
+
 @pytest.mark.asyncio
 async def test_detection_agent_ignores_non_telemetry():
     agent = DetectionAgent()
-    msg = ASOCMessage(
-        message_type=MessageType.COMMAND,
-        source_agent="SupervisorAgent",
-        payload={}
-    )
+    msg = ASOCMessage(message_type=MessageType.COMMAND, source_agent="SupervisorAgent", payload={})
     result = await agent.process_message(msg)
     assert result is None
+
 
 @pytest.mark.asyncio
 async def test_supervisor_routes_to_forensics():
@@ -37,12 +37,13 @@ async def test_supervisor_routes_to_forensics():
         message_type=MessageType.ALERT,
         source_agent="DetectionAgent",
         payload={"risk_score": 0.85, "reasoning": "Suspicious login"},
-        correlation_id="test-123"
+        correlation_id="test-123",
     )
     result = await agent.process_message(msg)
     assert result is not None
     assert result.target_agent == "ForensicsAgent"
     assert result.correlation_id == "test-123"
+
 
 @pytest.mark.asyncio
 async def test_response_executes_remediation():
@@ -51,11 +52,12 @@ async def test_response_executes_remediation():
         message_type=MessageType.COMMAND,
         source_agent="SupervisorAgent",
         target_agent="ResponseAgent",
-        payload={"action": "IAM_REVOKE", "target": "admin-user"}
+        payload={"action": "IAM_REVOKE", "target": "admin-user"},
     )
     result = await agent.process_message(msg)
     assert result is not None
     assert result.payload["success"] is True
+
 
 @pytest.mark.asyncio
 async def test_compliance_agent_maps_controls():
@@ -63,7 +65,77 @@ async def test_compliance_agent_maps_controls():
     msg = ASOCMessage(
         message_type=MessageType.LOG,
         source_agent="ResponseAgent",
-        payload={"event_type": "revoked_access", "details": {"user": "admin"}}
+        payload={"event_type": "revoked_access", "details": {"user": "admin"}},
     )
     result = await agent.process_message(msg)
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_telemetry_agent_poll_cloudtrail_returns_messages():
+    from unittest.mock import AsyncMock
+
+    from agents.telemetry.telemetry_agent import TelemetryAgent
+
+    mock_provider = AsyncMock()
+    mock_provider.fetch_events.return_value = []
+    agent = TelemetryAgent(provider=mock_provider)
+
+    result = await agent.poll_cloudtrail()
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_telemetry_agent_process_command_starts_polling():
+    from unittest.mock import AsyncMock
+
+    from agents.telemetry.telemetry_agent import TelemetryAgent
+
+    mock_provider = AsyncMock()
+    agent = TelemetryAgent(provider=mock_provider)
+
+    msg = ASOCMessage(message_type=MessageType.COMMAND, source_agent="System", payload={"action": "start_polling"})
+    result = await agent.process_message(msg)
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_telemetry_agent_poll_with_events():
+    from unittest.mock import AsyncMock
+
+    from agents.telemetry.cloud_providers import CloudEvent
+    from agents.telemetry.telemetry_agent import TelemetryAgent
+
+    mock_event = CloudEvent(
+        event_id="test-evt-1",
+        event_name="ConsoleLogin",
+        event_time="2026-06-05T12:00:00Z",
+        source_ip="1.2.3.4",
+        user_identity={"type": "IAMUser", "userName": "admin"},
+        resources=[],
+        raw={},
+    )
+
+    mock_provider = AsyncMock()
+    mock_provider.fetch_events.return_value = [mock_event]
+    agent = TelemetryAgent(provider=mock_provider)
+
+    result = await agent.poll_cloudtrail()
+    assert result is not None
+    assert result.message_type == MessageType.ALERT
+    assert len(result.payload["events"]) == 1
+    assert result.payload["events"][0]["eventID"] == "test-evt-1"
+
+
+@pytest.mark.asyncio
+async def test_telemetry_agent_poll_error_handled():
+    from unittest.mock import AsyncMock
+
+    from agents.telemetry.telemetry_agent import TelemetryAgent
+
+    mock_provider = AsyncMock()
+    mock_provider.fetch_events.side_effect = Exception("API failure")
+    agent = TelemetryAgent(provider=mock_provider)
+
+    result = await agent.poll_cloudtrail()
     assert result is None

@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     VAULT_ADDR: str = "http://localhost:8200"
     WS_API_TOKEN: Optional[SecretStr] = None
 
+    # Notifications
+    SLACK_WEBHOOK_URL: Optional[str] = None
+    TEAMS_WEBHOOK_URL: Optional[str] = None
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 

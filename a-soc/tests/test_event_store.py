@@ -1,5 +1,7 @@
 import pytest
+
 from core.memory.event_store import EventStore
+
 
 @pytest.mark.asyncio
 async def test_append_and_retrieve():
@@ -11,11 +13,13 @@ async def test_append_and_retrieve():
     events = await store.get_recent_events(limit=10)
     assert len(events) >= 1
 
+
 @pytest.mark.asyncio
 async def test_empty_store():
     store = EventStore(storage_path="/tmp/nonexistent_events.jsonl")
     events = await store.get_recent_events()
     assert events == []
+
 
 @pytest.mark.asyncio
 async def test_event_id_uniqueness():

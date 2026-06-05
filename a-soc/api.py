@@ -1,5 +1,4 @@
 import asyncio
-from contextlib import asynccontextmanager
 import hmac
 import os
 import random
@@ -7,6 +6,7 @@ import sys
 import time
 import uuid
 from collections import defaultdict
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List
@@ -18,6 +18,12 @@ from fastapi.middleware.cors import CORSMiddleware
 sys.path.append(str(Path(__file__).parent))
 
 from agents.base.message import ASOCMessage, MessageType, Priority
+
+# Notification agent for Slack/Teams
+from agents.notifications.notification_agent import NotificationAgent
+
+notification_agent = NotificationAgent()
+
 
 class RateLimiter:
     def __init__(self, max_calls: int = 10, window: float = 10.0):
@@ -81,7 +87,6 @@ manager = ConnectionManager()
 async def health_check():
     """Health check endpoint for Kubernetes probes"""
     return {"status": "healthy", "service": "asoc-backend", "active_connections": len(manager.active_connections)}
-
 
 
 @app.websocket("/ws/threat-feed")
@@ -329,8 +334,18 @@ async def run_simulation(permission_event: asyncio.Event):
 
     # Response
     await stream_status("Response", "actuating", f"Executing {scenario['action']}...", "critical")
-    timestamp = datetime.now(timezone.utc).strftime("%H:%M:%S")
-    await stream_status("Response", "notifying", f"Sending Slack Alert to #sec-ops at {timestamp}...", "medium")
+    await stream_status("Response", "notifying", "Sending alert via configured notification channels...", "medium")
+    await notification_agent.send_alert(
+        title=f"A-SOC: {scenario['name']}",
+        message=f"Action: {scenario['action']} on {scenario['target']} | Risk Score: {risk_score}",
+        severity="critical" if risk_score > 0.8 else "high",
+        fields={
+            "Incident": incident_id,
+            "Action": scenario["action"],
+            "Target": scenario["target"],
+            "Risk Score": f"{risk_score:.2f}",
+        },
+    )
     await asyncio.sleep(0.5)
     await stream_status("Response", "success", "Threat Neutralized. Infrastructure Secure.", "low")
 
