@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from core.database.connection import get_db_pool
-from core.logging import get_logger, get_trace_id, get_incident_id
+from core.logging import get_incident_id, get_logger, get_trace_id
 
 logger = get_logger("asoc.event_store")
 
@@ -40,7 +40,14 @@ class PostgresEventStore:
                 get_incident_id(),
             )
         logger.info("event_appended", event_id=event_id, event_type=event_type, agent=agent)
-        return {"id": event_id, "timestamp": now.isoformat(), "type": event_type, "agent": agent, "payload": payload, "signature": signature}
+        return {
+            "id": event_id,
+            "timestamp": now.isoformat(),
+            "type": event_type,
+            "agent": agent,
+            "payload": payload,
+            "signature": signature,
+        }
 
     async def search_events(
         self,
@@ -90,19 +97,23 @@ class PostgresEventStore:
                 FROM events WHERE {where_clause}
                 ORDER BY timestamp DESC LIMIT ${idx} OFFSET ${idx+1}
                 """,
-                *params, limit, offset,
+                *params,
+                limit,
+                offset,
             )
 
         events = []
         for row in rows:
-            events.append({
-                "id": str(row["id"]),
-                "timestamp": row["timestamp"].isoformat(),
-                "type": row["event_type"],
-                "agent": row["agent"],
-                "payload": row["payload"],
-                "signature": row["signature"],
-            })
+            events.append(
+                {
+                    "id": str(row["id"]),
+                    "timestamp": row["timestamp"].isoformat(),
+                    "type": row["event_type"],
+                    "agent": row["agent"],
+                    "payload": row["payload"],
+                    "signature": row["signature"],
+                }
+            )
 
         return {"events": events, "total": total, "limit": limit, "offset": offset}
 

@@ -24,7 +24,7 @@ async def async_retry(
         except exceptions as e:
             last_exc = e
             if attempt < max_retries:
-                delay = min(base_delay * (backoff ** attempt), max_delay)
+                delay = min(base_delay * (backoff**attempt), max_delay)
                 if jitter:
                     delay *= random.uniform(0.8, 1.2)
                 logger.warning(
@@ -53,6 +53,7 @@ def retry(
         async def wrapper(*args, **kwargs):
             async def _call():
                 return await func(*args, **kwargs)
+
             return await async_retry(
                 _call,
                 max_retries=max_retries,
@@ -62,5 +63,7 @@ def retry(
                 jitter=jitter,
                 exceptions=exceptions,
             )
+
         return wrapper
+
     return decorator

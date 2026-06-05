@@ -19,7 +19,10 @@ class ResponseAgent(BaseAgent):
             target = message.payload.get("target")
             success = await self.execute_remediation(action, target)
             return ASOCMessage(
-                message_type=MessageType.RESPONSE, source_agent=self.name, target_agent="SupervisorAgent",
-                payload={"success": success, "action": action}, correlation_id=message.correlation_id,
+                message_type=MessageType.RESPONSE,
+                source_agent=self.name,
+                target_agent="SupervisorAgent",
+                payload={"success": success, "action": action},
+                correlation_id=message.correlation_id,
             )
         return None

@@ -26,14 +26,16 @@ class SlackWebhookProvider(NotificationProvider):
     async def send(self, title: str, message: str, severity: str, fields: Optional[Dict[str, str]] = None) -> bool:
         color_map = {"low": "#36a64f", "medium": "#ffcc00", "high": "#ff6600", "critical": "#ff0000"}
         payload = {
-            "attachments": [{
-                "color": color_map.get(severity, "#36a64f"),
-                "title": title,
-                "text": message,
-                "fields": [{"title": k, "value": v, "short": True} for k, v in (fields or {}).items()],
-                "footer": "A-SOC",
-                "ts": datetime.now(timezone.utc).timestamp(),
-            }]
+            "attachments": [
+                {
+                    "color": color_map.get(severity, "#36a64f"),
+                    "title": title,
+                    "text": message,
+                    "fields": [{"title": k, "value": v, "short": True} for k, v in (fields or {}).items()],
+                    "footer": "A-SOC",
+                    "ts": datetime.now(timezone.utc).timestamp(),
+                }
+            ]
         }
         return await self._post(payload)
 
@@ -44,6 +46,7 @@ class SlackWebhookProvider(NotificationProvider):
                 resp.raise_for_status()
                 logger.info("slack_sent")
                 return True
+
         try:
             return await async_retry(_do_post, max_retries=3, exceptions=(httpx.HTTPError, httpx.TimeoutException))
         except Exception as e:
@@ -60,19 +63,27 @@ class TeamsWebhookProvider(NotificationProvider):
         facts = [{"name": k, "value": v} for k, v in (fields or {}).items()]
         payload = {
             "type": "message",
-            "attachments": [{
-                "contentType": "application/vnd.microsoft.card.adaptive",
-                "content": {
-                    "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-                    "type": "AdaptiveCard", "version": "1.4",
-                    "body": [
-                        {"type": "TextBlock", "text": title, "weight": "bolder", "size": "large"},
-                        {"type": "TextBlock", "text": message, "wrap": True},
-                        {"type": "FactSet", "facts": [{"name": "Severity", "value": severity.upper()}, *facts]},
-                        {"type": "TextBlock", "text": f"A-SOC | {datetime.now(timezone.utc).isoformat()}", "size": "small", "isSubtle": True},
-                    ],
-                },
-            }],
+            "attachments": [
+                {
+                    "contentType": "application/vnd.microsoft.card.adaptive",
+                    "content": {
+                        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                        "type": "AdaptiveCard",
+                        "version": "1.4",
+                        "body": [
+                            {"type": "TextBlock", "text": title, "weight": "bolder", "size": "large"},
+                            {"type": "TextBlock", "text": message, "wrap": True},
+                            {"type": "FactSet", "facts": [{"name": "Severity", "value": severity.upper()}, *facts]},
+                            {
+                                "type": "TextBlock",
+                                "text": f"A-SOC | {datetime.now(timezone.utc).isoformat()}",
+                                "size": "small",
+                                "isSubtle": True,
+                            },
+                        ],
+                    },
+                }
+            ],
         }
         return await self._post(payload)
 
@@ -83,6 +94,7 @@ class TeamsWebhookProvider(NotificationProvider):
                 resp.raise_for_status()
                 logger.info("teams_sent")
                 return True
+
         try:
             return await async_retry(_do_post, max_retries=3, exceptions=(httpx.HTTPError, httpx.TimeoutException))
         except Exception as e:
@@ -122,12 +134,18 @@ class JiraProvider(NotificationProvider):
         async def _do_post():
             async with httpx.AsyncClient(timeout=15.0) as client:
                 resp = await client.post(
-                    f"{self.url}/rest/api/2/issue", json=payload,
-                    headers={"Authorization": f"Basic {self._auth_header}", "Content-Type": "application/json", "Accept": "application/json"},
+                    f"{self.url}/rest/api/2/issue",
+                    json=payload,
+                    headers={
+                        "Authorization": f"Basic {self._auth_header}",
+                        "Content-Type": "application/json",
+                        "Accept": "application/json",
+                    },
                 )
                 resp.raise_for_status()
                 logger.info("jira_created", ticket_key=resp.json().get("key", "unknown"))
                 return True
+
         try:
             return await async_retry(_do_post, max_retries=3, exceptions=(httpx.HTTPError, httpx.TimeoutException))
         except Exception as e:
@@ -137,7 +155,9 @@ class JiraProvider(NotificationProvider):
 
 class NotificationAgent(BaseAgent):
     def __init__(self, providers: Optional[List[NotificationProvider]] = None):
-        super().__init__(name="NotificationAgent", description="Sends security alerts via Slack, Teams webhooks, and JIRA")
+        super().__init__(
+            name="NotificationAgent", description="Sends security alerts via Slack, Teams webhooks, and JIRA"
+        )
         self.providers = providers or self._default_providers()
 
     def _default_providers(self) -> List[NotificationProvider]:
@@ -147,10 +167,19 @@ class NotificationAgent(BaseAgent):
         if settings.TEAMS_WEBHOOK_URL:
             providers.append(TeamsWebhookProvider(settings.TEAMS_WEBHOOK_URL))
         if settings.JIRA_URL and settings.JIRA_EMAIL and settings.JIRA_API_TOKEN and settings.JIRA_PROJECT_KEY:
-            providers.append(JiraProvider(settings.JIRA_URL, settings.JIRA_EMAIL, settings.JIRA_API_TOKEN.get_secret_value(), settings.JIRA_PROJECT_KEY))
+            providers.append(
+                JiraProvider(
+                    settings.JIRA_URL,
+                    settings.JIRA_EMAIL,
+                    settings.JIRA_API_TOKEN.get_secret_value(),
+                    settings.JIRA_PROJECT_KEY,
+                )
+            )
         return providers
 
-    async def send_alert(self, title: str, message: str, severity: str = "low", fields: Optional[Dict[str, str]] = None) -> bool:
+    async def send_alert(
+        self, title: str, message: str, severity: str = "low", fields: Optional[Dict[str, str]] = None
+    ) -> bool:
         if not self.providers:
             logger.info("no_providers_configured")
             return False
@@ -159,12 +188,21 @@ class NotificationAgent(BaseAgent):
 
     async def process_message(self, message: ASOCMessage) -> Optional[ASOCMessage]:
         if message.message_type in (MessageType.ALERT, MessageType.LOG):
-            severity_map = {Priority.LOW: "low", Priority.MEDIUM: "medium", Priority.HIGH: "high", Priority.CRITICAL: "critical"}
+            severity_map = {
+                Priority.LOW: "low",
+                Priority.MEDIUM: "medium",
+                Priority.HIGH: "high",
+                Priority.CRITICAL: "critical",
+            }
             severity = severity_map.get(message.priority, "low")
             await self.send_alert(
                 title=f"A-SOC Alert: {message.source_agent}",
                 message=message.payload.get("reasoning", str(message.payload)),
                 severity=severity,
-                fields={"Agent": message.source_agent, "Incident": message.correlation_id or "N/A", "Priority": message.priority.name if hasattr(message.priority, "name") else str(message.priority)},
+                fields={
+                    "Agent": message.source_agent,
+                    "Incident": message.correlation_id or "N/A",
+                    "Priority": message.priority.name if hasattr(message.priority, "name") else str(message.priority),
+                },
             )
         return None

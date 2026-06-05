@@ -42,7 +42,8 @@ class DatabasePool:
 
     async def _run_migrations(self) -> None:
         async with self._pool.acquire() as conn:
-            await conn.execute("""
+            await conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS events (
                     id UUID PRIMARY KEY,
                     timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -57,7 +58,8 @@ class DatabasePool:
                 CREATE INDEX IF NOT EXISTS idx_events_agent ON events(agent);
                 CREATE INDEX IF NOT EXISTS idx_events_type ON events(event_type);
                 CREATE INDEX IF NOT EXISTS idx_events_incident ON events(incident_id);
-            """)
+            """
+            )
             logger.info("database_migrations_complete")
 
 

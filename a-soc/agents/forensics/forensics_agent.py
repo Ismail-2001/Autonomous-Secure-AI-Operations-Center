@@ -70,13 +70,19 @@ class ForensicsAgent(BaseAgent):
         await self.log_event("forensics_complete", analysis_result)
 
         return ASOCMessage(
-            message_type=MessageType.REPORT, source_agent=self.name, target_agent="SupervisorAgent",
-            payload=analysis_result, correlation_id=message.correlation_id, priority=Priority.HIGH,
+            message_type=MessageType.REPORT,
+            source_agent=self.name,
+            target_agent="SupervisorAgent",
+            payload=analysis_result,
+            correlation_id=message.correlation_id,
+            priority=Priority.HIGH,
         )
 
     async def _store_incident_vector(self, analysis: Dict[str, Any], incident_id: Optional[str] = None) -> None:
         try:
-            text_for_embedding = json.dumps({"root_cause": analysis.get("root_cause", ""), "evidence": analysis.get("evidence", [])})
+            text_for_embedding = json.dumps(
+                {"root_cause": analysis.get("root_cause", ""), "evidence": analysis.get("evidence", [])}
+            )
             vector = vector_provider.embed_text(text_for_embedding)
             record = VectorRecord(
                 id=incident_id or str(uuid.uuid4()),

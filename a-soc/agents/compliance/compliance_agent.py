@@ -6,7 +6,9 @@ from agents.base.message import ASOCMessage, MessageType
 
 class ComplianceAgent(BaseAgent):
     def __init__(self):
-        super().__init__(name="ComplianceAgent", description="Checks security events against SOC2, ISO 27001, and HIPAA frameworks")
+        super().__init__(
+            name="ComplianceAgent", description="Checks security events against SOC2, ISO 27001, and HIPAA frameworks"
+        )
         self.framework_mappings = {
             "revoked_access": ["SOC2.CC6.1", "ISO.A.9.2.6"],
             "unauthorized_login": ["SOC2.CC6.8", "NIST.AC-2"],

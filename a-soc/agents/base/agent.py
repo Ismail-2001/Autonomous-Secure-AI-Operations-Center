@@ -21,15 +21,18 @@ class BaseAgent(abc.ABC):
         try:
             bus = await get_message_bus()
             topic = message.target_agent or "broadcast"
-            await bus.publish(topic, {
-                "message_id": message.message_id,
-                "message_type": message.message_type.value,
-                "source_agent": message.source_agent,
-                "target_agent": message.target_agent,
-                "payload": message.payload,
-                "correlation_id": message.correlation_id,
-                "priority": message.priority.value if hasattr(message.priority, "value") else message.priority,
-            })
+            await bus.publish(
+                topic,
+                {
+                    "message_id": message.message_id,
+                    "message_type": message.message_type.value,
+                    "source_agent": message.source_agent,
+                    "target_agent": message.target_agent,
+                    "payload": message.payload,
+                    "correlation_id": message.correlation_id,
+                    "priority": message.priority.value if hasattr(message.priority, "value") else message.priority,
+                },
+            )
         except Exception as e:
             self.logger.error("send_message_failed", error=str(e), message_id=message.message_id)
 

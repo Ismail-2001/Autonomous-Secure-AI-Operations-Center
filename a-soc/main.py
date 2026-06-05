@@ -33,9 +33,11 @@ async def simulate_threat_cycle():
 
     logger.info("[1] Telemetry: Ingesting AWS CloudTrail logs...")
     alert_msg = ASOCMessage(
-        message_type=MessageType.ALERT, source_agent="TelemetryAgent",
+        message_type=MessageType.ALERT,
+        source_agent="TelemetryAgent",
         payload={"event": "ConsoleLogin", "user": "admin", "ip": "1.2.3.4"},
-        correlation_id=incident_id, priority=Priority.MEDIUM,
+        correlation_id=incident_id,
+        priority=Priority.MEDIUM,
     )
 
     logger.info("[2] Detection: Analyzing threat with LLM reasoning...")
@@ -51,15 +53,20 @@ async def simulate_threat_cycle():
 
             logger.info("[5] Response: Executing remediation (IAM_REVOKE)...")
             remediation_cmd = ASOCMessage(
-                message_type=MessageType.COMMAND, source_agent="SupervisorAgent", target_agent="ResponseAgent",
-                payload={"action": "IAM_REVOKE", "target": "admin-user"}, correlation_id=incident_id,
+                message_type=MessageType.COMMAND,
+                source_agent="SupervisorAgent",
+                target_agent="ResponseAgent",
+                payload={"action": "IAM_REVOKE", "target": "admin-user"},
+                correlation_id=incident_id,
             )
             await response.process_message(remediation_cmd)
 
             logger.info("[6] Compliance: Mapping incident to SOC2 controls...")
             audit_log = ASOCMessage(
-                message_type=MessageType.LOG, source_agent="ResponseAgent",
-                payload={"event_type": "revoked_access", "details": {"user": "admin-user"}}, correlation_id=incident_id,
+                message_type=MessageType.LOG,
+                source_agent="ResponseAgent",
+                payload={"event_type": "revoked_access", "details": {"user": "admin-user"}},
+                correlation_id=incident_id,
             )
             await compliance.process_message(audit_log)
 

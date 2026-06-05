@@ -22,7 +22,9 @@ class VectorProvider(abc.ABC):
     async def upsert(self, records: List[VectorRecord]) -> bool: ...
 
     @abc.abstractmethod
-    async def query(self, vector: List[float], top_k: int = 5, filter: Optional[Dict[str, Any]] = None) -> List[VectorRecord]: ...
+    async def query(
+        self, vector: List[float], top_k: int = 5, filter: Optional[Dict[str, Any]] = None
+    ) -> List[VectorRecord]: ...
 
     @abc.abstractmethod
     async def delete(self, ids: List[str]) -> bool: ...
@@ -44,7 +46,9 @@ class MockVectorProvider(VectorProvider):
         logger.info("MockVectorProvider: upserted %d records (total: %d)", len(records), len(self._store))
         return True
 
-    async def query(self, vector: List[float], top_k: int = 5, filter: Optional[Dict[str, Any]] = None) -> List[VectorRecord]:
+    async def query(
+        self, vector: List[float], top_k: int = 5, filter: Optional[Dict[str, Any]] = None
+    ) -> List[VectorRecord]:
         scored = []
         for record in self._store.values():
             if filter:
@@ -66,7 +70,7 @@ class MockVectorProvider(VectorProvider):
 
     def embed_text(self, text: str) -> List[float]:
         h = hashlib.sha256(text.encode()).hexdigest()
-        return [int(h[i:i+2], 16) / 255.0 for i in range(0, min(64, len(h)), 2)]
+        return [int(h[i : i + 2], 16) / 255.0 for i in range(0, min(64, len(h)), 2)]
 
     @staticmethod
     def _cosine_similarity(a: List[float], b: List[float]) -> float:
@@ -81,7 +85,9 @@ class MockVectorProvider(VectorProvider):
 
 
 class PineconeVectorProvider(VectorProvider):
-    def __init__(self, api_key: Optional[str] = None, environment: Optional[str] = None, index_name: str = "asoc-incidents"):
+    def __init__(
+        self, api_key: Optional[str] = None, environment: Optional[str] = None, index_name: str = "asoc-incidents"
+    ):
         self.api_key = api_key
         self.environment = environment or "us-west1-gcp"
         self.index_name = index_name
@@ -94,10 +100,13 @@ class PineconeVectorProvider(VectorProvider):
             return self._index
         try:
             from pinecone import Pinecone, ServerlessSpec
+
             self._pc = Pinecone(api_key=self.api_key)
             if self.index_name not in self._pc.list_indexes().names():
                 self._pc.create_index(
-                    name=self.index_name, dimension=32, metric="cosine",
+                    name=self.index_name,
+                    dimension=32,
+                    metric="cosine",
                     spec=ServerlessSpec(cloud="aws", region=self.environment),
                 )
             self._index = self._pc.Index(self.index_name)
@@ -122,7 +131,9 @@ class PineconeVectorProvider(VectorProvider):
             logger.error("Pinecone upsert failed: %s", e)
             return False
 
-    async def query(self, vector: List[float], top_k: int = 5, filter: Optional[Dict[str, Any]] = None) -> List[VectorRecord]:
+    async def query(
+        self, vector: List[float], top_k: int = 5, filter: Optional[Dict[str, Any]] = None
+    ) -> List[VectorRecord]:
         index = self._get_index()
         if index is None:
             logger.warning("Pinecone unavailable, returning empty query results")
@@ -162,13 +173,14 @@ class PineconeVectorProvider(VectorProvider):
     def embed_text(self, text: str) -> List[float]:
         try:
             from openai import OpenAI
+
             client = OpenAI()
             resp = client.embeddings.create(input=text, model="text-embedding-ada-002")
             return resp.data[0].embedding
         except Exception as e:
             logger.warning("OpenAI embedding failed, using fallback: %s", e)
             h = hashlib.sha256(text.encode()).hexdigest()
-            return [int(h[i:i+2], 16) / 255.0 for i in range(0, min(64, len(h)), 2)]
+            return [int(h[i : i + 2], 16) / 255.0 for i in range(0, min(64, len(h)), 2)]
 
 
 def create_vector_provider() -> VectorProvider:

@@ -9,7 +9,9 @@ logger = logging.getLogger("asoc.llm")
 
 
 class LLMResult:
-    def __init__(self, threat_detected: bool, risk_score: float, reasoning: str, attack_technique: Optional[str] = None):
+    def __init__(
+        self, threat_detected: bool, risk_score: float, reasoning: str, attack_technique: Optional[str] = None
+    ):
         self.threat_detected = threat_detected
         self.risk_score = max(0.0, min(1.0, risk_score))
         self.reasoning = reasoning
@@ -34,7 +36,9 @@ class MockProvider(LLMProvider):
         return "mock"
 
     async def analyze(self, event_data: dict) -> LLMResult:
-        return LLMResult(threat_detected=True, risk_score=0.85, reasoning="Suspicious ConsoleLogin from unusual IP address (1.2.3.4)")
+        return LLMResult(
+            threat_detected=True, risk_score=0.85, reasoning="Suspicious ConsoleLogin from unusual IP address (1.2.3.4)"
+        )
 
 
 PROMPT_TEMPLATE = """Analyze this AWS CloudTrail event for security threats.
@@ -60,6 +64,7 @@ class OpenAIProvider(LLMProvider):
     def _lazy_init(self):
         if self._client is None:
             from openai import AsyncOpenAI
+
             self._client = AsyncOpenAI(api_key=self.api_key)
 
     async def analyze(self, event_data: dict) -> LLMResult:
@@ -96,6 +101,7 @@ class AnthropicProvider(LLMProvider):
     def _lazy_init(self):
         if self._client is None:
             from anthropic import AsyncAnthropic
+
             self._client = AsyncAnthropic(api_key=self.api_key)
 
     async def analyze(self, event_data: dict) -> LLMResult:
@@ -133,6 +139,7 @@ class OllamaProvider(LLMProvider):
     def _lazy_init(self):
         if self._client is None:
             from openai import AsyncOpenAI
+
             self._client = AsyncOpenAI(base_url=f"{self.base_url}/v1", api_key="ollama")
 
     async def analyze(self, event_data: dict) -> LLMResult:

@@ -195,7 +195,9 @@ class GCPCloudProvider(BaseCloudProvider):
             self._healthy = False
         return self._client
 
-    async def fetch_events(self, max_results: int = 10, start_time: Optional[datetime] = None, **kwargs) -> List[CloudEvent]:
+    async def fetch_events(
+        self, max_results: int = 10, start_time: Optional[datetime] = None, **kwargs
+    ) -> List[CloudEvent]:
         client = self._get_client()
         if client is None:
             logger.info("No GCP Cloud Logging client available, returning mock events")
@@ -223,7 +225,16 @@ class GCPCloudProvider(BaseCloudProvider):
                     if isinstance(payload, dict):
                         results.append(payload)
                     else:
-                        results.append({"protoPayload": payload, "timestamp": entry.timestamp.isoformat() if hasattr(entry, "timestamp") else start_time.isoformat()})
+                        results.append(
+                            {
+                                "protoPayload": payload,
+                                "timestamp": (
+                                    entry.timestamp.isoformat()
+                                    if hasattr(entry, "timestamp")
+                                    else start_time.isoformat()
+                                ),
+                            }
+                        )
                 return results
             except Exception as e:
                 logger.error(f"GCP Logging list_entries failed: {e}")
@@ -235,15 +246,21 @@ class GCPCloudProvider(BaseCloudProvider):
             logger.info("No GCP audit log entries found, returning mock events")
             return self._mock_events(max_results)
 
-        return [CloudEvent(
-            event_id=entry.get("insertId", f"gcp-{i}"),
-            event_name=entry.get("protoPayload", {}).get("methodName", "Unknown"),
-            event_time=entry.get("timestamp", start_time.isoformat()),
-            source_ip=entry.get("protoPayload", {}).get("requestMetadata", {}).get("callerIp"),
-            user_identity=entry.get("protoPayload", {}).get("authenticationInfo", {}),
-            resources=[{"type": r.get("type", ""), "name": r.get("name", "")} for r in entry.get("protoPayload", {}).get("resourceList", [])],
-            raw=entry,
-        ) for i, entry in enumerate(raw_entries)]
+        return [
+            CloudEvent(
+                event_id=entry.get("insertId", f"gcp-{i}"),
+                event_name=entry.get("protoPayload", {}).get("methodName", "Unknown"),
+                event_time=entry.get("timestamp", start_time.isoformat()),
+                source_ip=entry.get("protoPayload", {}).get("requestMetadata", {}).get("callerIp"),
+                user_identity=entry.get("protoPayload", {}).get("authenticationInfo", {}),
+                resources=[
+                    {"type": r.get("type", ""), "name": r.get("name", "")}
+                    for r in entry.get("protoPayload", {}).get("resourceList", [])
+                ],
+                raw=entry,
+            )
+            for i, entry in enumerate(raw_entries)
+        ]
 
     async def health_check(self) -> bool:
         client = self._get_client()
@@ -263,11 +280,31 @@ class GCPCloudProvider(BaseCloudProvider):
 
     def _mock_events(self, count: int) -> List[CloudEvent]:
         mock_templates = [
-            {"eventName": "google.iam.admin.v1.CreateServiceAccount", "sourceIP": "10.0.0.1", "userName": "admin@gcp-project"},
-            {"eventName": "google.cloud.storage.v1.Storage.GetObject", "sourceIP": "203.0.113.5", "userName": "svc-account@gcp-project"},
-            {"eventName": "google.cloud.compute.v1.Instances.Insert", "sourceIP": "198.51.100.2", "userName": "ci-runner@gcp-project"},
-            {"eventName": "google.cloud.sql.v1.Instances.Delete", "sourceIP": "72.14.192.15", "userName": "ops-admin@gcp-project"},
-            {"eventName": "google.cloud.kms.v1.KeyManagementService.Decrypt", "sourceIP": "192.168.1.99", "userName": "app-svc@gcp-project"},
+            {
+                "eventName": "google.iam.admin.v1.CreateServiceAccount",
+                "sourceIP": "10.0.0.1",
+                "userName": "admin@gcp-project",
+            },
+            {
+                "eventName": "google.cloud.storage.v1.Storage.GetObject",
+                "sourceIP": "203.0.113.5",
+                "userName": "svc-account@gcp-project",
+            },
+            {
+                "eventName": "google.cloud.compute.v1.Instances.Insert",
+                "sourceIP": "198.51.100.2",
+                "userName": "ci-runner@gcp-project",
+            },
+            {
+                "eventName": "google.cloud.sql.v1.Instances.Delete",
+                "sourceIP": "72.14.192.15",
+                "userName": "ops-admin@gcp-project",
+            },
+            {
+                "eventName": "google.cloud.kms.v1.KeyManagementService.Decrypt",
+                "sourceIP": "192.168.1.99",
+                "userName": "app-svc@gcp-project",
+            },
         ]
         events = []
         for i in range(min(count, len(mock_templates))):
@@ -322,7 +359,9 @@ class AzureCloudProvider(BaseCloudProvider):
             self._healthy = False
         return self._client
 
-    async def fetch_events(self, max_results: int = 10, start_time: Optional[datetime] = None, **kwargs) -> List[CloudEvent]:
+    async def fetch_events(
+        self, max_results: int = 10, start_time: Optional[datetime] = None, **kwargs
+    ) -> List[CloudEvent]:
         client = self._get_client()
         if client is None:
             logger.info("No Azure Logs Query client available, returning mock events")
@@ -349,14 +388,16 @@ class AzureCloudProvider(BaseCloudProvider):
                     return []
                 rows = []
                 for row in tables[0].rows:
-                    rows.append({
-                        "TimeGenerated": row[0].isoformat() if hasattr(row[0], "isoformat") else str(row[0]),
-                        "OperationName": str(row[1]) if len(row) > 1 else "Unknown",
-                        "CallerIpAddress": str(row[2]) if len(row) > 2 and row[2] else None,
-                        "Caller": str(row[3]) if len(row) > 3 else "",
-                        "Resource": str(row[4]) if len(row) > 4 else "",
-                        "ActivityStatus": str(row[5]) if len(row) > 5 else "Accepted",
-                    })
+                    rows.append(
+                        {
+                            "TimeGenerated": row[0].isoformat() if hasattr(row[0], "isoformat") else str(row[0]),
+                            "OperationName": str(row[1]) if len(row) > 1 else "Unknown",
+                            "CallerIpAddress": str(row[2]) if len(row) > 2 and row[2] else None,
+                            "Caller": str(row[3]) if len(row) > 3 else "",
+                            "Resource": str(row[4]) if len(row) > 4 else "",
+                            "ActivityStatus": str(row[5]) if len(row) > 5 else "Accepted",
+                        }
+                    )
                 return rows
             except Exception as e:
                 logger.error(f"Azure Log Analytics query failed: {e}")
@@ -399,11 +440,31 @@ class AzureCloudProvider(BaseCloudProvider):
 
     def _mock_events(self, count: int) -> List[CloudEvent]:
         mock_templates = [
-            {"eventName": "MICROSOFT.COMPUTE/VIRTUALMACHINES/WRITE", "sourceIP": "10.0.0.1", "userName": "admin@contoso.com"},
-            {"eventName": "MICROSOFT.STORAGE/STORAGEACCOUNTS/LISTKEYS/ACTION", "sourceIP": "203.0.113.5", "userName": "svc-account@contoso.com"},
-            {"eventName": "MICROSOFT.AUTHORIZATION/ROLEASSIGNMENTS/WRITE", "sourceIP": "198.51.100.2", "userName": "sec-admin@contoso.com"},
-            {"eventName": "MICROSOFT.SECURITY/ALERTS/WRITE", "sourceIP": "72.14.192.15", "userName": "soc-analyst@contoso.com"},
-            {"eventName": "MICROSOFT.NETWORK/NETWORKSECURITYGROUPS/DELETE", "sourceIP": "192.168.1.99", "userName": "infra-bot@contoso.com"},
+            {
+                "eventName": "MICROSOFT.COMPUTE/VIRTUALMACHINES/WRITE",
+                "sourceIP": "10.0.0.1",
+                "userName": "admin@contoso.com",
+            },
+            {
+                "eventName": "MICROSOFT.STORAGE/STORAGEACCOUNTS/LISTKEYS/ACTION",
+                "sourceIP": "203.0.113.5",
+                "userName": "svc-account@contoso.com",
+            },
+            {
+                "eventName": "MICROSOFT.AUTHORIZATION/ROLEASSIGNMENTS/WRITE",
+                "sourceIP": "198.51.100.2",
+                "userName": "sec-admin@contoso.com",
+            },
+            {
+                "eventName": "MICROSOFT.SECURITY/ALERTS/WRITE",
+                "sourceIP": "72.14.192.15",
+                "userName": "soc-analyst@contoso.com",
+            },
+            {
+                "eventName": "MICROSOFT.NETWORK/NETWORKSECURITYGROUPS/DELETE",
+                "sourceIP": "192.168.1.99",
+                "userName": "infra-bot@contoso.com",
+            },
         ]
         events = []
         for i in range(min(count, len(mock_templates))):

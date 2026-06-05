@@ -40,6 +40,7 @@ class EventStore:
         }
         async with self._lock:
             import aiofiles
+
             async with aiofiles.open(self.storage_path, "a") as f:
                 await f.write(json.dumps(event_record) + "\n")
         return event_record
@@ -49,6 +50,7 @@ class EventStore:
             return []
         try:
             import aiofiles
+
             async with aiofiles.open(self.storage_path, "r") as f:
                 content = await f.read()
             lines = content.strip().split("\n")
@@ -62,13 +64,20 @@ class EventStore:
         return []
 
     async def search_events(
-        self, query: str = "", agent: str = "", event_type: str = "",
-        start_time: str = "", end_time: str = "", limit: int = 50, offset: int = 0,
+        self,
+        query: str = "",
+        agent: str = "",
+        event_type: str = "",
+        start_time: str = "",
+        end_time: str = "",
+        limit: int = 50,
+        offset: int = 0,
     ) -> Dict[str, Any]:
         if not self.storage_path.exists():
             return {"events": [], "total": 0, "limit": limit, "offset": offset}
         try:
             import aiofiles
+
             async with aiofiles.open(self.storage_path, "r") as f:
                 content = await f.read()
             lines = content.strip().split("\n")
@@ -90,15 +99,20 @@ class EventStore:
                 events.append(event)
             events.reverse()
             total = len(events)
-            sliced = events[offset: offset + limit]
+            sliced = events[offset : offset + limit]
             return {"events": sliced, "total": total, "limit": limit, "offset": offset}
         except Exception as e:
             logger.error("Error searching event store: %s", e)
             return {"events": [], "total": 0, "limit": limit, "offset": offset}
 
-    async def get_timeline(self, query: str = "", agent: str = "", start_time: str = "", end_time: str = "", bucket: str = "hour") -> List[Dict[str, Any]]:
+    async def get_timeline(
+        self, query: str = "", agent: str = "", start_time: str = "", end_time: str = "", bucket: str = "hour"
+    ) -> List[Dict[str, Any]]:
         from collections import defaultdict
-        result = await self.search_events(query=query, agent=agent, start_time=start_time, end_time=end_time, limit=10000)
+
+        result = await self.search_events(
+            query=query, agent=agent, start_time=start_time, end_time=end_time, limit=10000
+        )
         events = result["events"]
         buckets: Dict[str, int] = defaultdict(int)
         for event in events:
