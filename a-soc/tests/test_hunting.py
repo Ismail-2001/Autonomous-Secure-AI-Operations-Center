@@ -1,15 +1,18 @@
+import os
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from api import app
 
 transport = ASGITransport(app=app)
+_AUTH = {"Authorization": f"Bearer {os.environ.get('WS_API_TOKEN', 'test-token')}"}
 
 
 @pytest.mark.asyncio
 async def test_hunting_events_returns_ok():
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.get("/api/hunting/events")
+        resp = await client.get("/api/hunting/events", headers=_AUTH)
         assert resp.status_code == 200
         data = resp.json()
         assert data["status"] == "ok"
@@ -22,7 +25,7 @@ async def test_hunting_events_returns_ok():
 @pytest.mark.asyncio
 async def test_hunting_events_with_filters():
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.get("/api/hunting/events?q=login&limit=10&offset=0")
+        resp = await client.get("/api/hunting/events?q=login&limit=10&offset=0", headers=_AUTH)
         assert resp.status_code == 200
         data = resp.json()
         assert data["status"] == "ok"
@@ -31,7 +34,7 @@ async def test_hunting_events_with_filters():
 @pytest.mark.asyncio
 async def test_hunting_events_invalid_limit():
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.get("/api/hunting/events?limit=1000")
+        resp = await client.get("/api/hunting/events?limit=1000", headers=_AUTH)
         assert resp.status_code in (200, 422)
         if resp.status_code == 422:
             data = resp.json()
@@ -41,7 +44,7 @@ async def test_hunting_events_invalid_limit():
 @pytest.mark.asyncio
 async def test_hunting_timeline_returns_ok():
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.get("/api/hunting/timeline")
+        resp = await client.get("/api/hunting/timeline", headers=_AUTH)
         assert resp.status_code == 200
         data = resp.json()
         assert data["status"] == "ok"
@@ -52,7 +55,7 @@ async def test_hunting_timeline_returns_ok():
 @pytest.mark.asyncio
 async def test_hunting_timeline_with_filters():
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.get("/api/hunting/timeline?bucket=day&q=test")
+        resp = await client.get("/api/hunting/timeline?bucket=day&q=test", headers=_AUTH)
         assert resp.status_code == 200
         data = resp.json()
         assert data["bucket_size"] == "day"
@@ -61,5 +64,5 @@ async def test_hunting_timeline_with_filters():
 @pytest.mark.asyncio
 async def test_hunting_timeline_invalid_bucket():
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.get("/api/hunting/timeline?bucket=year")
+        resp = await client.get("/api/hunting/timeline?bucket=year", headers=_AUTH)
         assert resp.status_code == 422

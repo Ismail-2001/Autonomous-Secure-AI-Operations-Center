@@ -90,19 +90,22 @@ class TestMockVectorProvider:
         healthy = await self.provider.health_check()
         assert healthy is True
 
-    def test_embed_text_returns_32_dims(self):
-        vec = self.provider.embed_text("ConsoleLogin from unusual IP")
+    @pytest.mark.asyncio
+    async def test_embed_text_returns_32_dims(self):
+        vec = await self.provider.embed_text("ConsoleLogin from unusual IP")
         assert len(vec) == 32
         assert all(isinstance(v, float) for v in vec)
 
-    def test_embed_text_deterministic(self):
-        v1 = self.provider.embed_text("test input")
-        v2 = self.provider.embed_text("test input")
+    @pytest.mark.asyncio
+    async def test_embed_text_deterministic(self):
+        v1 = await self.provider.embed_text("test input")
+        v2 = await self.provider.embed_text("test input")
         assert v1 == v2
 
-    def test_embed_text_different_inputs(self):
-        v1 = self.provider.embed_text("hello world")
-        v2 = self.provider.embed_text("different input")
+    @pytest.mark.asyncio
+    async def test_embed_text_different_inputs(self):
+        v1 = await self.provider.embed_text("hello world")
+        v2 = await self.provider.embed_text("different input")
         assert v1 != v2
 
     def test_cosine_similarity_identical(self):
@@ -146,7 +149,7 @@ class TestPineconeVectorProvider:
 
     async def test_embed_text_returns_list(self):
         provider = PineconeVectorProvider()
-        vec = provider.embed_text("test")
+        vec = await provider.embed_text("test")
         assert isinstance(vec, list)
         assert len(vec) > 0
 

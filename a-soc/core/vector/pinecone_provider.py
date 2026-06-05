@@ -1,4 +1,5 @@
 import abc
+import asyncio
 import hashlib
 import logging
 from dataclasses import dataclass, field
@@ -33,7 +34,7 @@ class VectorProvider(abc.ABC):
     async def health_check(self) -> bool: ...
 
     @abc.abstractmethod
-    def embed_text(self, text: str) -> List[float]: ...
+    async def embed_text(self, text: str) -> List[float]: ...
 
 
 class MockVectorProvider(VectorProvider):
@@ -68,7 +69,7 @@ class MockVectorProvider(VectorProvider):
     async def health_check(self) -> bool:
         return True
 
-    def embed_text(self, text: str) -> List[float]:
+    async def embed_text(self, text: str) -> List[float]:
         h = hashlib.sha256(text.encode()).hexdigest()
         return [int(h[i : i + 2], 16) / 255.0 for i in range(0, min(64, len(h)), 2)]
 
@@ -95,36 +96,40 @@ class PineconeVectorProvider(VectorProvider):
         self._healthy = False
         self._pc = None
 
-    def _get_index(self):
+    async def _get_index(self):
         if self._index is not None:
             return self._index
         try:
             from pinecone import Pinecone, ServerlessSpec
 
             self._pc = Pinecone(api_key=self.api_key)
-            if self.index_name not in self._pc.list_indexes().names():
-                self._pc.create_index(
-                    name=self.index_name,
-                    dimension=32,
-                    metric="cosine",
-                    spec=ServerlessSpec(cloud="aws", region=self.environment),
-                )
-            self._index = self._pc.Index(self.index_name)
-            self._healthy = True
-            logger.info("Pinecone index '%s' initialized", self.index_name)
+
+            def _init():
+                if self.index_name not in self._pc.list_indexes().names():
+                    self._pc.create_index(
+                        name=self.index_name,
+                        dimension=32,
+                        metric="cosine",
+                        spec=ServerlessSpec(cloud="aws", region=self.environment),
+                    )
+                self._index = self._pc.Index(self.index_name)
+                self._healthy = True
+                logger.info("Pinecone index '%s' initialized", self.index_name)
+
+            await asyncio.to_thread(_init)
         except Exception as e:
             logger.warning("Failed to initialize Pinecone: %s", e)
             self._healthy = False
         return self._index
 
     async def upsert(self, records: List[VectorRecord]) -> bool:
-        index = self._get_index()
+        index = await self._get_index()
         if index is None:
             logger.warning("Pinecone unavailable, falling back to mock upsert")
             return False
         try:
             vectors = [(r.id, r.vector, r.metadata) for r in records]
-            index.upsert(vectors=vectors)
+            await asyncio.to_thread(index.upsert, vectors=vectors)
             logger.info("Pinecone: upserted %d vectors", len(records))
             return True
         except Exception as e:
@@ -134,12 +139,14 @@ class PineconeVectorProvider(VectorProvider):
     async def query(
         self, vector: List[float], top_k: int = 5, filter: Optional[Dict[str, Any]] = None
     ) -> List[VectorRecord]:
-        index = self._get_index()
+        index = await self._get_index()
         if index is None:
             logger.warning("Pinecone unavailable, returning empty query results")
             return []
         try:
-            result = index.query(vector=vector, top_k=top_k, filter=filter, include_metadata=True)
+            result = await asyncio.to_thread(
+                index.query, vector=vector, top_k=top_k, filter=filter, include_metadata=True
+            )
             return [
                 VectorRecord(id=m.get("id", ""), vector=[], metadata=m.get("metadata", {}), score=m.get("score", 0.0))
                 for m in result.get("matches", [])
@@ -149,33 +156,34 @@ class PineconeVectorProvider(VectorProvider):
             return []
 
     async def delete(self, ids: List[str]) -> bool:
-        index = self._get_index()
+        index = await self._get_index()
         if index is None:
             return False
         try:
-            index.delete(ids=ids)
+            await asyncio.to_thread(index.delete, ids=ids)
             return True
         except Exception as e:
             logger.error("Pinecone delete failed: %s", e)
             return False
 
     async def health_check(self) -> bool:
-        index = self._get_index()
+        index = await self._get_index()
         if index is None:
             return False
         try:
-            index.describe_index_stats()
+            fn = lambda: index.describe_index_stats()
+            await asyncio.to_thread(fn)
             return True
         except Exception:
             self._healthy = False
             return False
 
-    def embed_text(self, text: str) -> List[float]:
+    async def embed_text(self, text: str) -> List[float]:
         try:
-            from openai import OpenAI
+            from openai import AsyncOpenAI
 
-            client = OpenAI()
-            resp = client.embeddings.create(input=text, model="text-embedding-ada-002")
+            client = AsyncOpenAI()
+            resp = await client.embeddings.create(input=text, model="text-embedding-ada-002")
             return resp.data[0].embedding
         except Exception as e:
             logger.warning("OpenAI embedding failed, using fallback: %s", e)

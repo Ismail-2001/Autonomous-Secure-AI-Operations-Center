@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_fastapi_instrumentator import Instrumentator
 from pydantic import BaseModel, Field
@@ -17,9 +17,12 @@ sys.path.append(str(Path(__file__).parent))
 
 from agents.base.message import ASOCMessage, MessageType, Priority
 from agents.notifications.notification_agent import NotificationAgent
+from core.auth import require_api_token, require_ws_token
+from core.circuit_breaker import CircuitBreaker
 from core.database import PostgresEventStore, close_db_pool, get_db_pool
 from core.logging import get_logger, set_incident_id, set_trace_id
 from core.message_bus import close_message_bus, get_message_bus
+from core.rate_limiter import check_rate_limit
 
 logger = get_logger("asoc.api")
 
@@ -106,6 +109,24 @@ instrumentator = Instrumentator()
 async def lifespan(app: FastAPI):
     logger.info("app_starting")
     instrumentator.instrument(app).expose(app)
+    # Run Alembic migration on startup if Postgres is configured
+    if isinstance(event_store, PostgresEventStore):
+        try:
+            import subprocess
+
+            result = subprocess.run(
+                [sys.executable, "-m", "alembic", "upgrade", "head"],
+                capture_output=True,
+                text=True,
+                cwd=str(Path(__file__).parent),
+                timeout=30,
+            )
+            if result.returncode == 0:
+                logger.info("alembic_migration_complete", output=result.stdout.strip())
+            else:
+                logger.error("alembic_migration_failed", stderr=result.stderr.strip())
+        except Exception as e:
+            logger.error("alembic_migration_error", error=str(e))
     bg = asyncio.create_task(background_telemetry())
     yield
     bg.cancel()
@@ -124,39 +145,74 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
 )
 
+# ── Circuit Breakers ──
+db_circuit_breaker = CircuitBreaker("postgres", failure_threshold=3, recovery_timeout=15.0)
+redis_circuit_breaker = CircuitBreaker("redis", failure_threshold=3, recovery_timeout=15.0)
+
 
 # ── Health ──
 
 
 @app.get("/health")
 async def health_check():
+    """Aggregated health check — no auth required (for load balancers)."""
     db_ok = False
     bus_ok = False
+    vector_ok = False
+
     try:
-        pool = await get_db_pool()
-        async with pool.pool.acquire() as conn:
-            await conn.fetchval("SELECT 1")
-        db_ok = True
+        if isinstance(event_store, PostgresEventStore):
+            pool = await get_db_pool()
+            async with pool.pool.acquire() as conn:
+                await conn.fetchval("SELECT 1")
+            db_ok = True
+        else:
+            db_ok = True
     except Exception:
         pass
+
     try:
         bus = await get_message_bus()
         bus_ok = await bus.health_check()
     except Exception:
         pass
+
+    try:
+        from core.vector.pinecone_provider import vector_provider
+
+        vector_ok = await vector_provider.health_check()
+    except Exception:
+        pass
+
+    db_status = "connected" if db_ok else "unavailable"
+    bus_status = "connected" if bus_ok else "unavailable"
+    vector_status = "connected" if vector_ok else "unavailable"
+    overall = "healthy" if (db_ok and bus_ok and vector_ok) else "degraded"
+    # If using JSONL store, DB connectivity is not applicable
+    if not isinstance(event_store, PostgresEventStore):
+        db_status = "not_applicable"
+        overall = "healthy" if (bus_ok or vector_ok) else "degraded"
+    if not bus_ok and isinstance(event_store, PostgresEventStore):
+        bus_status = "unavailable"
     return {
-        "status": "healthy",
+        "status": overall,
         "service": "asoc-backend",
+        "version": "0.1.0",
         "active_connections": len(manager._connections),
-        "database": "connected" if db_ok else "unavailable",
-        "message_bus": "connected" if bus_ok else "unavailable",
+        "database": db_status,
+        "message_bus": bus_status,
+        "vector_store": vector_status,
+        "circuit_breakers": {
+            "postgres": db_circuit_breaker.state.value,
+            "redis": redis_circuit_breaker.state.value,
+        },
     }
 
 
 # ── Threat Hunting API ──
 
 
-@app.get("/api/hunting/events")
+@app.get("/api/hunting/events", dependencies=[Depends(require_api_token), Depends(check_rate_limit)])
 async def hunting_events(
     q: str = Query(default="", max_length=500),
     source: str = Query(default="", max_length=100, alias="agent"),
@@ -178,7 +234,7 @@ async def hunting_events(
     return {"status": "ok", **result}
 
 
-@app.get("/api/hunting/timeline")
+@app.get("/api/hunting/timeline", dependencies=[Depends(require_api_token), Depends(check_rate_limit)])
 async def hunting_timeline(
     q: str = Query(default="", max_length=500),
     source: str = Query(default="", max_length=100, alias="agent"),
@@ -203,7 +259,7 @@ async def hunting_timeline(
 async def websocket_endpoint(websocket: WebSocket, token: str = Query(default="")):
     import hmac
 
-    if not hmac.compare_digest(token, WS_API_TOKEN):
+    if not token or not hmac.compare_digest(token, WS_API_TOKEN):
         await websocket.close(code=4001, reason="Unauthorized")
         return
 

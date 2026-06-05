@@ -30,12 +30,13 @@ services:
   redis:
     image: redis:7-alpine
     container_name: asoc-redis
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:-changeme123}"]
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-changeme123}", "ping"]
       interval: 10s
       timeout: 3s
       retries: 5
@@ -117,7 +118,7 @@ services:
       LOCAL_LLM_MODEL: ${LOCAL_LLM_MODEL:-llama3}
       LOCAL_LLM_BASE_URL: ${LOCAL_LLM_BASE_URL:-http://ollama:11434}
       DATABASE_URL: postgresql+asyncpg://asoc_user:${POSTGRES_PASSWORD:-changeme123}@postgres:5432/asoc_db
-      REDIS_URL: redis://redis:6379/0
+      REDIS_URL: redis://:${REDIS_PASSWORD:-changeme123}@redis:6379/0
       OPA_URL: http://opa:8181
       HMAC_SECRET: ${HMAC_SECRET:-change-me-in-prod}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}

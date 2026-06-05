@@ -48,5 +48,21 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
+    @classmethod
+    def validate_production(cls) -> list[str]:
+        warnings: list[str] = []
+        s = cls()
+        if not s.OPENAI_API_KEY and not s.ANTHROPIC_API_KEY and not s.DEEPSEEK_API_KEY:
+            warnings.append(
+                "No LLM API key configured (OPENAI_API_KEY, ANTHROPIC_API_KEY, or DEEPSEEK_API_KEY required)"
+            )
+        if not s.HMAC_SECRET:
+            warnings.append("HMAC_SECRET is not set — API auth will use WS_API_TOKEN")
+        if not s.WS_API_TOKEN:
+            warnings.append("WS_API_TOKEN is not set — WebSocket connections will be rejected")
+        if not s.DATABASE_URL or "changeme" in s.DATABASE_URL:
+            warnings.append("DATABASE_URL is using default credentials — set a strong password in .env")
+        return warnings
+
 
 settings = Settings()
