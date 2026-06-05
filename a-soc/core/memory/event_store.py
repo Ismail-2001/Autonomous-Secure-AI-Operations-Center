@@ -66,6 +66,81 @@ class EventStore:
 
         return []
 
+    async def search_events(
+        self,
+        query: str = "",
+        agent: str = "",
+        event_type: str = "",
+        start_time: str = "",
+        end_time: str = "",
+        limit: int = 50,
+        offset: int = 0,
+    ) -> Dict[str, Any]:
+        if not self.storage_path.exists():
+            return {"events": [], "total": 0, "limit": limit, "offset": offset}
+
+        try:
+            import aiofiles
+
+            async with aiofiles.open(self.storage_path, "r") as f:
+                content = await f.read()
+            lines = content.strip().split("\n")
+            events = []
+            for line in lines:
+                if not line:
+                    continue
+                event = json.loads(line)
+                if query and query.lower() not in json.dumps(event).lower():
+                    continue
+                if agent and agent.lower() not in event.get("agent", "").lower():
+                    continue
+                if event_type and event_type.lower() not in event.get("type", "").lower():
+                    continue
+                if start_time and event.get("timestamp", "") < start_time:
+                    continue
+                if end_time and event.get("timestamp", "") > end_time:
+                    continue
+                events.append(event)
+
+            events.reverse()
+            total = len(events)
+            sliced = events[offset : offset + limit]
+            return {"events": sliced, "total": total, "limit": limit, "offset": offset}
+        except Exception as e:
+            print(f"Error searching event store: {e}")
+            return {"events": [], "total": 0, "limit": limit, "offset": offset}
+
+    async def get_timeline(
+        self,
+        query: str = "",
+        agent: str = "",
+        start_time: str = "",
+        end_time: str = "",
+        bucket: str = "hour",
+    ) -> List[Dict[str, Any]]:
+        from collections import defaultdict
+
+        result = await self.search_events(query=query, agent=agent, start_time=start_time, end_time=end_time, limit=10000)
+        events = result["events"]
+
+        buckets: Dict[str, int] = defaultdict(int)
+        for event in events:
+            ts = event.get("timestamp", "")
+            if not ts:
+                continue
+            if bucket == "hour":
+                key = ts[:13] + ":00:00"  # 2026-06-05T12:00:00 -> 2026-06-05T12:00:00
+            elif bucket == "day":
+                key = ts[:10] + "T00:00:00"
+            elif bucket == "minute":
+                key = ts[:16] + ":00"
+            else:
+                key = ts[:13] + ":00:00"
+            buckets[key] += 1
+
+        sorted_buckets = [{"time": k, "count": v} for k, v in sorted(buckets.items())]
+        return sorted_buckets
+
 
 # Singleton instance
 event_store = EventStore()

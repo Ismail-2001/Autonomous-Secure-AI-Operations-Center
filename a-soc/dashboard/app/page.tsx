@@ -11,6 +11,7 @@ import { AttackGraph } from "../components/AttackGraph";
 import { StatCard } from "../components/StatCard";
 import { TerminalFeed } from "../components/TerminalFeed";
 import { AgentGrid } from "../components/AgentGrid";
+import { ThreatHunting } from "../components/ThreatHunting";
 
 // Types
 interface ThreatEvent {
@@ -54,6 +55,7 @@ export default function Dashboard() {
   const [blastRadius, setBlastRadius] = useState<GraphData | null>(null);
   const [activeTab, setActiveTab] = useState<'incidents' | 'telemetry'>('incidents');
   const [currentTime, setCurrentTime] = useState<string>("");
+  const [mode, setMode] = useState<'dashboard' | 'hunting'>('dashboard');
 
   // Stats
   const [stats, setStats] = useState({
@@ -179,21 +181,23 @@ export default function Dashboard() {
 
           <nav className="flex-1 p-4 space-y-2">
             {[
-              { icon: Activity, label: "Live Monitoring", active: true },
-              { icon: Database, label: "Asset Inventory", active: false },
-              { icon: Terminal, label: "Forensics Lab", active: false },
-              { icon: Globe, label: "Threat Intel", active: false },
-              { icon: Lock, label: "Governance", active: false },
+              { icon: Activity, label: "Live Monitoring", key: "dashboard" as const },
+              { icon: Search, label: "Threat Hunting", key: "hunting" as const },
+              { icon: Database, label: "Asset Inventory", key: null },
+              { icon: Terminal, label: "Forensics Lab", key: null },
+              { icon: Globe, label: "Threat Intel", key: null },
+              { icon: Lock, label: "Governance", key: null },
             ].map((item, i) => (
               <button
                 key={i}
-                className={`w-full flex items-center gap-4 p-3 rounded-lg transition-all group ${item.active
+                onClick={() => { if (item.key) setMode(item.key); }}
+                className={`w-full flex items-center gap-4 p-3 rounded-lg transition-all group ${(item.key && mode === item.key) || (!item.key && false)
                   ? "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 shadow-[0_0_15px_-5px_rgba(6,182,212,0.3)]"
                   : "text-slate-500 hover:bg-slate-800 hover:text-slate-200"}`}
               >
                 <item.icon className="w-5 h-5" />
                 <span className="hidden lg:block font-medium text-sm">{item.label}</span>
-                {item.active && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_5px_cyan] hidden lg:block"></div>}
+                {(item.key && mode === item.key) && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_5px_cyan] hidden lg:block"></div>}
               </button>
             ))}
           </nav>
@@ -249,94 +253,97 @@ export default function Dashboard() {
 
           {/* Dashboard Content */}
           <div className="flex-1 p-8 overflow-y-auto no-scrollbar space-y-6">
-
-            {/* KPI Row */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              <StatCard
-                icon={AlertTriangle}
-                label="Active Threats"
-                value={stats.activeThreats.toString()}
-                subValue="+200%"
-                color="red"
-              />
-              <StatCard
-                icon={CheckCircle}
-                label="Threats Neutralized"
-                value={stats.resolved.toString()}
-                subValue="Today"
-                color="emerald"
-              />
-              <StatCard
-                icon={Clock}
-                label="Mean Time to Respond"
-                value="1.2s"
-                subValue="-0.4s"
-                color="cyan"
-              />
-              <StatCard
-                icon={Cpu}
-                label="AI Agents Online"
-                value={`${stats.agentsActive}/6`}
-                subValue="Optimal"
-                color="purple"
-              />
-            </div>
-
-            {/* Central Visuals Row */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[450px]">
-              {/* Attack Graph */}
-              <div className="lg:col-span-8 cyber-card">
-                <div className="absolute top-4 left-4 z-10">
-                  <h3 className="text-white font-bold flex items-center gap-2">
-                    <Activity className="w-4 h-4 text-orange-400" />
-                    BLAST RADIUS VISUALIZATION
-                  </h3>
-                  <p className="text-slate-500 text-xs font-mono uppercase mt-1">Real-time vector analysis</p>
+            {mode === 'hunting' ? (
+              <ThreatHunting />
+            ) : (
+              <>
+                {/* KPI Row */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  <StatCard
+                    icon={AlertTriangle}
+                    label="Active Threats"
+                    value={stats.activeThreats.toString()}
+                    subValue="+200%"
+                    color="red"
+                  />
+                  <StatCard
+                    icon={CheckCircle}
+                    label="Threats Neutralized"
+                    value={stats.resolved.toString()}
+                    subValue="Today"
+                    color="emerald"
+                  />
+                  <StatCard
+                    icon={Clock}
+                    label="Mean Time to Respond"
+                    value="1.2s"
+                    subValue="-0.4s"
+                    color="cyan"
+                  />
+                  <StatCard
+                    icon={Cpu}
+                    label="AI Agents Online"
+                    value={`${stats.agentsActive}/6`}
+                    subValue="Optimal"
+                    color="purple"
+                  />
                 </div>
-                {blastRadius ? (
-                  <div className="w-full h-full p-4">
-                    <AttackGraph data={blastRadius} />
-                  </div>
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center flex-col gap-4 opacity-30">
-                    <Globe className="w-24 h-24 text-cyan-500 animate-pulse" />
-                    <p className="font-mono text-cyan-500 tracking-widest">AWAITING TELEMETRY...</p>
-                  </div>
-                )}
-              </div>
 
-              {/* Right Panel: Agent Status */}
-              <div className="lg:col-span-4 flex flex-col gap-6">
-                <div className="flex-1 cyber-card p-4">
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-white font-bold text-sm uppercase tracking-wider">Agent Health</h3>
-                    <div className="flex gap-1">
-                      <div className="w-2 h-2 rounded-full bg-cyan-500"></div>
-                      <div className="w-2 h-2 rounded-full bg-slate-700"></div>
+                {/* Central Visuals Row */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[450px]">
+                  {/* Attack Graph */}
+                  <div className="lg:col-span-8 cyber-card">
+                    <div className="absolute top-4 left-4 z-10">
+                      <h3 className="text-white font-bold flex items-center gap-2">
+                        <Activity className="w-4 h-4 text-orange-400" />
+                        BLAST RADIUS VISUALIZATION
+                      </h3>
+                      <p className="text-slate-500 text-xs font-mono uppercase mt-1">Real-time vector analysis</p>
+                    </div>
+                    {blastRadius ? (
+                      <div className="w-full h-full p-4">
+                        <AttackGraph data={blastRadius} />
+                      </div>
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center flex-col gap-4 opacity-30">
+                        <Globe className="w-24 h-24 text-cyan-500 animate-pulse" />
+                        <p className="font-mono text-cyan-500 tracking-widest">AWAITING TELEMETRY...</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Right Panel: Agent Status */}
+                  <div className="lg:col-span-4 flex flex-col gap-6">
+                    <div className="flex-1 cyber-card p-4">
+                      <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-white font-bold text-sm uppercase tracking-wider">Agent Health</h3>
+                        <div className="flex gap-1">
+                          <div className="w-2 h-2 rounded-full bg-cyan-500"></div>
+                          <div className="w-2 h-2 rounded-full bg-slate-700"></div>
+                        </div>
+                      </div>
+                      <AgentGrid running={running} />
                     </div>
                   </div>
-                  {/* We'll inline grid here for simplicity or import AgentGrid if available */}
-                  <AgentGrid running={running} />
                 </div>
-              </div>
-            </div>
 
-            {/* Bottom Row: Terminal Feeds */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[400px]">
-              <TerminalFeed
-                title="INCIDENT LOG STREAM"
-                logs={logs}
-                color="red"
-                icon={AlertTriangle}
-              />
-              <TerminalFeed
-                title="SYSTEM TELEMETRY (BACKGROUND)"
-                logs={backgroundLogs}
-                color="cyan"
-                icon={Terminal}
-              />
-            </div>
-
+                {/* Bottom Row: Terminal Feeds */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[400px]">
+                  <TerminalFeed
+                    title="INCIDENT LOG STREAM"
+                    logs={logs}
+                    color="red"
+                    icon={AlertTriangle}
+                  />
+                  <TerminalFeed
+                    title="SYSTEM TELEMETRY (BACKGROUND)"
+                    logs={backgroundLogs}
+                    color="cyan"
+                    icon={Terminal}
+                  />
+                </div>
+              </>
+            )}
           </div>
         </main>
       </div>

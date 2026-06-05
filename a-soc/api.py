@@ -24,6 +24,8 @@ from agents.notifications.notification_agent import NotificationAgent
 
 notification_agent = NotificationAgent()
 
+from core.memory.event_store import event_store
+
 
 class RateLimiter:
     def __init__(self, max_calls: int = 10, window: float = 10.0):
@@ -87,6 +89,48 @@ manager = ConnectionManager()
 async def health_check():
     """Health check endpoint for Kubernetes probes"""
     return {"status": "healthy", "service": "asoc-backend", "active_connections": len(manager.active_connections)}
+
+
+# ── Threat Hunting REST API ──────────────────────────────────────────────
+
+
+@app.get("/api/hunting/events")
+async def hunting_events(
+    q: str = Query(default="", description="Search query"),
+    source: str = Query(default="", alias="agent", description="Filter by agent name"),
+    event_type: str = Query(default="", description="Filter by event type"),
+    start_time: str = Query(default="", description="ISO timestamp start filter"),
+    end_time: str = Query(default="", description="ISO timestamp end filter"),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+):
+    result = await event_store.search_events(
+        query=q,
+        agent=source,
+        event_type=event_type,
+        start_time=start_time,
+        end_time=end_time,
+        limit=limit,
+        offset=offset,
+    )
+    return {"status": "ok", **result}
+
+
+@app.get("/api/hunting/timeline")
+async def hunting_timeline(
+    q: str = Query(default="", description="Search query"),
+    source: str = Query(default="", alias="agent", description="Filter by agent name"),
+    start_time: str = Query(default="", description="ISO timestamp start filter"),
+    end_time: str = Query(default="", description="ISO timestamp end filter"),
+    bucket: str = Query(default="hour", pattern="^(minute|hour|day)$"),
+):
+    buckets = await event_store.get_timeline(
+        query=q, agent=source, start_time=start_time, end_time=end_time, bucket=bucket
+    )
+    return {"status": "ok", "buckets": buckets, "bucket_size": bucket}
+
+
+# ── WebSocket ─────────────────────────────────────────────────────────────
 
 
 @app.websocket("/ws/threat-feed")

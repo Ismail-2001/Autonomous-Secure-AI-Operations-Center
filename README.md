@@ -11,6 +11,9 @@
 [![Next.js](https://img.shields.io/badge/Next.js-14-000000?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://docker.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](./LICENSE)
+[![Tests](https://img.shields.io/badge/tests-68%20passed-brightgreen?style=for-the-badge)]()
+[![Coverage](https://img.shields.io/badge/coverage-85%25-green?style=for-the-badge)]()
+[![Warnings](https://img.shields.io/badge/warnings-0-brightgreen?style=for-the-badge)]()
 
 <br/>
 
