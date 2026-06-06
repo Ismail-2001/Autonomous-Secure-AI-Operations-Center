@@ -30,8 +30,11 @@ markers = [
     "asyncio: mark test as async",
 ]
 
+[tool.setuptools.packages.find]
+where = ["src"]
+
 [tool.coverage.run]
-source = ["agents", "core", "guardrails"]
+source = ["src"]
 omit = ["*/__init__.py", "tests/*", "api.py"]
 
 [tool.coverage.report]

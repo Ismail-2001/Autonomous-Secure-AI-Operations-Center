@@ -6,14 +6,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from agents.base.message import ASOCMessage, MessageType, Priority
-from agents.compliance.compliance_agent import ComplianceAgent
-from agents.detection.detection_agent import DetectionAgent
-from agents.forensics.forensics_agent import ForensicsAgent
-from agents.response.response_agent import ResponseAgent
-from agents.supervisor.supervisor_agent import SupervisorAgent
-from agents.telemetry.telemetry_agent import TelemetryAgent
-from core.logging import get_logger, set_trace_id
+from src.asoc.agents.message import ASOCMessage, MessageType, Priority
+from src.asoc.agents.compliance import ComplianceAgent
+from src.asoc.agents.detection import DetectionAgent
+from src.asoc.agents.forensics import ForensicsAgent
+from src.asoc.agents.response import ResponseAgent
+from src.asoc.agents.supervisor import SupervisorAgent
+from src.asoc.agents.telemetry import TelemetryAgent
+from src.asoc.core.logging import get_logger, set_trace_id
 
 logger = get_logger("asoc.main")
 

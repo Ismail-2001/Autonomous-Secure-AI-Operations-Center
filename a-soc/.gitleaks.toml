@@ -1,0 +1,10 @@
+# Gitleaks config for A-SOC
+title = "A-SOC Secret Scanning Config"
+
+[allowlist]
+paths = [
+  ".env.example",
+  "tests/**",
+  "**/__pycache__/**",
+  "*.pyc",
+]
