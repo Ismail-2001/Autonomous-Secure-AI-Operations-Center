@@ -1,11 +1,9 @@
 import asyncio
 import os
 import random
-import sys
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import List, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
@@ -18,6 +16,7 @@ from src.asoc.agents.message import ASOCMessage, MessageType, Priority
 from src.asoc.agents.notifications import NotificationAgent
 from src.asoc.core.auth import require_api_token
 from src.asoc.core.circuit_breaker import CircuitBreaker
+from src.asoc.core.config import settings
 from src.asoc.core.connection import close_db_pool, get_db_pool
 from src.asoc.core.event_store import EventStore, PostgresEventStore
 from src.asoc.core.logging import get_logger, get_request_id, set_incident_id, set_request_id, set_trace_id
@@ -28,15 +27,21 @@ from src.asoc.core.router import v1 as api_v1
 logger = get_logger("asoc.api")
 
 notification_agent = NotificationAgent()
+_event_store_instance = None
 
-_db_url = os.getenv("DATABASE_URL", "")
-if _db_url and "localhost" not in _db_url:
-    event_store = PostgresEventStore()
-else:
-    event_store = EventStore()
+
+def get_event_store() -> EventStore:
+    global _event_store_instance
+    if _event_store_instance is None:
+        _db_url = os.getenv("DATABASE_URL", "")
+        if _db_url and "localhost" not in _db_url:
+            _event_store_instance = PostgresEventStore()
+        else:
+            _event_store_instance = EventStore()
+    return _event_store_instance
+
 
 CORS_ALLOW_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
-WS_API_TOKEN = os.getenv("WS_API_TOKEN", "dev-token")
 
 
 class SimulationStart(BaseModel):
@@ -128,23 +133,6 @@ async def lifespan(app: FastAPI):
 
     setup_tracing(app)
     instrumentator.instrument(app).expose(app)
-    if isinstance(event_store, PostgresEventStore):
-        try:
-            import subprocess
-
-            result = subprocess.run(
-                [sys.executable, "-m", "alembic", "upgrade", "head"],
-                capture_output=True,
-                text=True,
-                cwd=str(Path(__file__).parent.parent.parent),
-                timeout=30,
-            )
-            if result.returncode == 0:
-                logger.info("alembic_migration_complete", output=result.stdout.strip())
-            else:
-                logger.error("alembic_migration_failed", stderr=result.stderr.strip())
-        except Exception as e:
-            logger.error("alembic_migration_error", error=str(e))
     bg = asyncio.create_task(background_telemetry())
     yield
     bg.cancel()
@@ -204,7 +192,7 @@ async def health_check():
     vector_ok = False
 
     try:
-        if isinstance(event_store, PostgresEventStore):
+        if isinstance(get_event_store(), PostgresEventStore):
             pool = await get_db_pool()
             async with pool.pool.acquire() as conn:
                 await conn.fetchval("SELECT 1")
@@ -231,10 +219,10 @@ async def health_check():
     bus_status = "connected" if bus_ok else "unavailable"
     vector_status = "connected" if vector_ok else "unavailable"
     overall = "healthy" if (db_ok and bus_ok and vector_ok) else "degraded"
-    if not isinstance(event_store, PostgresEventStore):
+    if not isinstance(get_event_store(), PostgresEventStore):
         db_status = "not_applicable"
         overall = "healthy" if (bus_ok or vector_ok) else "degraded"
-    if not bus_ok and isinstance(event_store, PostgresEventStore):
+    if not bus_ok and isinstance(get_event_store(), PostgresEventStore):
         bus_status = "unavailable"
     return {
         "status": overall,
@@ -262,7 +250,7 @@ async def hunting_events(
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
 ):
-    result = await event_store.search_events(
+    result = await get_event_store().search_events(
         query=q,
         agent=source,
         event_type=event_type,
@@ -283,7 +271,7 @@ async def hunting_timeline(
     end_time: str = Query(default="", max_length=30),
     bucket: str = Query(default="hour", pattern="^(minute|hour|day)$"),
 ):
-    buckets = await event_store.get_timeline(
+    buckets = await get_event_store().get_timeline(
         query=q,
         agent=source,
         start_time=start_time,
@@ -298,7 +286,12 @@ async def hunting_timeline(
 async def websocket_endpoint(websocket: WebSocket, token: str = Query(default="")):
     import hmac
 
-    if not token or not hmac.compare_digest(token, WS_API_TOKEN):
+    ws_token = settings.WS_API_TOKEN.get_secret_value() if settings.WS_API_TOKEN else ""
+    if not ws_token:
+        logger.error("ws_token_not_configured")
+        await websocket.close(code=4001, reason="Server configuration error")
+        return
+    if not token or not hmac.compare_digest(token, ws_token):
         await websocket.close(code=4001, reason="Unauthorized")
         return
 
@@ -531,7 +524,7 @@ async def run_simulation(permission_event: asyncio.Event):
     await stream_status("Compliance", "logged", f"Audit record #{random.randint(1000, 9999)} sealed.", "low")
 
     try:
-        await event_store.append_event(
+        await get_event_store().append_event(
             "threat_cycle_complete",
             {"scenario": scenario["name"], "risk_score": detected_score, "action": scenario["action"]},
             "System",

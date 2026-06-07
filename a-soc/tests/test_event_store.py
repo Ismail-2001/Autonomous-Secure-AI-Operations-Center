@@ -1,6 +1,19 @@
+import os
+
 import pytest
 
 from core.memory.event_store import EventStore
+
+
+@pytest.fixture(autouse=True)
+def _hmac_env():
+    old = os.environ.pop("HMAC_SECRET", None)
+    os.environ["HMAC_SECRET"] = "test-hmac-secret"
+    yield
+    if old:
+        os.environ["HMAC_SECRET"] = old
+    else:
+        os.environ.pop("HMAC_SECRET", None)
 
 
 @pytest.mark.asyncio

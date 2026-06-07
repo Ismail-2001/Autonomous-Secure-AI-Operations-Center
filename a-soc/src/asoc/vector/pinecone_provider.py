@@ -1,6 +1,5 @@
 import abc
 import asyncio
-import hashlib
 import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
@@ -70,8 +69,23 @@ class MockVectorProvider(VectorProvider):
         return True
 
     async def embed_text(self, text: str) -> List[float]:
-        h = hashlib.sha256(text.encode()).hexdigest()
-        return [int(h[i : i + 2], 16) / 255.0 for i in range(0, min(64, len(h)), 2)]
+        return self._word_average_embedding(text, dim=32)
+
+    @staticmethod
+    def _word_average_embedding(text: str, dim: int = 32) -> List[float]:
+        words = text.lower().split()
+        if not words:
+            return [0.0] * dim
+        vec = [0.0] * dim
+        for word in words:
+            h = 14695981039346656037
+            for b in word.encode():
+                h ^= b
+                h *= 1099511628211
+                h &= 0xFFFFFFFFFFFFFFFF
+            for i in range(dim):
+                vec[i] += ((h >> (i * 4)) & 0xFF) / 255.0
+        return [round(v / len(words), 6) for v in vec]
 
     @staticmethod
     def _cosine_similarity(a: List[float], b: List[float]) -> float:
@@ -187,8 +201,7 @@ class PineconeVectorProvider(VectorProvider):
             return resp.data[0].embedding
         except Exception as e:
             logger.warning("OpenAI embedding failed, using fallback: %s", e)
-            h = hashlib.sha256(text.encode()).hexdigest()
-            return [int(h[i : i + 2], 16) / 255.0 for i in range(0, min(64, len(h)), 2)]
+            return MockVectorProvider._word_average_embedding(text)
 
 
 def create_vector_provider() -> VectorProvider:

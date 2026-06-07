@@ -1,5 +1,4 @@
 import hmac
-import os
 from typing import Optional
 
 from fastapi import Header, HTTPException, WebSocketException, status
@@ -7,11 +6,14 @@ from fastapi import Header, HTTPException, WebSocketException, status
 from src.asoc.core.config import settings
 
 
+def _get_ws_token() -> str:
+    return settings.WS_API_TOKEN.get_secret_value() if settings.WS_API_TOKEN else ""
+
+
 def _verify_token(token: str) -> bool:
-    expected = os.getenv("WS_API_TOKEN", "")
+    expected = _get_ws_token()
     if not expected:
-        api_key = settings.HMAC_SECRET.get_secret_value() if settings.HMAC_SECRET else ""
-        expected = api_key or "dev-token"
+        return False
     return hmac.compare_digest(token, expected)
 
 

@@ -19,30 +19,23 @@ class EventStore:
         self.storage_path = Path(storage_path)
         self.storage_path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = asyncio.Lock()
-        self._hmac_key = os.getenv("HMAC_SECRET", "").encode() or b"dev-secret-change-in-prod"
+        hmac_secret = os.getenv("HMAC_SECRET")
+        if not hmac_secret:
+            raise ValueError("HMAC_SECRET environment variable must be set")
+        self._hmac_key = hmac_secret.encode()
         self._chain_hash = self._load_last_hash()
 
     def _load_last_hash(self) -> str:
         if not self.storage_path.exists():
             return ""
         try:
-            import aiofiles
-            loop = asyncio.new_event_loop()
-            try:
-                content = loop.run_until_complete(self._read_last_line())
-            finally:
-                loop.close()
-            return content
+            with open(self.storage_path, "r") as f:
+                lines = f.readlines()
+            if lines:
+                last = json.loads(lines[-1].strip())
+                return last.get("_chain_hash", "")
         except Exception:
-            return ""
-
-    async def _read_last_line(self) -> str:
-        import aiofiles
-        async with aiofiles.open(self.storage_path, "r") as f:
-            lines = await f.readlines()
-        if lines:
-            last = json.loads(lines[-1].strip())
-            return last.get("_chain_hash", "")
+            pass
         return ""
 
     def _hash_record(self, record: dict) -> str:
@@ -64,12 +57,8 @@ class EventStore:
         if not self.storage_path.exists():
             return True
         try:
-            import aiofiles
-            loop = asyncio.new_event_loop()
-            try:
-                content = loop.run_until_complete(self._read_all())
-            finally:
-                loop.close()
+            with open(self.storage_path, "r") as f:
+                content = f.read()
             prev_hash = ""
             for line in content.strip().split("\n"):
                 if not line:
@@ -84,11 +73,6 @@ class EventStore:
         except Exception:
             return False
 
-    async def _read_all(self) -> str:
-        import aiofiles
-        async with aiofiles.open(self.storage_path, "r") as f:
-            return await f.read()
-
     async def append_event(self, event_type: str, payload: Dict[str, Any], agent: str):
         event_record = {
             "id": str(uuid.uuid4()),
@@ -100,19 +84,21 @@ class EventStore:
         }
         event_record["_chain_hash"] = self._hash_record(event_record)
         async with self._lock:
-            import aiofiles
-            async with aiofiles.open(self.storage_path, "a") as f:
-                await f.write(json.dumps(event_record) + "\n")
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, self._append_to_file, event_record)
             self._chain_hash = event_record["_chain_hash"]
         return event_record
+
+    def _append_to_file(self, record: dict) -> None:
+        with open(self.storage_path, "a") as f:
+            f.write(json.dumps(record) + "\n")
 
     async def get_recent_events(self, limit: int = 50) -> List[Dict[str, Any]]:
         if not self.storage_path.exists():
             return []
         try:
-            import aiofiles
-            async with aiofiles.open(self.storage_path, "r") as f:
-                content = await f.read()
+            loop = asyncio.get_running_loop()
+            content = await loop.run_in_executor(None, self.storage_path.read_text)
             lines = content.strip().split("\n")
             events = []
             for line in reversed(lines[-limit:]):
@@ -136,9 +122,8 @@ class EventStore:
         if not self.storage_path.exists():
             return {"events": [], "total": 0, "limit": limit, "offset": offset}
         try:
-            import aiofiles
-            async with aiofiles.open(self.storage_path, "r") as f:
-                content = await f.read()
+            loop = asyncio.get_running_loop()
+            content = await loop.run_in_executor(None, self.storage_path.read_text)
             lines = content.strip().split("\n")
             events = []
             for line in lines:
@@ -192,7 +177,10 @@ class EventStore:
 
 class PostgresEventStore:
     def __init__(self) -> None:
-        self._hmac_key = os.getenv("HMAC_SECRET", "").encode() or b"dev-secret-change-in-prod"
+        hmac_secret = os.getenv("HMAC_SECRET")
+        if not hmac_secret:
+            raise ValueError("HMAC_SECRET environment variable must be set")
+        self._hmac_key = hmac_secret.encode()
 
     def _sign_payload(self, payload: dict) -> str:
         serialized = str(sorted(payload.items()))

@@ -16,7 +16,7 @@ class ForensicsAgent(BaseAgent):
         self.logger.info("forensics_started", incident_id=incident_data.get("incident_id"))
 
         query_text = json.dumps(incident_data.get("data", incident_data))
-        query_vector = vector_provider.embed_text(query_text)
+        query_vector = await vector_provider.embed_text(query_text)
         try:
             similar = await vector_provider.query(query_vector, top_k=3)
         except Exception as e:
@@ -83,7 +83,7 @@ class ForensicsAgent(BaseAgent):
             text_for_embedding = json.dumps(
                 {"root_cause": analysis.get("root_cause", ""), "evidence": analysis.get("evidence", [])}
             )
-            vector = vector_provider.embed_text(text_for_embedding)
+            vector = await vector_provider.embed_text(text_for_embedding)
             record = VectorRecord(
                 id=incident_id or str(uuid.uuid4()),
                 vector=vector,

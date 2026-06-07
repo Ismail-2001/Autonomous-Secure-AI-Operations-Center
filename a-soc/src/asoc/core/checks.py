@@ -46,7 +46,7 @@ async def run_boot_checks() -> list[str]:
 
 def _check_secrets() -> None:
     if "HMAC_SECRET" not in os.environ:
-        _warn("HMAC_SECRET not set — using default, rotate immediately in production")
+        _fail("HMAC_SECRET not set — EventStore will fail to initialize")
     if "WS_API_TOKEN" not in os.environ:
         _fail("WS_API_TOKEN not set — WebSocket auth will reject all connections")
     if "changeme" in os.getenv("POSTGRES_PASSWORD", ""):
