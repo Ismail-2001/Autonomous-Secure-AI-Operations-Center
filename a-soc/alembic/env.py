@@ -19,10 +19,14 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    from asyncpg import connect
-    from sqlalchemy.ext.asyncio import create_async_engine
+    from sqlalchemy import create_engine
 
-    connectable = create_async_engine(config.get_main_option("sqlalchemy.url"))
+    url = config.get_main_option("sqlalchemy.url")
+    # Convert async URL to sync for Alembic
+    if url and url.startswith("postgresql+asyncpg://"):
+        url = url.replace("postgresql+asyncpg://", "postgresql://", 1)
+
+    connectable = create_engine(url)
 
     with connectable.connect() as connection:
         context.configure(connection=connection, target_metadata=target_metadata)

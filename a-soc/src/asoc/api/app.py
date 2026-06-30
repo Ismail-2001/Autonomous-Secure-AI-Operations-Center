@@ -147,7 +147,6 @@ async def lifespan(app: FastAPI):
     await run_boot_checks()
 
     setup_tracing(app)
-    instrumentator.instrument(app).expose(app)
     bg = asyncio.create_task(background_telemetry())
     yield
     bg.cancel()
@@ -157,6 +156,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="A-SOC API", version="1.0.0-beta", lifespan=lifespan)
+
+instrumentator.instrument(app).expose(app)
 
 app.add_middleware(
     CORSMiddleware,

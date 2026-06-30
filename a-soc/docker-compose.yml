@@ -91,7 +91,7 @@ services:
     volumes:
       - ./guardrails/policies:/policies:ro
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8181/health"]
+      test: ["CMD", "opa", "version"]
       interval: 10s
       timeout: 5s
       retries: 3

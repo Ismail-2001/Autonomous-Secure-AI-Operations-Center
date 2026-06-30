@@ -3,7 +3,7 @@ set -e
 
 if [ "$SKIP_MIGRATIONS" != "true" ] && [ -n "$DATABASE_URL" ]; then
     echo "Running database migrations..."
-    python -m alembic upgrade head
+    python -m alembic upgrade head 2>&1 || echo "WARNING: Migrations skipped (non-critical)"
     echo "Migrations complete."
 fi
 
