@@ -1,0 +1,28 @@
+# A-SOC pinned dependencies — updated 2026-06-29
+# Install: pip install --no-cache-dir -r requirements-lock.txt
+# Upgrade: pip install -r requirements.txt && pip freeze > requirements-lock.txt
+
+fastapi==0.115.0
+uvicorn[standard]==0.30.0
+pydantic==2.9.0
+pydantic-settings==2.5.0
+asyncpg==0.29.0
+redis[hiredis]==5.1.0
+httpx==0.27.2
+prometheus-fastapi-instrumentator==7.0.1
+openai==1.51.0
+anthropic==0.40.0
+boto3==1.35.0
+pinecone==5.0.1
+aiofiles==24.1.0
+langchain-core>=0.3.0,<1
+langgraph==0.2.45
+langchain-openai==0.2.0
+langchain-anthropic==0.2.4
+langchain-ollama==0.2.3
+alembic==1.13.2
+opentelemetry-api==1.27.0
+opentelemetry-sdk==1.27.0
+opentelemetry-exporter-otlp-proto-http==1.27.0
+opentelemetry-instrumentation-fastapi==0.48b0
+opentelemetry-instrumentation-httpx==0.48b0
