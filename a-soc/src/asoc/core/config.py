@@ -1,10 +1,22 @@
+"""Centralized application configuration using Pydantic BaseSettings.
+
+All settings are loaded from environment variables with sensible defaults.
+Secrets use SecretStr to prevent accidental logging.
+"""
+
 from typing import Optional
 
-from pydantic import SecretStr
+from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    """A-SOC application settings.
+
+    Loaded from environment variables or .env file.
+    Use validate_production() to check for missing critical config.
+    """
+
     LLM_PROVIDER: str = "openai"
     LLM_MODEL: str = "gpt-4"
     OPENAI_API_KEY: Optional[SecretStr] = None
@@ -12,6 +24,14 @@ class Settings(BaseSettings):
     DEEPSEEK_API_KEY: Optional[SecretStr] = None
     LOCAL_LLM_MODEL: str = "llama3"
     LOCAL_LLM_BASE_URL: str = "http://localhost:11434"
+
+    @field_validator("LLM_PROVIDER")
+    @classmethod
+    def validate_llm_provider(cls, v: str) -> str:
+        allowed = {"openai", "anthropic", "ollama", "deepseek"}
+        if v.lower() not in allowed:
+            raise ValueError(f"LLM_PROVIDER must be one of {allowed}, got '{v}'")
+        return v.lower()
 
     AWS_REGION: str = "us-east-1"
     AWS_ACCESS_KEY_ID: Optional[SecretStr] = None
