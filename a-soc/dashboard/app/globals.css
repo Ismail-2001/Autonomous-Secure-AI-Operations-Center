@@ -1,0 +1,126 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: #030712;
+  --color-foreground: #fafafa;
+  --color-card: #0f172a;
+  --color-card-foreground: #fafafa;
+  --color-primary: #06b6d4;
+  --color-primary-foreground: #1c1917;
+  --color-secondary: #a855f7;
+  --color-secondary-foreground: #fafafa;
+  --color-muted: #1e293b;
+  --color-muted-foreground: #94a3b8;
+  --color-destructive: #dc2626;
+  --color-destructive-foreground: #fafafa;
+  --color-border: #1e293b;
+  --color-ring: #06b6d4;
+}
+
+body {
+  background-color: var(--color-background);
+  background-image: radial-gradient(circle at 50% 0%, rgba(6, 182, 212, 0.15), transparent 50%);
+  font-family: 'Inter', system-ui, sans-serif;
+  color: white;
+}
+
+/* Perspective Grid Floor - Simplified */
+.cyber-grid {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 50%;
+  background: rgba(6, 182, 212, 0.05);
+  transform: perspective(1000px) rotateX(10deg) translateY(100px) scale(1.5);
+  pointer-events: none;
+  z-index: -1;
+  mask-image: linear-gradient(to top, black, transparent);
+  -webkit-mask-image: linear-gradient(to top, black, transparent);
+}
+
+@layer components {
+  .glass-panel {
+    @apply bg-slate-900 backdrop-blur-md border border-slate-700 shadow-xl;
+  }
+
+  .cyber-card {
+    @apply relative overflow-hidden bg-slate-900 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl transition-all duration-300;
+  }
+
+  .cyber-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, #06b6d4, transparent);
+    opacity: 0.5;
+  }
+
+  .cyber-button {
+    @apply relative overflow-hidden px-6 py-3 rounded-lg font-bold uppercase tracking-wider transition-all duration-300;
+    background: #030712;
+    border: 1px solid rgba(6, 182, 212, 0.3);
+    color: #06b6d4;
+  }
+
+  .cyber-button:hover {
+    @apply bg-cyan-900 text-cyan-300;
+    border-color: #06b6d4;
+    box-shadow: 0 0 20px rgba(6, 182, 212, 0.4);
+  }
+}
+
+@layer utilities {
+  .text-glow {
+    text-shadow: 0 0 10px rgba(6, 182, 212, 0.7);
+  }
+
+  .animate-scan {
+    animation: scan 4s linear infinite;
+  }
+
+  .animate-pulse-fast {
+    animation: pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+}
+
+@keyframes scan {
+  0% {
+    transform: translateY(-100%);
+  }
+
+  100% {
+    transform: translateY(1000%);
+  }
+}
+
+/* Scrollbar */
+.terminal-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.terminal-scrollbar::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.terminal-scrollbar::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 3px;
+}
+
+/* CRT Scanline - Simplified */
+.scanlines::before {
+  content: " ";
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+  background: rgba(0, 0, 0, 0.1);
+  z-index: 100;
+  pointer-events: none;
+}
