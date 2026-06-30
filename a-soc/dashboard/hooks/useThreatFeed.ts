@@ -1,333 +1,253 @@
-/**
- * Production-grade WebSocket hook for the A-SOC threat feed.
- *
- * Features:
- * - Exponential backoff reconnection (1s → 2s → 4s → ... → 30s cap)
- * - Message queue for offline buffering (replays on reconnect)
- * - Optimistic updates for low-latency UI feel
- * - Connection state machine: CONNECTING | OPEN | RECONNECTING | CLOSED
- * - Typed message handling (no `any` types)
- */
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+"use client";
 
-// ── Types ────────────────────────────────────────────────────────────────
+import { useReducer, useCallback, useRef, useEffect } from "react";
 
-export type ConnectionState = "CONNECTING" | "OPEN" | "RECONNECTING" | "CLOSED";
+type ConnectionState = "CLOSED" | "CONNECTING" | "OPEN" | "RECONNECTING";
 
-export interface ThreatEvent {
-  readonly id: string;
-  readonly timestamp: string;
-  readonly agent: string;
-  readonly status: string;
-  readonly message: string;
-  readonly severity: "low" | "medium" | "high" | "critical";
-  readonly is_background?: boolean;
+interface ThreatEvent {
+  id: string;
+  timestamp: string;
+  source: string;
+  severity: string;
+  description: string;
+  type: "threat" | "background" | "approval" | "blast_radius";
 }
 
-export interface ApprovalRequest {
-  readonly type: "APPROVAL_REQUIRED";
-  readonly action: string;
-  readonly target: string;
-  readonly risk_score: number;
+interface BlastRadiusData {
+  nodes: { id: string; label: string; type: string; risk: string }[];
+  edges: { source: string; target: string; type: string }[];
 }
 
-export interface BlastRadiusUpdate {
-  readonly type: "BLAST_RADIUS_UPDATE";
-  readonly graph: GraphData;
-  readonly root_cause: string;
+interface ApprovalRequest {
+  action: string;
+  target: string;
+  risk_score: number;
+  run_id?: string;
 }
 
-export interface GraphNode {
-  readonly id: string;
-  readonly type: "threat_actor" | "identity" | "resource" | "unknown";
-  readonly label: string;
-  readonly risk: "critical" | "high" | "medium" | "low";
+interface FeedStats {
+  activeThreats: number;
+  resolved: number;
+  agentsActive: number;
 }
 
-export interface GraphEdge {
-  readonly source: string;
-  readonly target: string;
-  readonly label: string;
+interface FeedState {
+  connectionState: ConnectionState;
+  events: ThreatEvent[];
+  backgroundEvents: ThreatEvent[];
+  approvalRequest: ApprovalRequest | null;
+  blastRadius: BlastRadiusData | null;
+  stats: FeedStats;
+  reconnectAttempts: number;
 }
 
-export interface GraphData {
-  readonly nodes: readonly GraphNode[];
-  readonly edges: readonly GraphEdge[];
-}
-
-export type WSMessage = ThreatEvent | ApprovalRequest | BlastRadiusUpdate;
-
-export interface UseThreatFeedOptions {
-  readonly url: string;
-  readonly token: string;
-  readonly maxReconnectAttempts?: number;
-  readonly baseReconnectDelayMs?: number;
-  readonly maxReconnectDelayMs?: number;
-  readonly messageBufferSize?: number;
-}
-
-export interface UseThreatFeedReturn {
-  readonly connectionState: ConnectionState;
-  readonly events: readonly ThreatEvent[];
-  readonly backgroundEvents: readonly ThreatEvent[];
-  readonly approvalRequest: ApprovalRequest | null;
-  readonly blastRadius: GraphData | null;
-  readonly stats: FeedStats;
-  readonly sendMessage: (message: string) => void;
-  readonly startSimulation: () => void;
-  readonly approveAction: () => void;
-  readonly denyAction: () => void;
-  readonly resetStats: () => void;
-}
-
-export interface FeedStats {
-  readonly activeThreats: number;
-  readonly resolved: number;
-  readonly agentsActive: number;
-  readonly totalEvents: number;
-  readonly reconnectCount: number;
-}
-
-// ── State Machine ────────────────────────────────────────────────────────
-
-type StateAction =
-  | { type: "CONNECT" }
+type FeedAction =
+  | { type: "CONNECTING" }
   | { type: "OPEN" }
-  | { type: "CLOSE" }
-  | { type: "RECONNECT" }
-  | { type: "GIVE_UP" };
+  | { type: "CLOSED" }
+  | { type: "RECONNECTING"; attempt: number }
+  | { type: "ADD_EVENT"; event: ThreatEvent }
+  | { type: "ADD_BACKGROUND"; event: ThreatEvent }
+  | { type: "SET_APPROVAL"; request: ApprovalRequest | null }
+  | { type: "SET_BLAST_RADIUS"; data: BlastRadiusData | null }
+  | { type: "UPDATE_STATS"; stats: Partial<FeedStats> }
+  | { type: "APPROVE" }
+  | { type: "DENY" }
+  | { type: "RESET" };
 
-function connectionReducer(state: ConnectionState, action: StateAction): ConnectionState {
+function feedReducer(state: FeedState, action: FeedAction): FeedState {
   switch (action.type) {
-    case "CONNECT":
-      return "CONNECTING";
+    case "CONNECTING":
+      return { ...state, connectionState: "CONNECTING" };
     case "OPEN":
-      return "OPEN";
-    case "CLOSE":
-      return state === "OPEN" ? "RECONNECTING" : state;
-    case "RECONNECT":
-      return "RECONNECTING";
-    case "GIVE_UP":
-      return "CLOSED";
+      return { ...state, connectionState: "OPEN", reconnectAttempts: 0 };
+    case "CLOSED":
+      return { ...state, connectionState: "CLOSED" };
+    case "RECONNECTING":
+      return { ...state, connectionState: "RECONNECTING", reconnectAttempts: action.attempt };
+    case "ADD_EVENT":
+      return { ...state, events: [action.event, ...state.events].slice(0, 100) };
+    case "ADD_BACKGROUND":
+      return { ...state, backgroundEvents: [action.event, ...state.backgroundEvents].slice(0, 50) };
+    case "SET_APPROVAL":
+      return { ...state, approvalRequest: action.request };
+    case "SET_BLAST_RADIUS":
+      return { ...state, blastRadius: action.data };
+    case "UPDATE_STATS":
+      return { ...state, stats: { ...state.stats, ...action.stats } };
+    case "APPROVE":
+      return { ...state, approvalRequest: null };
+    case "DENY":
+      return { ...state, approvalRequest: null };
+    case "RESET":
+      return { ...state, events: [], backgroundEvents: [], approvalRequest: null, blastRadius: null };
     default:
       return state;
   }
 }
 
-// ── Hook ─────────────────────────────────────────────────────────────────
+const initialState: FeedState = {
+  connectionState: "CLOSED",
+  events: [],
+  backgroundEvents: [],
+  approvalRequest: null,
+  blastRadius: null,
+  stats: { activeThreats: 0, resolved: 0, agentsActive: 0 },
+  reconnectAttempts: 0,
+};
 
-export function useThreatFeed(options: UseThreatFeedOptions): UseThreatFeedReturn {
+interface UseThreatFeedOptions {
+  url: string;
+  token: string;
+  maxReconnectAttempts?: number;
+  baseReconnectDelayMs?: number;
+  maxReconnectDelayMs?: number;
+}
+
+export function useThreatFeed(options: UseThreatFeedOptions) {
   const {
     url,
     token,
     maxReconnectAttempts = 10,
     baseReconnectDelayMs = 1000,
     maxReconnectDelayMs = 30000,
-    messageBufferSize = 100,
   } = options;
 
-  const [connectionState, dispatch] = useReducer(connectionReducer, "CLOSED");
-  const [events, setEvents] = useState<ThreatEvent[]>([]);
-  const [backgroundEvents, setBackgroundEvents] = useState<ThreatEvent[]>([]);
-  const [approvalRequest, setApprovalRequest] = useState<ApprovalRequest | null>(null);
-  const [blastRadius, setBlastRadius] = useState<GraphData | null>(null);
-  const [stats, setStats] = useState<FeedStats>({
-    activeThreats: 0,
-    resolved: 0,
-    agentsActive: 0,
-    totalEvents: 0,
-    reconnectCount: 0,
-  });
-
+  const [state, dispatch] = useReducer(feedReducer, initialState);
   const wsRef = useRef<WebSocket | null>(null);
-  const reconnectAttemptRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const messageQueueRef = useRef<string[]>([]);
   const mountedRef = useRef(true);
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      mountedRef.current = false;
-      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
-      wsRef.current?.close();
-    };
-  }, []);
-
-  const calculateDelay = useCallback(
-    (attempt: number): number => {
-      const delay = baseReconnectDelayMs * Math.pow(2, attempt);
-      const jitter = Math.random() * 0.3 * delay;
-      return Math.min(delay + jitter, maxReconnectDelayMs);
-    },
-    [baseReconnectDelayMs, maxReconnectDelayMs]
-  );
-
-  const processMessage = useCallback((data: WSMessage) => {
-    if (!mountedRef.current) return;
-
-    // Approval request — highest priority
-    if ("type" in data && data.type === "APPROVAL_REQUIRED") {
-      setApprovalRequest(data as ApprovalRequest);
-      return;
-    }
-
-    // Blast radius update
-    if ("type" in data && data.type === "BLAST_RADIUS_UPDATE") {
-      setBlastRadius((data as BlastRadiusUpdate).graph);
-      return;
-    }
-
-    // Threat event
-    const event = data as ThreatEvent;
-    if (event.agent) {
-      if (event.is_background) {
-        setBackgroundEvents((prev) => [event, ...prev].slice(0, messageBufferSize));
-      } else {
-        setEvents((prev) => [event, ...prev].slice(0, messageBufferSize));
-
-        // Optimistic stats update
-        if (event.severity === "high" || event.severity === "critical") {
-          setStats((prev) => ({ ...prev, activeThreats: prev.activeThreats + 1 }));
-        }
-        if (event.status === "success" || event.status === "logged") {
-          setStats((prev) => ({
-            ...prev,
-            resolved: prev.resolved + 1,
-            activeThreats: Math.max(0, prev.activeThreats - 1),
-          }));
-        }
-      }
-
-      setStats((prev) => ({ ...prev, totalEvents: prev.totalEvents + 1 }));
-    }
-  }, [messageBufferSize]);
-
   const connect = useCallback(() => {
-    if (!mountedRef.current) return;
+    if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
-    // Clean up existing connection
-    if (wsRef.current) {
-      wsRef.current.onopen = null;
-      wsRef.current.onmessage = null;
-      wsRef.current.onclose = null;
-      wsRef.current.onerror = null;
-      wsRef.current.close();
-    }
+    dispatch({ type: "CONNECTING" });
 
-    dispatch({ type: "CONNECT" });
-
-    const ws = new WebSocket(`${url}?token=${token}`);
+    const ws = new WebSocket(`${url}/ws/threat-feed?token=${encodeURIComponent(token)}`);
     wsRef.current = ws;
 
     ws.onopen = () => {
       if (!mountedRef.current) return;
       dispatch({ type: "OPEN" });
-      reconnectAttemptRef.current = 0;
-      setStats((prev) => ({ ...prev, agentsActive: 6 }));
-
-      // Flush offline message queue
-      while (messageQueueRef.current.length > 0) {
-        const queued = messageQueueRef.current.shift();
-        if (queued && ws.readyState === WebSocket.OPEN) {
-          ws.send(queued);
-        }
-      }
     };
 
-    ws.onmessage = (event: MessageEvent) => {
+    ws.onmessage = (event) => {
+      if (!mountedRef.current) return;
       try {
-        const data: WSMessage = JSON.parse(event.data);
-        processMessage(data);
+        const msg = JSON.parse(event.data);
+        if (msg.type === "APPROVAL_REQUIRED") {
+          dispatch({ type: "SET_APPROVAL", request: msg.payload });
+        } else if (msg.type === "BLAST_RADIUS_UPDATE") {
+          dispatch({ type: "SET_BLAST_RADIUS", data: msg.payload });
+        } else if (msg.type === "THREAT_EVENT" || msg.type === "INCIDENT") {
+          const threatEvent: ThreatEvent = {
+            id: msg.payload.id || crypto.randomUUID(),
+            timestamp: msg.payload.timestamp || new Date().toISOString(),
+            source: msg.payload.source || "unknown",
+            severity: msg.payload.severity || "info",
+            description: msg.payload.description || msg.payload.message || JSON.stringify(msg.payload),
+            type: "threat",
+          };
+          dispatch({ type: "ADD_EVENT", event: threatEvent });
+          dispatch({ type: "UPDATE_STATS", stats: { activeThreats: state.stats.activeThreats + 1 } });
+        } else if (msg.type === "TELEMETRY" || msg.type === "HEARTBEAT") {
+          const bgEvent: ThreatEvent = {
+            id: msg.payload?.id || crypto.randomUUID(),
+            timestamp: msg.timestamp || new Date().toISOString(),
+            source: msg.payload?.source || "system",
+            severity: msg.payload?.severity || "info",
+            description: msg.payload?.message || msg.payload?.description || "System event",
+            type: "background",
+          };
+          dispatch({ type: "ADD_BACKGROUND", event: bgEvent });
+        }
       } catch {
-        // Ignore malformed messages
+        /* ignore malformed messages */
       }
     };
 
     ws.onclose = () => {
       if (!mountedRef.current) return;
-      dispatch({ type: "CLOSE" });
+      wsRef.current = null;
 
-      if (reconnectAttemptRef.current < maxReconnectAttempts) {
-        const delay = calculateDelay(reconnectAttemptRef.current);
-        reconnectAttemptRef.current += 1;
-
-        setStats((prev) => ({
-          ...prev,
-          reconnectCount: prev.reconnectCount + 1,
-          agentsActive: 0,
-        }));
-
-        reconnectTimerRef.current = setTimeout(() => {
-          if (mountedRef.current) {
-            dispatch({ type: "RECONNECT" });
-            connect();
-          }
-        }, delay);
-      } else {
-        dispatch({ type: "GIVE_UP" });
+      const attempt = state.reconnectAttempts + 1;
+      if (attempt >= maxReconnectAttempts) {
+        dispatch({ type: "CLOSED" });
+        return;
       }
+
+      dispatch({ type: "RECONNECTING", attempt });
+      const delay = Math.min(baseReconnectDelayMs * Math.pow(2, attempt - 1), maxReconnectDelayMs);
+
+      reconnectTimerRef.current = setTimeout(() => {
+        if (mountedRef.current) connect();
+      }, delay);
     };
 
     ws.onerror = () => {
-      ws.close();
+      /* onclose will handle reconnection */
     };
-  }, [url, token, maxReconnectAttempts, calculateDelay, processMessage]);
+  }, [url, token, maxReconnectAttempts, baseReconnectDelayMs, maxReconnectDelayMs, state.reconnectAttempts, state.stats.activeThreats]);
 
-  // Connect on mount
-  useEffect(() => {
-    connect();
-  }, [connect]);
+  const disconnect = useCallback(() => {
+    mountedRef.current = false;
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+    dispatch({ type: "CLOSED" });
+  }, []);
 
   const sendMessage = useCallback((message: string) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(message);
-    } else {
-      // Queue for offline delivery
-      messageQueueRef.current.push(message);
     }
   }, []);
 
   const startSimulation = useCallback(() => {
     sendMessage("START_SIMULATION");
-    setEvents([]);
-    setBackgroundEvents([]);
-    setBlastRadius(null);
-    setApprovalRequest(null);
   }, [sendMessage]);
 
   const approveAction = useCallback(() => {
-    sendMessage("APPROVE_ACTION");
-    setApprovalRequest(null);
-  }, [sendMessage]);
+    if (state.approvalRequest) {
+      sendMessage(`APPROVE_ACTION:${JSON.stringify(state.approvalRequest)}`);
+    }
+    dispatch({ type: "APPROVE" });
+  }, [sendMessage, state.approvalRequest]);
 
   const denyAction = useCallback(() => {
-    setApprovalRequest(null);
-  }, []);
+    if (state.approvalRequest) {
+      sendMessage(`DENY_ACTION:${JSON.stringify(state.approvalRequest)}`);
+    }
+    dispatch({ type: "DENY" });
+  }, [sendMessage, state.approvalRequest]);
 
-  const resetStats = useCallback(() => {
-    setStats({
-      activeThreats: 0,
-      resolved: 0,
-      agentsActive: 0,
-      totalEvents: 0,
-      reconnectCount: 0,
-    });
-    setEvents([]);
-    setBackgroundEvents([]);
-  }, []);
+  useEffect(() => {
+    mountedRef.current = true;
+    connect();
+    return () => {
+      mountedRef.current = false;
+      disconnect();
+    };
+  }, [connect, disconnect]);
 
   return {
-    connectionState,
-    events,
-    backgroundEvents,
-    approvalRequest,
-    blastRadius,
-    stats,
-    sendMessage,
+    connectionState: state.connectionState,
+    events: state.events,
+    backgroundEvents: state.backgroundEvents,
+    approvalRequest: state.approvalRequest,
+    blastRadius: state.blastRadius,
+    stats: state.stats,
+    reconnectAttempts: state.reconnectAttempts,
     startSimulation,
     approveAction,
     denyAction,
-    resetStats,
+    sendMessage,
   };
 }
+
+export type { ConnectionState, ThreatEvent, BlastRadiusData, ApprovalRequest, FeedStats };

@@ -1,98 +1,89 @@
-import { Shield, Server } from "lucide-react";
-import { useEffect, useRef } from "react";
+"use client";
 
-interface Log {
-    agent: string;
-    status: string;
-    message: string;
-    severity: string;
-    timestamp: string;
+import { useEffect, useRef, ReactNode } from "react";
+import { cn } from "@/lib/utils";
+import { LucideIcon } from "lucide-react";
+
+interface LogEntry {
+  id?: string;
+  timestamp: string;
+  source: string;
+  severity: string;
+  description: string;
 }
 
 interface TerminalFeedProps {
-    logs: readonly Log[];
-    title: string;
-    color?: "cyan" | "orange" | "red";
-    icon?: any;
+  title: string;
+  logs: LogEntry[];
+  color?: "red" | "cyan" | "green" | "amber";
+  icon: LucideIcon;
 }
 
-export function TerminalFeed({ logs, title, color = "cyan", icon: Icon = Shield }: TerminalFeedProps) {
-    const scrollRef = useRef<HTMLDivElement>(null);
+const colorMap = {
+  red: { border: "border-red-500/20", dot: "bg-red-500", text: "text-red-400" },
+  cyan: { border: "border-cyan-500/20", dot: "bg-cyan-500", text: "text-cyan-400" },
+  green: { border: "border-green-500/20", dot: "bg-green-500", text: "text-green-400" },
+  amber: { border: "border-amber-500/20", dot: "bg-amber-500", text: "text-amber-400" },
+};
 
-    useEffect(() => {
-        if (scrollRef.current) {
-            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-        }
-    }, [logs]);
+const severityClass: Record<string, string> = {
+  critical: "text-red-400",
+  high: "text-orange-400",
+  medium: "text-yellow-400",
+  low: "text-green-400",
+  info: "text-blue-400",
+};
 
-    const severityColor = (severity: string) => {
-        switch (severity) {
-            case "critical": return "text-red-500 bg-red-500/10 border-red-500/20";
-            case "high": return "text-orange-500 bg-orange-500/10 border-orange-500/20";
-            case "medium": return "text-yellow-500 bg-yellow-500/10 border-yellow-500/20";
-            default: return "text-cyan-500 bg-cyan-500/10 border-cyan-500/20";
-        }
-    };
+export function TerminalFeed({ title, logs, color = "cyan", icon: Icon }: TerminalFeedProps) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const c = colorMap[color];
 
-    return (
-        <div className="cyber-card flex flex-col h-full min-h-[500px] border border-slate-800">
-            {/* Header Bar */}
-            <div className="bg-slate-950/80 px-4 py-3 border-b border-slate-800 flex items-center justify-between backdrop-blur-md sticky top-0 z-10">
-                <div className="flex items-center gap-3">
-                    <div className={`p-2 rounded bg-${color}-500/10 border border-${color}-500/20`}>
-                        <Icon className={`w-4 h-4 text-${color}-400`} />
-                    </div>
-                    <span className="font-mono text-sm uppercase tracking-widest text-slate-300 font-bold">
-                        {title}
-                    </span>
-                </div>
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = 0;
+    }
+  }, [logs.length]);
 
-                {/* Fake Window Controls */}
-                <div className="flex gap-2">
-                    <div className="w-2 h-2 rounded-full bg-slate-700"></div>
-                    <div className="w-2 h-2 rounded-full bg-slate-700"></div>
-                    <div className="w-2 h-2 rounded-full bg-slate-700"></div>
-                </div>
-            </div>
-
-            {/* Terminal Viewport */}
-            <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 font-mono text-xs sm:text-sm space-y-2 terminal-scrollbar bg-black/40">
-                {logs.length === 0 ? (
-                    <div className="h-full flex flex-col items-center justify-center text-slate-600 space-y-4 animate-pulse">
-                        <Server className="w-12 h-12 opacity-20" />
-                        <p>System initialized. Waiting for input stream...</p>
-                    </div>
-                ) : (
-                    logs.map((log, i) => (
-                        <div key={i} className="group flex gap-3 animate-fade-in-up hover:bg-slate-900/50 p-1 -mx-1 rounded transition-colors">
-                            <span className="text-cyan-600 w-20 shrink-0 select-none font-bold">
-                                [{new Date(log.timestamp).toLocaleTimeString([], { hour12: false })}]
-                            </span>
-
-                            <div className="flex-1 break-words">
-                                <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] uppercase font-bold mr-2 ${severityColor(log.severity)}`}>
-                                    {log.agent}::{log.status}
-                                </span>
-                                <span className="text-slate-100 font-mono tracking-wide group-hover:text-white transition-colors">
-                                    {log.message}
-                                </span>
-                            </div>
-                        </div>
-                    ))
-                )}
-
-                {/* Blinking Cursor at bottom */}
-                <div className="h-4 w-2 bg-cyan-500 animate-blink mt-2 inline-block"></div>
-            </div>
-
-            {/* Footer Status Bar */}
-            <div className="bg-slate-950 px-4 py-1.5 border-t border-slate-800 text-[10px] font-mono text-slate-500 flex justify-between uppercase tracking-wider">
-                <span>Channel: Secure/WSS-9004</span>
-                <span className="flex items-center gap-2">
-                    <span className={`w-1.5 h-1.5 rounded-full ${logs.length > 0 ? 'bg-green-500 animate-pulse' : 'bg-slate-600'}`}></span>
-                    Live
-                </span>
-            </div>
+  return (
+    <div className={cn("glass-card flex flex-col h-full", c.border)}>
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-800/50">
+        <div className="flex items-center gap-2">
+          <Icon className={cn("w-3.5 h-3.5", c.text)} />
+          <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">{title}</span>
         </div>
-    );
+        <div className="flex items-center gap-1.5">
+          <div className={cn("w-1.5 h-1.5 rounded-full", c.dot, "animate-pulse")} />
+          <span className="text-[10px] text-slate-500 font-mono">LIVE</span>
+        </div>
+      </div>
+
+      {/* Feed */}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 space-y-1.5 no-scrollbar" aria-live="polite">
+        {logs.length === 0 ? (
+          <div className="flex items-center justify-center h-full opacity-30">
+            <p className="text-xs font-mono text-slate-500">Waiting for events...</p>
+          </div>
+        ) : (
+          logs.map((log, i) => (
+            <div
+              key={log.id || i}
+              className="flex items-start gap-2 text-xs font-mono leading-relaxed group"
+            >
+              <span className="text-slate-600 shrink-0 w-14">{new Date(log.timestamp).toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>
+              <span className={cn("shrink-0", severityClass[log.severity] || "text-slate-500")}>[{log.severity.toUpperCase().padEnd(8)}]</span>
+              <span className="text-slate-400 shrink-0">{log.source}:</span>
+              <span className="text-slate-300 break-all">{log.description}</span>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className="flex items-center justify-between px-4 py-1.5 border-t border-slate-800/50 text-[10px] text-slate-600 font-mono">
+        <span>{logs.length} events</span>
+        <span>{title}</span>
+      </div>
+    </div>
+  );
 }

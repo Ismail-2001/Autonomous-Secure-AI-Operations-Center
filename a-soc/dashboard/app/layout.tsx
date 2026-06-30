@@ -8,20 +8,13 @@ const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "A-SOC | Autonomous Security Operations Center",
-  description:
-    "AI-powered autonomous security monitoring and incident response platform",
+  description: "AI-powered autonomous security monitoring and incident response platform",
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className="dark">
-      <body
-        className={`${inter.className} bg-slate-950 text-slate-200 antialiased selection:bg-cyan-500/30`}
-      >
+      <body className={`${inter.className} antialiased`}>
         <ErrorBoundary>
           <AuthProvider>{children}</AuthProvider>
         </ErrorBoundary>

@@ -4,9 +4,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Shield, Activity, Search, Database, Terminal,
-  Globe, Lock, User, Bell, LogOut
+  Globe, Lock, ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useState } from "react";
 
 const navItems = [
   { icon: Activity, label: "Live Monitoring", href: "/" },
@@ -17,64 +18,87 @@ const navItems = [
   { icon: Lock, label: "Governance", href: "/governance" },
 ];
 
-export function Sidebar({ connectionState }: { connectionState?: string }) {
+interface SidebarProps {
+  connectionState?: string;
+}
+
+export function Sidebar({ connectionState }: SidebarProps) {
   const pathname = usePathname();
+  const [collapsed, setCollapsed] = useState(false);
 
   return (
-    <aside className="w-20 lg:w-64 bg-slate-900/50 backdrop-blur-xl border-r border-slate-800 flex flex-col z-20 transition-all duration-300 shrink-0">
-      <div className="p-6 flex items-center gap-3 border-b border-slate-800/50">
-        <div className="p-2 bg-cyan-500/10 rounded-lg border border-cyan-500/20">
-          <Shield className="w-6 h-6 text-cyan-400 animate-pulse-slow" />
-        </div>
-        <span className="font-bold text-xl tracking-tighter text-white hidden lg:block">
-          A-SOC <span className="text-cyan-500">PRO</span>
-        </span>
+    <aside
+      className={cn(
+        "flex flex-col z-20 transition-all duration-300 shrink-0 h-screen",
+        "bg-[#0a0f1a]/80 backdrop-blur-xl border-r border-slate-800/50",
+        collapsed ? "w-[68px]" : "w-60"
+      )}
+    >
+      {/* Logo */}
+      <div className="h-16 flex items-center justify-between px-4 border-b border-slate-800/50">
+        <Link href="/" className="flex items-center gap-2.5 overflow-hidden">
+          <div className="p-1.5 bg-cyan-500/10 rounded-lg border border-cyan-500/20 shrink-0">
+            <Shield className="w-5 h-5 text-cyan-400" />
+          </div>
+          {!collapsed && (
+            <span className="font-bold text-lg tracking-tight text-white whitespace-nowrap">
+              A-SOC <span className="text-cyan-400">PRO</span>
+            </span>
+          )}
+        </Link>
+        <button
+          onClick={() => setCollapsed(!collapsed)}
+          className="p-1.5 rounded-md text-slate-500 hover:text-slate-300 hover:bg-slate-800/50 transition-colors"
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+        </button>
       </div>
 
-      <nav className="flex-1 p-4 space-y-2">
+      {/* Navigation */}
+      <nav className="flex-1 p-3 space-y-1" role="navigation" aria-label="Main navigation">
         {navItems.map((item) => {
           const isActive = pathname === item.href;
           return (
             <Link
               key={item.href}
               href={item.href}
+              aria-current={isActive ? "page" : undefined}
               className={cn(
-                "w-full flex items-center gap-4 p-3 rounded-lg transition-all group",
+                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
                 isActive
-                  ? "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 shadow-[0_0_15px_-5px_rgba(6,182,212,0.3)]"
-                  : "text-slate-500 hover:bg-slate-800 hover:text-slate-200"
+                  ? "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20"
+                  : "text-slate-500 hover:bg-slate-800/50 hover:text-slate-300 border border-transparent"
               )}
+              title={collapsed ? item.label : undefined}
             >
-              <item.icon className="w-5 h-5" />
-              <span className="hidden lg:block font-medium text-sm">{item.label}</span>
-              {isActive && (
-                <div className="ml-auto w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_5px_cyan] hidden lg:block" />
+              <item.icon className="w-[18px] h-[18px] shrink-0" />
+              {!collapsed && <span className="truncate">{item.label}</span>}
+              {isActive && !collapsed && (
+                <div className="ml-auto w-1.5 h-1.5 rounded-full bg-cyan-400" />
               )}
             </Link>
           );
         })}
       </nav>
 
-      <div className="p-4 border-t border-slate-800/50">
-        <div className="bg-slate-950/50 rounded-xl p-4 border border-slate-800">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-cyan-500 to-blue-600" />
-            <div className="hidden lg:block">
-              <p className="text-sm font-bold text-white">Chief Operator</p>
-              <p className="text-xs text-slate-500">SEC-OPS LEVEL 5</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 mt-2">
-            <div className={cn(
-              "w-1.5 h-1.5 rounded-full",
-              connectionState === "OPEN" ? "bg-green-500 animate-pulse" :
-              connectionState === "CONNECTING" || connectionState === "RECONNECTING"
-                ? "bg-yellow-500 animate-pulse" : "bg-red-500"
-            )} />
-            <span className="text-[10px] text-slate-500 font-mono hidden lg:block">
+      {/* Connection Status */}
+      <div className="p-3 border-t border-slate-800/50">
+        <div className={cn(
+          "flex items-center gap-2 px-3 py-2 rounded-lg",
+          "bg-slate-900/50"
+        )}>
+          <div className={cn(
+            "status-dot shrink-0",
+            connectionState === "OPEN" ? "status-dot-online" :
+            connectionState === "CONNECTING" || connectionState === "RECONNECTING"
+              ? "status-dot-warning" : "status-dot-offline"
+          )} />
+          {!collapsed && (
+            <span className="text-xs font-mono text-slate-500 truncate">
               WS: {connectionState || "CLOSED"}
             </span>
-          </div>
+          )}
         </div>
       </div>
     </aside>

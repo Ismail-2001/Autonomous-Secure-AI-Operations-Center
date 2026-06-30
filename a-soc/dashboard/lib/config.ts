@@ -1,36 +1,28 @@
-export const dashboardConfig = {
-  wsUrl: process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:9002",
-  wsToken: process.env.NEXT_PUBLIC_WS_TOKEN || "dev-token",
-  wsMaxReconnect: 10,
-  wsBaseDelayMs: 1000,
-  wsMaxDelayMs: 30000,
+/* A-SOC Dashboard Configuration */
 
-  maxEvents: 100,
-  maxBackgroundEvents: 50,
-  refreshIntervalMs: 5000,
-  clockIntervalMs: 1000,
-
-  enableThreatHunting: true,
-  enableBlastRadius: true,
-  enableTerminalFeed: true,
-  enableAgentGrid: true,
-  enableApprovalWorkflow: true,
-
-  agentColors: {
-    TelemetryAgent: "#3b82f6",
-    DetectionAgent: "#f59e0b",
-    SupervisorAgent: "#8b5cf6",
-    ForensicsAgent: "#10b981",
-    ResponseAgent: "#ef4444",
-    ComplianceAgent: "#06b6d4",
-    NotificationAgent: "#f97316",
-  } as Record<string, string>,
-
-  severityColors: {
-    critical: "#dc2626",
-    high: "#ea580c",
-    medium: "#d97706",
-    low: "#2563eb",
-    info: "#6b7280",
-  } as Record<string, string>,
+export const config = {
+  ws: {
+    url: process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:9002",
+    token: process.env.NEXT_PUBLIC_WS_TOKEN || "my-SOC-agent-2001",
+    maxReconnect: 10,
+    baseDelayMs: 1000,
+    maxDelayMs: 30000,
+  },
+  api: {
+    url: process.env.NEXT_PUBLIC_API_URL || "http://localhost:9002",
+  },
+  display: {
+    maxEvents: 100,
+    maxBackgroundEvents: 50,
+    refreshIntervalMs: 5000,
+  },
+  agents: [
+    { name: "TelemetryAgent", role: "Data Collection", color: "#3b82f6" },
+    { name: "DetectionAgent", role: "Threat Detection", color: "#f59e0b" },
+    { name: "SupervisorAgent", role: "Quality Gate", color: "#8b5cf6" },
+    { name: "ForensicsAgent", role: "Investigation", color: "#22c55e" },
+    { name: "ResponseAgent", role: "Containment", color: "#ef4444" },
+    { name: "ComplianceAgent", role: "Audit & Compliance", color: "#06b6d4" },
+    { name: "NotificationAgent", role: "Alerting", color: "#f97316" },
+  ],
 } as const;
