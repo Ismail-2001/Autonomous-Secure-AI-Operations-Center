@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import { ErrorBoundary } from "../components/ErrorBoundary";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "A-SOC | Autonomous Security Operations Center",
-  description: "AI-powered autonomous security monitoring and incident response platform",
+  description:
+    "AI-powered autonomous security monitoring and incident response platform",
 };
 
 export default function RootLayout({
@@ -16,8 +18,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark">
-      <body className={`${inter.className} bg-slate-950 text-white antialiased`}>
-        {children}
+      <body
+        className={`${inter.className} bg-slate-950 text-white antialiased`}
+      >
+        <ErrorBoundary>{children}</ErrorBoundary>
       </body>
     </html>
   );
