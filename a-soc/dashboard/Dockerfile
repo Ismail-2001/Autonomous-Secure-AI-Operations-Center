@@ -6,8 +6,8 @@ WORKDIR /app
 # Copy package files
 COPY package.json package-lock.json ./
 
-# Install dependencies (npm install used instead of npm ci due to lock file drift)
-RUN npm install
+# Delete stale lockfile and do a fresh install
+RUN rm -f package-lock.json && npm install --legacy-peer-deps
 
 # Copy source code
 COPY . .

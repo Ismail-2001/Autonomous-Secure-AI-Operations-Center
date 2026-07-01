@@ -1,43 +1,99 @@
 "use client";
 
-import { LucideIcon } from "lucide-react";
+import React from "react";
 import { cn } from "@/lib/utils";
 
 interface StatCardProps {
-  icon: LucideIcon;
+  icon: React.ReactNode;
   label: string;
-  value: string;
+  value: string | number;
   subValue?: string;
-  color?: "cyan" | "purple" | "rose" | "emerald" | "orange";
+  color?: "cyan" | "purple" | "rose" | "emerald" | "amber" | "blue";
   className?: string;
 }
 
 const colorMap = {
-  cyan: { border: "border-cyan-500/20", icon: "text-cyan-400 bg-cyan-500/10", glow: "shadow-[0_0_15px_-5px_rgba(6,182,212,0.2)]" },
-  purple: { border: "border-purple-500/20", icon: "text-purple-400 bg-purple-500/10", glow: "shadow-[0_0_15px_-5px_rgba(139,92,246,0.2)]" },
-  rose: { border: "border-rose-500/20", icon: "text-rose-400 bg-rose-500/10", glow: "shadow-[0_0_15px_-5px_rgba(244,63,94,0.2)]" },
-  emerald: { border: "border-emerald-500/20", icon: "text-emerald-400 bg-emerald-500/10", glow: "shadow-[0_0_15px_-5px_rgba(16,185,129,0.2)]" },
-  orange: { border: "border-orange-500/20", icon: "text-orange-400 bg-orange-500/10", glow: "shadow-[0_0_15px_-5px_rgba(249,115,22,0.2)]" },
+  cyan: {
+    bg: "rgba(6, 182, 212, 0.1)",
+    border: "rgba(6, 182, 212, 0.25)",
+    icon: "#06b6d4",
+    glow: "0 0 20px rgba(6, 182, 212, 0.15)",
+  },
+  purple: {
+    bg: "rgba(139, 92, 246, 0.1)",
+    border: "rgba(139, 92, 246, 0.25)",
+    icon: "#8b5cf6",
+    glow: "0 0 20px rgba(139, 92, 246, 0.15)",
+  },
+  rose: {
+    bg: "rgba(239, 68, 68, 0.1)",
+    border: "rgba(239, 68, 68, 0.25)",
+    icon: "#ef4444",
+    glow: "0 0 20px rgba(239, 68, 68, 0.15)",
+  },
+  emerald: {
+    bg: "rgba(34, 197, 94, 0.1)",
+    border: "rgba(34, 197, 94, 0.25)",
+    icon: "#22c55e",
+    glow: "0 0 20px rgba(34, 197, 94, 0.15)",
+  },
+  amber: {
+    bg: "rgba(245, 158, 11, 0.1)",
+    border: "rgba(245, 158, 11, 0.25)",
+    icon: "#f59e0b",
+    glow: "0 0 20px rgba(245, 158, 11, 0.15)",
+  },
+  blue: {
+    bg: "rgba(59, 130, 246, 0.1)",
+    border: "rgba(59, 130, 246, 0.25)",
+    icon: "#3b82f6",
+    glow: "0 0 20px rgba(59, 130, 246, 0.15)",
+  },
 };
 
-export function StatCard({ icon: Icon, label, value, subValue, color = "cyan", className }: StatCardProps) {
+export default function StatCard({ icon, label, value, subValue, color = "cyan", className }: StatCardProps) {
   const c = colorMap[color];
   return (
     <div
-      className={cn("glass-card p-4 group", c.border, c.glow, className)}
-      role="article"
-      aria-label={`${label}: ${value}`}
+      className={cn("glass-card", className)}
+      style={{
+        padding: "18px 20px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 12,
+        borderColor: c.border,
+        boxShadow: c.glow,
+        animation: "slide-up 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both",
+      }}
     >
-      <div className="flex items-center justify-between mb-3">
-        <div className={cn("p-2 rounded-lg", c.icon)}>
-          <Icon className="w-4 h-4" />
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{
+          width: 40,
+          height: 40,
+          borderRadius: 10,
+          background: c.bg,
+          border: `1px solid ${c.border}`,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: c.icon,
+        }}>
+          {icon}
+        </div>
+      </div>
+      <div>
+        <div style={{ fontSize: 28, fontWeight: 800, color: "#f8fafc", fontFamily: "JetBrains Mono, monospace", lineHeight: 1.1 }}>
+          {value}
+        </div>
+        <div style={{ fontSize: 12, color: "#64748b", fontWeight: 500, marginTop: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+          {label}
         </div>
         {subValue && (
-          <span className="text-xs font-mono text-slate-500">{subValue}</span>
+          <div style={{ fontSize: 11, color: c.icon, fontWeight: 600, marginTop: 4 }}>
+            {subValue}
+          </div>
         )}
       </div>
-      <p className="text-2xl font-bold text-white tracking-tight">{value}</p>
-      <p className="text-xs text-slate-500 font-mono uppercase tracking-wider mt-1">{label}</p>
     </div>
   );
 }

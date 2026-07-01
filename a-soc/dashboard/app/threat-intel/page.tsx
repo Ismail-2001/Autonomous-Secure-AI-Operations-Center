@@ -1,116 +1,175 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { Globe, RefreshCw, Shield, Search, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
-import { Shell } from "@/components/Shell";
-import { endpoints, ThreatIndicator } from "@/lib/api";
-import { severityBadge, formatDate, cn } from "@/lib/utils";
-
-const tlpColors: Record<string, string> = {
-  red: "bg-red-500/20 text-red-400 border-red-500/30",
-  amber: "bg-amber-500/20 text-amber-400 border-amber-500/30",
-  green: "bg-green-500/20 text-green-400 border-green-500/30",
-  white: "bg-slate-500/20 text-slate-300 border-slate-500/30",
-};
-
-const demo: ThreatIndicator[] = [
-  { id: "ioc-001", type: "ip", value: "198.51.100.42", confidence: 0.92, severity: "critical", tlp: "red", source: "CrowdStrike Intel", first_seen: new Date(Date.now() - 86400000 * 3).toISOString(), last_seen: new Date().toISOString(), tags: ["apt29", "c2"], description: "Known C2 server associated with APT29" },
-  { id: "ioc-002", type: "hash", value: "a1b2c3d4e5f678901234567890123456", confidence: 0.87, severity: "high", tlp: "amber", source: "VirusTotal", first_seen: new Date(Date.now() - 86400000 * 7).toISOString(), last_seen: new Date(Date.now() - 86400000).toISOString(), tags: ["ransomware", "lockbit"], description: "LockBit 3.0 ransomware sample" },
-  { id: "ioc-003", type: "domain", value: "evil-update.com", confidence: 0.78, severity: "high", tlp: "amber", source: "AlienVault OTX", first_seen: new Date(Date.now() - 86400000 * 14).toISOString(), last_seen: new Date(Date.now() - 86400000 * 2).toISOString(), tags: ["phishing"], description: "Phishing domain mimicking software updates" },
-  { id: "ioc-004", type: "url", value: "https://malware-host.xyz/payload.exe", confidence: 0.95, severity: "critical", tlp: "red", source: "URLhaus", first_seen: new Date(Date.now() - 3600000 * 6).toISOString(), last_seen: new Date().toISOString(), tags: ["malware-dropper"], description: "Active malware distribution URL" },
-  { id: "ioc-005", type: "email", value: "phish@spoofed.com", confidence: 0.72, severity: "medium", tlp: "green", source: "PhishTank", first_seen: new Date(Date.now() - 86400000 * 5).toISOString(), last_seen: new Date(Date.now() - 86400000).toISOString(), tags: ["bec"], description: "BEC phishing sender address" },
-];
+import React, { useState, useEffect, useCallback } from "react";
+import Shell from "@/components/Shell";
+import { api, endpoints, type ThreatIndicator } from "@/lib/api";
+import { severityBadge, timeAgo, severityColor } from "@/lib/utils";
 
 export default function ThreatIntelPage() {
   const [indicators, setIndicators] = useState<ThreatIndicator[]>([]);
   const [loading, setLoading] = useState(true);
+  const [typeFilter, setTypeFilter] = useState<string>("");
+  const [tlpFilter, setTlpFilter] = useState<string>("");
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [typeFilter, setTypeFilter] = useState("");
-  const [tlpFilter, setTlpFilter] = useState("");
-  const [search, setSearch] = useState("");
+  const [query, setQuery] = useState("");
 
-  const fetchIntel = useCallback(async () => {
+  const fetchIndicators = useCallback(async () => {
     setLoading(true);
     try {
-      const params: Record<string, string> = { limit: "100" };
-      if (tlpFilter) params.tlp = tlpFilter;
-      const data = await endpoints.threatIntel(params);
-      setIndicators(data.indicators?.length ? data.indicators : demo);
-    } catch { setIndicators(demo); } finally { setLoading(false); }
-  }, [tlpFilter]);
+      const data = await api.get<{ indicators: ThreatIndicator[] }>(endpoints.threatIntel());
+      setIndicators(data.indicators || []);
+    } catch (_e) {
+      setIndicators([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  useEffect(() => { fetchIntel(); }, [fetchIntel]);
+  useEffect(() => { fetchIndicators(); }, [fetchIndicators]);
 
   const filtered = indicators.filter((i) => {
     if (typeFilter && i.type !== typeFilter) return false;
-    if (search && !i.value.toLowerCase().includes(search.toLowerCase()) && !i.description.toLowerCase().includes(search.toLowerCase())) return false;
+    if (tlpFilter && i.tlp !== tlpFilter) return false;
+    if (query) {
+      const q = query.toLowerCase();
+      return i.value.toLowerCase().includes(q) || i.source.toLowerCase().includes(q) || i.tags.some((t) => t.toLowerCase().includes(q));
+    }
     return true;
   });
 
+  const tlpColors: Record<string, string> = {
+    red: "#ef4444",
+    amber: "#f59e0b",
+    green: "#22c55e",
+    white: "#e2e8f0",
+  };
+
+  const iocTypeIcons: Record<string, string> = {
+    ip: "🌐",
+    domain: "🔗",
+    hash: "#️⃣",
+    url: "🌍",
+    email: "📧",
+  };
+
   return (
-    <Shell title="Threat Intelligence" subtitle="Indicators of Compromise from multiple threat feeds">
-      <div className="p-6 space-y-5">
-        <div className="grid grid-cols-4 gap-4">
-          <div className="glass-card p-3 text-center"><p className="text-2xl font-bold text-white">{indicators.length}</p><p className="text-[10px] text-slate-500 font-mono mt-0.5">TOTAL IOCs</p></div>
-          <div className="glass-card card-critical p-3 text-center"><p className="text-2xl font-bold text-red-400">{indicators.filter((i) => i.severity === "critical").length}</p><p className="text-[10px] text-slate-500 font-mono mt-0.5">CRITICAL</p></div>
-          <div className="glass-card card-warning p-3 text-center"><p className="text-2xl font-bold text-orange-400">{indicators.filter((i) => i.severity === "high").length}</p><p className="text-[10px] text-slate-500 font-mono mt-0.5">HIGH</p></div>
-          <div className="glass-card p-3 text-center border-cyan-500/20"><p className="text-2xl font-bold text-cyan-400">{indicators.filter((i) => new Date(i.last_seen).getTime() > Date.now() - 86400000).length}</p><p className="text-[10px] text-slate-500 font-mono mt-0.5">SEEN 24H</p></div>
+    <Shell>
+      <div style={{ display: "flex", flexDirection: "column", gap: 20, animation: "fade-in 0.4s ease" }}>
+        <div>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: "#f8fafc", marginBottom: 4 }}>Threat Intelligence Center</h1>
+          <p style={{ fontSize: 13, color: "#64748b" }}>IOC database, threat actors, and intelligence feeds</p>
         </div>
 
-        <div className="flex gap-3">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-            <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search IOCs by value, description, or tag..." className="input pl-10" aria-label="Search IOCs" />
+        {/* Stats */}
+        <div className="grid-4">
+          {[
+            { label: "Total IOCs", value: indicators.length, color: "#06b6d4" },
+            { label: "Critical", value: indicators.filter((i) => i.severity === "critical").length, color: "#ef4444" },
+            { label: "High", value: indicators.filter((i) => i.severity === "high").length, color: "#f97316" },
+            { label: "TLP:Red", value: indicators.filter((i) => i.tlp === "red").length, color: "#ef4444" },
+          ].map((stat) => (
+            <div key={stat.label} className="glass-card" style={{ padding: "14px 16px" }}>
+              <div style={{ fontSize: 24, fontWeight: 800, fontFamily: "JetBrains Mono, monospace", color: stat.color }}>{stat.value}</div>
+              <div style={{ fontSize: 11, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>{stat.label}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Filters */}
+        <div className="glass-panel" style={{ padding: 16, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+          <div className="search-bar" style={{ flex: 1, minWidth: 200 }}>
+            <svg className="search-icon" width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <circle cx={11} cy={11} r={8} />
+              <line x1={21} y1={21} x2="16.65" y2="16.65" />
+            </svg>
+            <input className="input input-mono" placeholder="Search IOCs..." value={query} onChange={(e) => setQuery(e.target.value)} />
           </div>
-          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="select w-36" aria-label="IOC type filter">
-            <option value="">All Types</option><option value="ip">IP</option><option value="domain">Domain</option><option value="hash">Hash</option><option value="url">URL</option><option value="email">Email</option>
+          <select className="select" style={{ width: 140 }} value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+            <option value="">All Types</option>
+            <option value="ip">IP Address</option>
+            <option value="domain">Domain</option>
+            <option value="hash">Hash</option>
+            <option value="url">URL</option>
+            <option value="email">Email</option>
           </select>
-          <select value={tlpFilter} onChange={(e) => setTlpFilter(e.target.value)} className="select w-36" aria-label="TLP filter">
-            <option value="">All TLP</option><option value="red">TLP:RED</option><option value="amber">TLP:AMBER</option><option value="green">TLP:GREEN</option><option value="white">TLP:WHITE</option>
+          <select className="select" style={{ width: 140 }} value={tlpFilter} onChange={(e) => setTlpFilter(e.target.value)}>
+            <option value="">All TLP</option>
+            <option value="red">TLP:RED</option>
+            <option value="amber">TLP:AMBER</option>
+            <option value="green">TLP:GREEN</option>
+            <option value="white">TLP:WHITE</option>
           </select>
-          <button onClick={fetchIntel} className="btn-primary"><RefreshCw className="w-3.5 h-3.5" /> Sync</button>
         </div>
 
-        {loading ? (
-          <div className="flex items-center justify-center py-16"><Shield className="w-6 h-6 text-cyan-500 animate-pulse" /></div>
-        ) : (
-          <div className="space-y-2">
-            {filtered.map((ioc) => (
-              <div key={ioc.id} className="glass-card p-4 cursor-pointer hover:border-slate-600 transition-colors"
+        {/* IOC List */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {loading ? (
+            Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="skeleton" style={{ height: 72, borderRadius: 10 }} />
+            ))
+          ) : filtered.length === 0 ? (
+            <div className="empty-state">
+              <h3>No indicators found</h3>
+              <p>IOCs will appear here as they are ingested from threat feeds</p>
+            </div>
+          ) : (
+            filtered.map((ioc) => (
+              <div
+                key={ioc.id}
+                className="glass-card"
+                style={{ padding: 14, cursor: "pointer" }}
                 onClick={() => setExpanded(expanded === ioc.id ? null : ioc.id)}
-                role="button" tabIndex={0} aria-expanded={expanded === ioc.id}
-                onKeyDown={(e) => e.key === "Enter" && setExpanded(expanded === ioc.id ? null : ioc.id)}
               >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <span className={severityBadge(ioc.severity)}>{ioc.severity}</span>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-white font-mono text-sm">{ioc.value}</span>
-                        <span className="text-slate-600 text-[10px] font-mono">({ioc.type.toUpperCase()})</span>
-                      </div>
-                      <p className="text-slate-500 text-xs mt-0.5 truncate">{ioc.description}</p>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <span style={{ fontSize: 20 }}>{iocTypeIcons[ioc.type] || "❓"}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                      <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 13, fontWeight: 700, color: "#f8fafc" }}>
+                        {ioc.value}
+                      </span>
+                      <span className={`tlp-${ioc.tlp}`} style={{ fontSize: 9, padding: "2px 6px", borderRadius: 3 }}>
+                        TLP:{ioc.tlp.toUpperCase()}
+                      </span>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className={cn("badge border", tlpColors[ioc.tlp] || "")}>TLP:{ioc.tlp.toUpperCase()}</span>
-                      <span className="text-xs font-mono text-slate-500">{(ioc.confidence * 100).toFixed(0)}%</span>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 11, color: "#64748b" }}>
+                      <span className={severityBadge(ioc.severity)}>{ioc.severity}</span>
+                      <span>Source: <span style={{ color: "#94a3b8" }}>{ioc.source}</span></span>
+                      <span>Confidence: <span style={{ color: ioc.confidence >= 80 ? "#22c55e" : ioc.confidence >= 50 ? "#f59e0b" : "#ef4444" }}>{ioc.confidence}%</span></span>
+                      <span style={{ marginLeft: "auto" }}>{timeAgo(ioc.last_seen)}</span>
                     </div>
                   </div>
-                  {expanded === ioc.id ? <ChevronUp className="w-4 h-4 text-slate-500 shrink-0 ml-2" /> : <ChevronDown className="w-4 h-4 text-slate-500 shrink-0 ml-2" />}
                 </div>
+
+                {/* Expanded Details */}
                 {expanded === ioc.id && (
-                  <div className="mt-3 pt-3 border-t border-slate-800 grid grid-cols-2 md:grid-cols-4 gap-3 text-xs font-mono">
-                    <div><span className="text-slate-500">Source</span><p className="text-slate-300 mt-0.5">{ioc.source}</p></div>
-                    <div><span className="text-slate-500">First Seen</span><p className="text-slate-300 mt-0.5">{formatDate(ioc.first_seen)}</p></div>
-                    <div><span className="text-slate-500">Last Seen</span><p className="text-slate-300 mt-0.5">{formatDate(ioc.last_seen)}</p></div>
-                    <div><span className="text-slate-500">Confidence</span><p className="text-slate-300 mt-0.5">{(ioc.confidence * 100).toFixed(0)}%</p></div>
-                    <div className="col-span-2 md:col-span-4"><span className="text-slate-500">Tags</span><div className="flex gap-1 mt-1 flex-wrap">{ioc.tags.map((t, i) => <span key={i} className="badge badge-neutral">{t}</span>)}</div></div>
+                  <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid rgba(51, 65, 85, 0.3)", animation: "slide-up 0.2s ease" }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 12 }}>
+                      <div>
+                        <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Type</div>
+                        <div style={{ fontSize: 12, color: "#f8fafc", textTransform: "capitalize" }}>{ioc.type}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>First Seen</div>
+                        <div style={{ fontSize: 12, color: "#f8fafc", fontFamily: "JetBrains Mono, monospace" }}>{new Date(ioc.first_seen).toLocaleDateString()}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Last Seen</div>
+                        <div style={{ fontSize: 12, color: "#f8fafc", fontFamily: "JetBrains Mono, monospace" }}>{new Date(ioc.last_seen).toLocaleDateString()}</div>
+                      </div>
+                    </div>
+                    {ioc.tags.length > 0 && (
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                        {ioc.tags.map((tag) => (
+                          <span key={tag} className="badge badge-cyan" style={{ fontSize: 9 }}>{tag}</span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
-            ))}
-          </div>
-        )}
+            ))
+          )}
+        </div>
       </div>
     </Shell>
   );

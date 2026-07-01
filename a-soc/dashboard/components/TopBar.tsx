@@ -1,67 +1,125 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Clock, Globe, Bell, Play, Activity } from "lucide-react";
+import React, { useState, useEffect } from "react";
 
 interface TopBarProps {
-  connectionState?: string;
   onSimulate?: () => void;
-  title?: string;
-  subtitle?: string;
+  simulating?: boolean;
 }
 
-export function TopBar({ connectionState, onSimulate, title, subtitle }: TopBarProps) {
-  const [currentTime, setCurrentTime] = useState("");
+export default function TopBar({ onSimulate, simulating }: TopBarProps) {
+  const [time, setTime] = useState(new Date());
 
   useEffect(() => {
-    setCurrentTime(new Date().toLocaleTimeString());
-    const timer = setInterval(() => setCurrentTime(new Date().toLocaleTimeString()), 1000);
+    const timer = setInterval(() => setTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
   return (
-    <header className="h-14 border-b border-slate-800/50 bg-[#0a0f1a]/60 backdrop-blur-sm flex items-center justify-between px-6 shrink-0">
-      <div className="flex items-center gap-4 min-w-0">
-        {title ? (
-          <div className="min-w-0">
-            <h1 className="text-sm font-semibold text-white truncate">{title}</h1>
-            {subtitle && <p className="text-xs text-slate-500 truncate">{subtitle}</p>}
-          </div>
-        ) : (
-          <div className="flex items-center gap-3 text-slate-500 text-xs">
-            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-800/50 border border-slate-700/50">
-              <Clock className="w-3 h-3 text-cyan-400" />
-              <span className="font-mono text-slate-300">{currentTime}</span>
-            </span>
-            <span className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-800/50 border border-slate-700/50">
-              <Globe className="w-3 h-3 text-emerald-400" />
-              US-EAST-1
-            </span>
-          </div>
-        )}
+    <header style={{
+      height: 56,
+      padding: "0 24px",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      background: "rgba(15, 23, 42, 0.8)",
+      backdropFilter: "blur(12px)",
+      borderBottom: "1px solid rgba(51, 65, 85, 0.5)",
+      zIndex: 50,
+      flexShrink: 0,
+    }}>
+      {/* Left: Title */}
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <h1 style={{ fontSize: 15, fontWeight: 700, color: "#f8fafc", letterSpacing: "0.01em" }}>
+          Security Operations Center
+        </h1>
+        <span style={{
+          fontSize: 10,
+          fontWeight: 600,
+          color: "#06b6d4",
+          background: "rgba(6, 182, 212, 0.1)",
+          border: "1px solid rgba(6, 182, 212, 0.2)",
+          borderRadius: 4,
+          padding: "2px 8px",
+          letterSpacing: "0.05em",
+          textTransform: "uppercase",
+        }}>
+          LIVE
+        </span>
       </div>
 
-      <div className="flex items-center gap-3">
-        {onSimulate && (
-          <button
-            onClick={onSimulate}
-            disabled={connectionState !== "OPEN"}
-            className="btn-primary text-xs !py-1.5 !px-3"
-          >
-            {connectionState !== "OPEN" ? (
-              <Activity className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              <Play className="w-3.5 h-3.5" />
-            )}
-            {connectionState !== "OPEN" ? "CONNECTING" : "SIMULATE"}
-          </button>
-        )}
+      {/* Right: Actions */}
+      <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+        {/* Region */}
+        <span style={{
+          fontSize: 11,
+          color: "#64748b",
+          fontFamily: "JetBrains Mono, monospace",
+          fontWeight: 500,
+        }}>
+          US-EAST-1
+        </span>
+
+        {/* Clock */}
+        <span style={{
+          fontSize: 12,
+          color: "#94a3b8",
+          fontFamily: "JetBrains Mono, monospace",
+          fontWeight: 500,
+          minWidth: 70,
+        }}>
+          {time.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })}
+        </span>
+
+        {/* Simulate Button */}
         <button
-          className="relative p-2 text-slate-500 hover:text-slate-300 hover:bg-slate-800/50 rounded-lg transition-colors"
-          aria-label="Notifications"
+          onClick={onSimulate}
+          disabled={simulating}
+          style={{
+            padding: "6px 14px",
+            fontSize: 12,
+            fontWeight: 600,
+            color: simulating ? "#64748b" : "#06b6d4",
+            background: simulating ? "rgba(6, 182, 212, 0.05)" : "rgba(6, 182, 212, 0.1)",
+            border: "1px solid rgba(6, 182, 212, 0.2)",
+            borderRadius: 6,
+            cursor: simulating ? "not-allowed" : "pointer",
+            transition: "all 0.2s ease",
+            letterSpacing: "0.03em",
+          }}
         >
-          <Bell className="w-4 h-4" />
-          <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-red-500 rounded-full" />
+          {simulating ? "⟳ SIMULATING..." : "▶ SIMULATE"}
+        </button>
+
+        {/* Notifications */}
+        <button style={{
+          width: 32,
+          height: 32,
+          borderRadius: 8,
+          background: "transparent",
+          border: "1px solid rgba(51, 65, 85, 0.5)",
+          color: "#94a3b8",
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          transition: "all 0.2s ease",
+          position: "relative",
+        }}>
+          <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" />
+            <path d="M13.73 21a2 2 0 01-3.46 0" />
+          </svg>
+          <div style={{
+            position: "absolute",
+            top: 4,
+            right: 4,
+            width: 7,
+            height: 7,
+            borderRadius: "50%",
+            background: "#ef4444",
+            border: "1.5px solid #0f172a",
+          }} />
         </button>
       </div>
     </header>

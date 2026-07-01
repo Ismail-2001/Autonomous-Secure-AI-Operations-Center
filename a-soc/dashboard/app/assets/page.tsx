@@ -1,128 +1,246 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { Database, Server, Monitor, Wifi, Cloud, Smartphone, AppWindow, Search, RefreshCw, Shield } from "lucide-react";
-import { Shell } from "@/components/Shell";
-import { endpoints, Asset, ApiError } from "@/lib/api";
-import { severityBadge, statusBadge, formatDate, cn } from "@/lib/utils";
-
-const typeIcons: Record<string, React.ElementType> = {
-  server: Server, workstation: Monitor, network_device: Wifi,
-  cloud_resource: Cloud, iot: Smartphone, application: AppWindow,
-};
-
-const demoAssets: Asset[] = [
-  { id: "srv-001", name: "PROD-WEB-01", asset_type: "server", ip_address: "10.0.1.10", os: "Ubuntu 22.04", status: "online", risk_level: "medium", last_scan: new Date().toISOString(), vulnerabilities: 3, owner: "Platform Team", tags: ["production", "web"] },
-  { id: "srv-002", name: "PROD-DB-01", asset_type: "server", ip_address: "10.0.1.20", os: "Ubuntu 22.04", status: "online", risk_level: "critical", last_scan: new Date().toISOString(), vulnerabilities: 7, owner: "Data Team", tags: ["production", "database"] },
-  { id: "ws-001", name: "SECOP-WKS-042", asset_type: "workstation", ip_address: "10.0.5.42", os: "Windows 11", status: "online", risk_level: "low", last_scan: new Date().toISOString(), vulnerabilities: 0, owner: "SOC Analyst", tags: ["security-ops"] },
-  { id: "net-001", name: "CORE-SW-01", asset_type: "network_device", ip_address: "10.0.0.1", os: "Cisco IOS XE", status: "online", risk_level: "high", last_scan: new Date().toISOString(), vulnerabilities: 5, owner: "Network Team", tags: ["core"] },
-  { id: "cld-001", name: "AWS-EKS-PROD", asset_type: "cloud_resource", os: "Kubernetes 1.28", status: "online", risk_level: "medium", last_scan: new Date().toISOString(), vulnerabilities: 2, owner: "Cloud Team", tags: ["aws", "k8s"] },
-  { id: "app-001", name: "A-SOC Backend", asset_type: "application", os: "Python 3.12", status: "online", risk_level: "low", last_scan: new Date().toISOString(), vulnerabilities: 0, owner: "Security Engineering", tags: ["a-soc"] },
-];
+import React, { useState, useEffect, useCallback } from "react";
+import Shell from "@/components/Shell";
+import { api, endpoints, type Asset } from "@/lib/api";
+import { statusBadge, riskColor, timeAgo } from "@/lib/utils";
 
 export default function AssetInventoryPage() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [loading, setLoading] = useState(true);
-  const [typeFilter, setTypeFilter] = useState("");
-  const [riskFilter, setRiskFilter] = useState("");
-  const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState<string>("");
+  const [riskFilter, setRiskFilter] = useState<string>("");
+  const [sortKey, setSortKey] = useState<keyof Asset>("name");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
 
   const fetchAssets = useCallback(async () => {
     setLoading(true);
     try {
-      const params: Record<string, string> = { limit: "100" };
-      if (typeFilter) params.asset_type = typeFilter;
-      if (riskFilter) params.risk_level = riskFilter;
-      const data = await endpoints.assets(params);
-      setAssets(data.assets?.length ? data.assets : demoAssets);
-    } catch { setAssets(demoAssets); } finally { setLoading(false); }
-  }, [typeFilter, riskFilter]);
+      const data = await api.get<{ assets: Asset[] }>(endpoints.assets());
+      setAssets(data.assets || []);
+    } catch (_e) {
+      setAssets([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => { fetchAssets(); }, [fetchAssets]);
 
-  const filtered = assets.filter((a) =>
-    !search || a.name.toLowerCase().includes(search.toLowerCase()) ||
-    a.ip_address?.includes(search) || a.tags.some((t) => t.includes(search.toLowerCase()))
-  );
+  const filtered = assets
+    .filter((a) => {
+      if (typeFilter && a.type !== typeFilter) return false;
+      if (riskFilter) {
+        if (riskFilter === "critical" && a.risk_score < 80) return false;
+        if (riskFilter === "high" && (a.risk_score < 60 || a.risk_score >= 80)) return false;
+        if (riskFilter === "medium" && (a.risk_score < 40 || a.risk_score >= 60)) return false;
+        if (riskFilter === "low" && a.risk_score >= 40) return false;
+      }
+      return true;
+    })
+    .sort((a, b) => {
+      const av = a[sortKey] ?? "";
+      const bv = b[sortKey] ?? "";
+      if (typeof av === "number" && typeof bv === "number") {
+        return sortDir === "asc" ? av - bv : bv - av;
+      }
+      return sortDir === "asc"
+        ? String(av).localeCompare(String(bv))
+        : String(bv).localeCompare(String(av));
+    });
 
-  const stats = {
-    total: assets.length,
-    critical: assets.filter((a) => a.risk_level === "critical").length,
-    high: assets.filter((a) => a.risk_level === "high").length,
-    compromised: assets.filter((a) => a.status === "compromised").length,
+  const handleSort = (key: keyof Asset) => {
+    if (sortKey === key) {
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  };
+
+  const typeColors: Record<string, string> = {
+    server: "#3b82f6",
+    workstation: "#8b5cf6",
+    network: "#06b6d4",
+    cloud: "#f59e0b",
+    iot: "#22c55e",
+    app: "#f97316",
   };
 
   return (
-    <Shell title="Asset Inventory" subtitle="Complete infrastructure inventory with risk assessment">
-      <div className="p-6 space-y-5">
-        <div className="grid grid-cols-4 gap-4">
-          <div className="glass-card p-3 text-center"><p className="text-2xl font-bold text-white">{stats.total}</p><p className="text-[10px] text-slate-500 font-mono mt-0.5">TOTAL</p></div>
-          <div className="glass-card card-critical p-3 text-center"><p className="text-2xl font-bold text-red-400">{stats.critical}</p><p className="text-[10px] text-slate-500 font-mono mt-0.5">CRITICAL</p></div>
-          <div className="glass-card card-warning p-3 text-center"><p className="text-2xl font-bold text-orange-400">{stats.high}</p><p className="text-[10px] text-slate-500 font-mono mt-0.5">HIGH</p></div>
-          <div className="glass-card p-3 text-center"><p className="text-2xl font-bold text-purple-400">{stats.compromised}</p><p className="text-[10px] text-slate-500 font-mono mt-0.5">COMPROMISED</p></div>
+    <Shell>
+      <div style={{ display: "flex", flexDirection: "column", gap: 20, animation: "fade-in 0.4s ease" }}>
+        <div>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: "#f8fafc", marginBottom: 4 }}>Asset Inventory</h1>
+          <p style={{ fontSize: 13, color: "#64748b" }}>Infrastructure assets, risk scores, and vulnerability tracking</p>
         </div>
 
-        <div className="flex gap-3">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-            <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by name, IP, or tag..." className="input pl-10" aria-label="Search assets" />
-          </div>
-          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="select w-36" aria-label="Asset type filter">
+        {/* Filters */}
+        <div className="glass-panel" style={{ padding: 16, display: "flex", gap: 12, alignItems: "center" }}>
+          <select className="select" style={{ width: 160 }} value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
             <option value="">All Types</option>
-            <option value="server">Servers</option>
-            <option value="workstation">Workstations</option>
-            <option value="network_device">Network</option>
-            <option value="cloud_resource">Cloud</option>
-            <option value="application">Apps</option>
+            <option value="server">Server</option>
+            <option value="workstation">Workstation</option>
+            <option value="network">Network</option>
+            <option value="cloud">Cloud</option>
+            <option value="iot">IoT</option>
+            <option value="app">Application</option>
           </select>
-          <select value={riskFilter} onChange={(e) => setRiskFilter(e.target.value)} className="select w-36" aria-label="Risk level filter">
-            <option value="">All Risk</option>
-            <option value="critical">Critical</option>
-            <option value="high">High</option>
-            <option value="medium">Medium</option>
-            <option value="low">Low</option>
+          <select className="select" style={{ width: 160 }} value={riskFilter} onChange={(e) => setRiskFilter(e.target.value)}>
+            <option value="">All Risk Levels</option>
+            <option value="critical">Critical (80+)</option>
+            <option value="high">High (60-79)</option>
+            <option value="medium">Medium (40-59)</option>
+            <option value="low">Low (&lt;40)</option>
           </select>
+          <span style={{ fontSize: 12, color: "#64748b", marginLeft: "auto" }}>
+            {filtered.length} assets
+          </span>
         </div>
 
-        {loading ? (
-          <div className="flex items-center justify-center py-16"><Shield className="w-6 h-6 text-cyan-500 animate-pulse" /></div>
-        ) : (
-          <div className="glass-card overflow-hidden">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Asset</th><th>Type</th><th>IP / OS</th><th>Status</th><th>Risk</th><th>Vulns</th><th>Owner</th><th>Last Scan</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((asset) => {
-                  const Icon = typeIcons[asset.asset_type] || Server;
-                  return (
-                    <tr key={asset.id}>
+        {/* Table */}
+        <div className="glass-panel" style={{ overflow: "hidden" }}>
+          {loading ? (
+            <div style={{ padding: 24 }}>
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="skeleton" style={{ height: 48, marginBottom: 8, borderRadius: 6 }} />
+              ))}
+            </div>
+          ) : (
+            <div style={{ overflowX: "auto" }}>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    {[
+                      { key: "name", label: "Asset" },
+                      { key: "type", label: "Type" },
+                      { key: "ip_address", label: "IP / OS" },
+                      { key: "status", label: "Status" },
+                      { key: "risk_score", label: "Risk" },
+                      { key: "vulnerabilities", label: "Vulns" },
+                      { key: "owner", label: "Owner" },
+                      { key: "last_scan", label: "Last Scan" },
+                    ].map((col) => (
+                      <th
+                        key={col.key}
+                        onClick={() => handleSort(col.key as keyof Asset)}
+                        style={{ cursor: "pointer", userSelect: "none" }}
+                      >
+                        {col.label}
+                        {sortKey === col.key && (
+                          <span style={{ marginLeft: 4, color: "#06b6d4" }}>
+                            {sortDir === "asc" ? "↑" : "↓"}
+                          </span>
+                        )}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((asset) => (
+                    <tr key={asset.id} onClick={() => setSelectedAsset(asset)} style={{ cursor: "pointer" }}>
                       <td>
-                        <div className="flex items-center gap-2.5">
-                          <div className="p-1.5 bg-slate-800 rounded-md"><Icon className="w-3.5 h-3.5 text-cyan-400" /></div>
-                          <div>
-                            <p className="text-white text-sm font-medium">{asset.name}</p>
-                            <p className="text-slate-600 text-[10px] font-mono">{asset.id}</p>
-                          </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <div style={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: "50%",
+                            background: riskColor(asset.risk_score),
+                            boxShadow: `0 0 6px ${riskColor(asset.risk_score)}44`,
+                            flexShrink: 0,
+                          }} />
+                          <span style={{ fontWeight: 600, color: "#f8fafc" }}>{asset.name}</span>
                         </div>
                       </td>
-                      <td className="text-xs font-mono">{asset.asset_type.replace("_", " ")}</td>
                       <td>
-                        <p className="text-slate-300 font-mono text-xs">{asset.ip_address || "—"}</p>
-                        <p className="text-slate-600 text-[10px]">{asset.os || ""}</p>
+                        <span style={{
+                          fontSize: 11,
+                          fontWeight: 600,
+                          color: typeColors[asset.type] || "#64748b",
+                          background: `${typeColors[asset.type] || "#64748b"}15`,
+                          padding: "2px 8px",
+                          borderRadius: 4,
+                          textTransform: "capitalize",
+                        }}>
+                          {asset.type}
+                        </span>
                       </td>
-                      <td><span className={statusBadge(asset.status)}>{asset.status}</span></td>
-                      <td><span className={severityBadge(asset.risk_level)}>{asset.risk_level}</span></td>
-                      <td className="text-center"><span className={cn("font-mono text-sm", asset.vulnerabilities > 0 ? "text-orange-400" : "text-emerald-400")}>{asset.vulnerabilities}</span></td>
-                      <td className="text-xs">{asset.owner || "—"}</td>
-                      <td className="text-xs font-mono text-slate-500">{formatDate(asset.last_scan)}</td>
+                      <td>
+                        <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 12, color: "#94a3b8" }}>
+                          {asset.ip_address}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={statusBadge(asset.status)}>{asset.status}</span>
+                      </td>
+                      <td>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <div style={{ width: 50, height: 4, background: "var(--bg-hover)", borderRadius: 2, overflow: "hidden" }}>
+                            <div style={{ width: `${asset.risk_score}%`, height: "100%", background: riskColor(asset.risk_score), borderRadius: 2 }} />
+                          </div>
+                          <span style={{ fontSize: 12, fontFamily: "JetBrains Mono, monospace", color: riskColor(asset.risk_score), fontWeight: 600 }}>
+                            {asset.risk_score}
+                          </span>
+                        </div>
+                      </td>
+                      <td>
+                        <span style={{
+                          fontSize: 12,
+                          fontFamily: "JetBrains Mono, monospace",
+                          color: asset.vulnerabilities > 5 ? "#ef4444" : asset.vulnerabilities > 0 ? "#f59e0b" : "#22c55e",
+                          fontWeight: 600,
+                        }}>
+                          {asset.vulnerabilities}
+                        </span>
+                      </td>
+                      <td style={{ color: "#94a3b8", fontSize: 12 }}>{asset.owner || "—"}</td>
+                      <td style={{ color: "#64748b", fontSize: 11, fontFamily: "JetBrains Mono, monospace" }}>
+                        {asset.last_scan ? timeAgo(asset.last_scan) : "—"}
+                      </td>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* Asset Detail Modal */}
+        {selectedAsset && (
+          <div className="modal-overlay" onClick={() => setSelectedAsset(null)}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 600 }}>
+              <div style={{ padding: "20px 24px", borderBottom: "1px solid rgba(51, 65, 85, 0.5)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <h2 style={{ fontSize: 18, fontWeight: 700, color: "#f8fafc" }}>{selectedAsset.name}</h2>
+                  <p style={{ fontSize: 12, color: "#64748b", fontFamily: "JetBrains Mono, monospace" }}>{selectedAsset.id}</p>
+                </div>
+                <button onClick={() => setSelectedAsset(null)} className="btn-icon">✕</button>
+              </div>
+              <div style={{ padding: "20px 24px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                {[
+                  { label: "Type", value: selectedAsset.type, color: typeColors[selectedAsset.type] || "#94a3b8" },
+                  { label: "IP Address", value: selectedAsset.ip_address, mono: true },
+                  { label: "OS", value: selectedAsset.os || "Unknown" },
+                  { label: "Status", value: selectedAsset.status },
+                  { label: "Risk Score", value: `${selectedAsset.risk_score}/100`, color: riskColor(selectedAsset.risk_score) },
+                  { label: "Vulnerabilities", value: String(selectedAsset.vulnerabilities), color: selectedAsset.vulnerabilities > 5 ? "#ef4444" : "#22c55e" },
+                  { label: "Owner", value: selectedAsset.owner || "Unassigned" },
+                  { label: "Location", value: selectedAsset.location || "Unknown" },
+                ].map((field) => (
+                  <div key={field.label}>
+                    <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>{field.label}</div>
+                    <div style={{ fontSize: 13, color: field.color || "#f8fafc", fontWeight: 600, fontFamily: field.mono ? "JetBrains Mono, monospace" : "inherit" }}>
+                      {field.value}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ padding: "16px 24px", borderTop: "1px solid rgba(51, 65, 85, 0.5)", display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                <button className="btn-ghost btn-sm">Scan Asset</button>
+                <button className="btn-primary btn-sm">View Incidents</button>
+              </div>
+            </div>
           </div>
         )}
       </div>

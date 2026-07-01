@@ -1,134 +1,115 @@
-/* ===================================================================
-   A-SOC API Client — Enterprise-grade HTTP layer with auth + retry
-   =================================================================== */
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:9002";
-
 export class ApiError extends Error {
   status: number;
-  detail: string;
-  constructor(status: number, message: string, detail?: string) {
+  constructor(message: string, status: number) {
     super(message);
-    this.status = status;
-    this.detail = detail || message;
     this.name = "ApiError";
+    this.status = status;
   }
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
   const token = typeof window !== "undefined" ? localStorage.getItem("asoc_token") : null;
-
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    ...(options.headers as Record<string, string> || {}),
+    ...((options.headers as Record<string, string>) || {}),
   };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
 
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
-  }
-
-  const res = await fetch(`${API_URL}${path}`, { ...options, headers });
-
+  const res = await fetch(url, { ...options, headers });
   if (!res.ok) {
-    const body = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new ApiError(res.status, body.detail || res.statusText, body.detail);
+    const text = await res.text().catch(() => "Unknown error");
+    throw new ApiError(`${res.status}: ${text}`, res.status);
   }
-
-  if (res.status === 204) return undefined as T;
   return res.json();
 }
 
 export const api = {
-  get: <T>(path: string) => request<T>(path),
-  post: <T>(path: string, body?: unknown) =>
-    request<T>(path, { method: "POST", body: body ? JSON.stringify(body) : undefined }),
-  put: <T>(path: string, body?: unknown) =>
-    request<T>(path, { method: "PUT", body: body ? JSON.stringify(body) : undefined }),
-  delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
+  get: <T>(url: string) => request<T>(url),
+  post: <T>(url: string, body?: unknown) =>
+    request<T>(url, { method: "POST", body: body ? JSON.stringify(body) : undefined }),
+  put: <T>(url: string, body?: unknown) =>
+    request<T>(url, { method: "PUT", body: body ? JSON.stringify(body) : undefined }),
+  delete: <T>(url: string) => request<T>(url, { method: "DELETE" }),
 };
 
-/* ===== Types ===== */
 export interface HealthResponse {
   status: string;
-  database: string;
-  message_bus: string;
-  vector_store: string;
+  version: string;
+  uptime: number;
+  agents: Record<string, string>;
 }
 
 export interface DashboardStats {
   active_threats: number;
-  resolved_threats: number;
-  mean_response_time: string;
-  agents_online: number;
-  total_agents: number;
-  uptime: string;
+  threats_neutralized: number;
+  mttr_minutes: number;
+  ai_agents_active: number;
+  total_assets: number;
+  compliance_score: number;
   events_today: number;
-  threat_level: string;
+  critical_alerts: number;
 }
 
 export interface AgentStatus {
   name: string;
   status: string;
-  tools: string[];
-  last_cycle: string;
-  cycles_completed: number;
-  errors: number;
-  confidence?: number;
-  current_task?: string;
-  latency_ms?: number;
+  role: string;
+  confidence: number;
+  last_active: string;
+  task_count: number;
+  error_count: number;
 }
 
 export interface Incident {
   id: string;
   title: string;
-  severity: "critical" | "high" | "medium" | "low" | "info";
-  status: "open" | "investigating" | "contained" | "resolved" | "closed";
+  description: string;
+  severity: string;
+  status: string;
+  source: string;
   created_at: string;
   updated_at: string;
-  source: string;
-  affected_agents: string[];
-  description: string;
+  agent?: string;
+  tags?: string[];
 }
 
 export interface Asset {
   id: string;
   name: string;
-  asset_type: "server" | "workstation" | "network_device" | "cloud_resource" | "iot" | "application";
-  ip_address?: string;
+  type: string;
+  ip_address: string;
   os?: string;
-  status: "online" | "offline" | "maintenance" | "compromised";
-  risk_level: "critical" | "high" | "medium" | "low" | "none";
-  last_scan: string;
+  status: string;
+  risk_score: number;
   vulnerabilities: number;
   owner?: string;
-  tags: string[];
+  last_scan?: string;
+  location?: string;
 }
 
 export interface ForensicsJob {
   id: string;
-  case_id: string;
   title: string;
-  status: "queued" | "running" | "completed" | "failed";
-  job_type: string;
-  target_evidence: string;
+  status: string;
+  type: string;
   created_at: string;
-  completed_at?: string;
   findings: string[];
   artifacts: string[];
+  agent?: string;
 }
 
 export interface ThreatIndicator {
   id: string;
-  type: "ip" | "domain" | "hash" | "url" | "email";
+  type: string;
   value: string;
+  severity: string;
   confidence: number;
-  severity: "critical" | "high" | "medium" | "low";
-  tlp: "white" | "green" | "amber" | "red";
   source: string;
+  tlp: string;
   first_seen: string;
   last_seen: string;
   tags: string[];
-  description: string;
+  related_campaigns?: string[];
 }
 
 export interface AuditEvent {
@@ -137,68 +118,42 @@ export interface AuditEvent {
   actor: string;
   action: string;
   resource: string;
-  outcome: "success" | "failure";
-  details: Record<string, unknown>;
+  details: string;
   hmac: string;
+  verified: boolean;
 }
 
 export interface ComplianceReport {
-  generated_at: string;
-  controls: { id: string; name: string; status: "pass" | "fail" | "partial"; details: string }[];
   score: number;
-  total_controls: number;
-  passed: number;
-  failed: number;
-  partial: number;
+  controls: { name: string; status: string; description: string }[];
+  last_audit: string;
+  trend: string;
 }
 
 export interface ThreatEvent {
   id: string;
   timestamp: string;
-  source: string;
-  event_type: string;
   severity: string;
+  source: string;
+  type: string;
   description: string;
-  raw_data: Record<string, unknown>;
+  agent?: string;
+  confidence?: number;
+  mitigated?: boolean;
 }
 
-/* ===== API endpoints ===== */
 export const endpoints = {
-  health: () => api.get<HealthResponse>("/api/v1/health"),
-  stats: () => api.get<DashboardStats>("/api/v1/dashboard/stats"),
-  agents: () => api.get<{ agents: AgentStatus[] }>("/api/v1/agents"),
-  incidents: (params?: Record<string, string>) => {
-    const filtered = params ? Object.fromEntries(Object.entries(params).filter(([, v]) => v != null && v !== "")) : {};
-    const q = Object.keys(filtered).length ? "?" + new URLSearchParams(filtered).toString() : "";
-    return api.get<{ incidents: Incident[] }>(`/api/v1/incidents${q}`);
-  },
-  assets: (params?: Record<string, string>) => {
-    const filtered = params ? Object.fromEntries(Object.entries(params).filter(([, v]) => v != null && v !== "")) : {};
-    const q = Object.keys(filtered).length ? "?" + new URLSearchParams(filtered).toString() : "";
-    return api.get<{ assets: Asset[] }>(`/api/v1/assets${q}`);
-  },
-  forensics: (params?: Record<string, string>) => {
-    const filtered = params ? Object.fromEntries(Object.entries(params).filter(([, v]) => v != null && v !== "")) : {};
-    const q = Object.keys(filtered).length ? "?" + new URLSearchParams(filtered).toString() : "";
-    return api.get<{ jobs: ForensicsJob[] }>(`/api/v1/forensics/jobs${q}`);
-  },
-  threatIntel: (params?: Record<string, string>) => {
-    const filtered = params ? Object.fromEntries(Object.entries(params).filter(([, v]) => v != null && v !== "")) : {};
-    const q = Object.keys(filtered).length ? "?" + new URLSearchParams(filtered).toString() : "";
-    return api.get<{ indicators: ThreatIndicator[] }>(`/api/v1/threat-intel${q}`);
-  },
-  audit: (params?: Record<string, string>) => {
-    const filtered = params ? Object.fromEntries(Object.entries(params).filter(([, v]) => v != null && v !== "")) : {};
-    const q = Object.keys(filtered).length ? "?" + new URLSearchParams(filtered).toString() : "";
-    return api.get<{ events: AuditEvent[] }>(`/api/v1/audit${q}`);
-  },
-  compliance: () => api.get<ComplianceReport>("/api/v1/compliance/report"),
-  searchEvents: (q: string, filters?: Record<string, string>) => {
-    const params = new URLSearchParams({ q });
-    if (filters) Object.entries(filters).forEach(([k, v]) => params.set(k, v));
-    return api.get<{ results: ThreatEvent[] }>(`/api/v1/events/search?${params.toString()}`);
-  },
+  health: () => `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:9002"}/api/v1/health`,
+  stats: () => `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:9002"}/api/v1/dashboard/stats`,
+  agents: () => `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:9002"}/api/v1/agents/status`,
+  incidents: () => `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:9002"}/api/v1/incidents`,
+  assets: () => `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:9002"}/api/v1/assets`,
+  forensics: () => `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:9002"}/api/v1/forensics/jobs`,
+  threatIntel: () => `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:9002"}/api/v1/threat-intel/indicators`,
+  audit: () => `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:9002"}/api/v1/audit/events`,
+  compliance: () => `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:9002"}/api/v1/compliance/report`,
+  searchEvents: () => `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:9002"}/api/v1/events/search`,
   auth: {
-    token: () => api.post<{ access_token: string }>("/api/v1/auth/token", { user_id: "dashboard-ui", role: "analyst", client_id: "web" }),
+    token: () => `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:9002"}/api/v1/auth/token`,
   },
 };

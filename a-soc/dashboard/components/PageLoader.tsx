@@ -1,12 +1,32 @@
 "use client";
 
-import { Shield } from "lucide-react";
+import React from "react";
 
-export function PageLoader({ text = "Loading..." }: { text?: string }) {
+export default function PageLoader({ text = "Loading..." }: { text?: string }) {
   return (
-    <div className="flex-1 flex items-center justify-center flex-col gap-4">
-      <Shield className="w-12 h-12 text-cyan-500 animate-pulse" />
-      <p className="font-mono text-cyan-500 tracking-widest text-sm animate-pulse">{text}</p>
+    <div style={{
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      justifyContent: "center",
+      minHeight: "60vh",
+      gap: 16,
+    }}>
+      <div style={{
+        width: 48,
+        height: 48,
+        borderRadius: 14,
+        background: "rgba(6, 182, 212, 0.1)",
+        border: "1px solid rgba(6, 182, 212, 0.2)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: 24,
+        animation: "pulse-slow 2s ease-in-out infinite",
+      }}>
+        🛡️
+      </div>
+      <span style={{ fontSize: 13, color: "#64748b", fontWeight: 500 }}>{text}</span>
     </div>
   );
 }

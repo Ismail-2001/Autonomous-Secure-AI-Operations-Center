@@ -1,27 +1,26 @@
 "use client";
 
-import { ReactNode } from "react";
-import { Sidebar } from "./Sidebar";
-import { TopBar } from "./TopBar";
+import React from "react";
+import Sidebar from "./Sidebar";
+import TopBar from "./TopBar";
 
 interface ShellProps {
-  children: ReactNode;
-  connectionState?: string;
+  children: React.ReactNode;
   onSimulate?: () => void;
-  title?: string;
-  subtitle?: string;
+  simulating?: boolean;
 }
 
-export function Shell({ children, connectionState, onSimulate, title, subtitle }: ShellProps) {
+export default function Shell({ children, onSimulate, simulating }: ShellProps) {
   return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar connectionState={connectionState} />
-      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-        <TopBar connectionState={connectionState} onSimulate={onSimulate} title={title} subtitle={subtitle} />
-        <main className="flex-1 overflow-y-auto no-scrollbar" role="main">
+    <div style={{ display: "flex", minHeight: "100vh", background: "#020617" }}>
+      <Sidebar />
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
+        <TopBar onSimulate={onSimulate} simulating={simulating} />
+        <main style={{ flex: 1, padding: 24, overflow: "auto" }}>
           {children}
         </main>
       </div>
+      <div className="cyber-grid" />
     </div>
   );
 }

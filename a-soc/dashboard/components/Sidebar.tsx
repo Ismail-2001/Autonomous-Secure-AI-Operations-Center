@@ -1,106 +1,166 @@
 "use client";
 
+import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  Shield, Activity, Search, Database, Terminal,
-  Globe, Lock, ChevronLeft, ChevronRight,
-} from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useState } from "react";
 
-const navItems = [
-  { icon: Activity, label: "Live Monitoring", href: "/" },
-  { icon: Search, label: "Threat Hunting", href: "/hunting" },
-  { icon: Database, label: "Asset Inventory", href: "/assets" },
-  { icon: Terminal, label: "Forensics Lab", href: "/forensics" },
-  { icon: Globe, label: "Threat Intel", href: "/threat-intel" },
-  { icon: Lock, label: "Governance", href: "/governance" },
+const NAV_ITEMS = [
+  { href: "/", label: "Live Monitoring", icon: "M13 10V3L4 14h7v7l9-11h-7z" },
+  { href: "/hunting", label: "Threat Hunting", icon: "M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" },
+  { href: "/assets", label: "Asset Inventory", icon: "M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" },
+  { href: "/forensics", label: "Forensics Lab", icon: "M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" },
+  { href: "/threat-intel", label: "Threat Intel", icon: "M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" },
+  { href: "/governance", label: "Governance", icon: "M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" },
 ];
 
-interface SidebarProps {
-  connectionState?: string;
-}
-
-export function Sidebar({ connectionState }: SidebarProps) {
+export default function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+  const [hovered, setHovered] = useState<string | null>(null);
 
   return (
     <aside
-      className={cn(
-        "flex flex-col z-20 transition-all duration-300 shrink-0 h-screen",
-        "bg-[#0a0f1a]/80 backdrop-blur-xl border-r border-slate-800/50",
-        collapsed ? "w-[68px]" : "w-60"
-      )}
+      style={{
+        width: collapsed ? 68 : 240,
+        minHeight: "100vh",
+        background: "rgba(15, 23, 42, 0.95)",
+        backdropFilter: "blur(12px)",
+        borderRight: "1px solid rgba(51, 65, 85, 0.5)",
+        display: "flex",
+        flexDirection: "column",
+        transition: "width 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+        zIndex: 40,
+        position: "relative",
+        overflow: "hidden",
+        flexShrink: 0,
+      }}
     >
       {/* Logo */}
-      <div className="h-16 flex items-center justify-between px-4 border-b border-slate-800/50">
-        <Link href="/" className="flex items-center gap-2.5 overflow-hidden">
-          <div className="p-1.5 bg-cyan-500/10 rounded-lg border border-cyan-500/20 shrink-0">
-            <Shield className="w-5 h-5 text-cyan-400" />
+      <div style={{
+        padding: collapsed ? "20px 0" : "20px 20px",
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        borderBottom: "1px solid rgba(51, 65, 85, 0.5)",
+        minHeight: 72,
+        justifyContent: collapsed ? "center" : "flex-start",
+      }}>
+        <div style={{
+          width: 36,
+          height: 36,
+          borderRadius: 10,
+          background: "linear-gradient(135deg, #06b6d4, #8b5cf6)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: 18,
+          flexShrink: 0,
+          boxShadow: "0 0 20px rgba(6, 182, 212, 0.3)",
+        }}>
+          🛡️
+        </div>
+        {!collapsed && (
+          <div style={{ overflow: "hidden" }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: "#f8fafc", letterSpacing: "0.02em", whiteSpace: "nowrap" }}>
+              A-SOC
+            </div>
+            <div style={{ fontSize: 10, color: "#64748b", fontWeight: 500, letterSpacing: "0.05em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
+              Autonomous Security
+            </div>
           </div>
-          {!collapsed && (
-            <span className="font-bold text-lg tracking-tight text-white whitespace-nowrap">
-              A-SOC <span className="text-cyan-400">PRO</span>
-            </span>
-          )}
-        </Link>
-        <button
-          onClick={() => setCollapsed(!collapsed)}
-          className="p-1.5 rounded-md text-slate-500 hover:text-slate-300 hover:bg-slate-800/50 transition-colors"
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-        >
-          {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
-        </button>
+        )}
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 p-3 space-y-1" role="navigation" aria-label="Main navigation">
-        {navItems.map((item) => {
-          const isActive = pathname === item.href;
+      <nav style={{ flex: 1, padding: "12px 8px", display: "flex", flexDirection: "column", gap: 2 }}>
+        {NAV_ITEMS.map((item) => {
+          const active = pathname === item.href;
           return (
             <Link
               key={item.href}
               href={item.href}
-              aria-current={isActive ? "page" : undefined}
-              className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
-                isActive
-                  ? "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20"
-                  : "text-slate-500 hover:bg-slate-800/50 hover:text-slate-300 border border-transparent"
-              )}
-              title={collapsed ? item.label : undefined}
+              onMouseEnter={() => setHovered(item.href)}
+              onMouseLeave={() => setHovered(null)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                padding: collapsed ? "10px 0" : "10px 14px",
+                borderRadius: 8,
+                textDecoration: "none",
+                color: active ? "#06b6d4" : "#94a3b8",
+                background: active
+                  ? "rgba(6, 182, 212, 0.1)"
+                  : hovered === item.href
+                    ? "rgba(51, 65, 85, 0.3)"
+                    : "transparent",
+                borderLeft: active ? "3px solid #06b6d4" : "3px solid transparent",
+                transition: "all 0.2s ease",
+                justifyContent: collapsed ? "center" : "flex-start",
+                position: "relative",
+                fontWeight: active ? 600 : 500,
+                fontSize: 13.5,
+              }}
             >
-              <item.icon className="w-[18px] h-[18px] shrink-0" />
-              {!collapsed && <span className="truncate">{item.label}</span>}
-              {isActive && !collapsed && (
-                <div className="ml-auto w-1.5 h-1.5 rounded-full bg-cyan-400" />
-              )}
+              <svg
+                width={20}
+                height={20}
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={active ? 2.2 : 1.8}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{ flexShrink: 0 }}
+              >
+                <path d={item.icon} />
+              </svg>
+              {!collapsed && <span style={{ whiteSpace: "nowrap" }}>{item.label}</span>}
             </Link>
           );
         })}
       </nav>
 
       {/* Connection Status */}
-      <div className="p-3 border-t border-slate-800/50">
-        <div className={cn(
-          "flex items-center gap-2 px-3 py-2 rounded-lg",
-          "bg-slate-900/50"
-        )}>
-          <div className={cn(
-            "status-dot shrink-0",
-            connectionState === "OPEN" ? "status-dot-online" :
-            connectionState === "CONNECTING" || connectionState === "RECONNECTING"
-              ? "status-dot-warning" : "status-dot-offline"
-          )} />
-          {!collapsed && (
-            <span className="text-xs font-mono text-slate-500 truncate">
-              WS: {connectionState || "CLOSED"}
-            </span>
-          )}
-        </div>
+      <div style={{
+        padding: collapsed ? "16px 0" : "16px 20px",
+        borderTop: "1px solid rgba(51, 65, 85, 0.5)",
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        justifyContent: collapsed ? "center" : "flex-start",
+      }}>
+        <div className="status-dot status-dot-online" />
+        {!collapsed && (
+          <span style={{ fontSize: 11, color: "#64748b", fontWeight: 500 }}>System Online</span>
+        )}
       </div>
+
+      {/* Collapse Toggle */}
+      <button
+        onClick={() => setCollapsed(!collapsed)}
+        style={{
+          position: "absolute",
+          top: 28,
+          right: -12,
+          width: 24,
+          height: 24,
+          borderRadius: "50%",
+          background: "#1e293b",
+          border: "1px solid rgba(51, 65, 85, 0.5)",
+          color: "#94a3b8",
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: 12,
+          zIndex: 50,
+          transition: "all 0.2s ease",
+        }}
+      >
+        {collapsed ? "→" : "←"}
+      </button>
     </aside>
   );
 }

@@ -1,142 +1,225 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { Lock, Shield, CheckCircle, AlertTriangle, Clock, FileText, RefreshCw, ChevronDown, ChevronUp } from "lucide-react";
-import { Shell } from "@/components/Shell";
-import { endpoints, AuditEvent, ComplianceReport } from "@/lib/api";
-import { statusBadge, formatDate, cn } from "@/lib/utils";
-
-const demoCompliance: ComplianceReport = {
-  generated_at: new Date().toISOString(), score: 87, total_controls: 42, passed: 36, failed: 3, partial: 3,
-  controls: [
-    { id: "AC-1", name: "Access Control Policy", status: "pass", details: "RBAC + MFA enforced" },
-    { id: "AC-2", name: "Account Management", status: "pass", details: "Automated provisioning via LDAP" },
-    { id: "AC-3", name: "Access Enforcement", status: "pass", details: "JWT RS256 role-based scopes" },
-    { id: "AU-1", name: "Audit Policy", status: "pass", details: "HMAC chain-verified audit trail" },
-    { id: "AU-2", name: "Audit Events", status: "pass", details: "All 7 agents emit structured events" },
-    { id: "AU-3", name: "Audit Record Content", status: "partial", details: "Missing geolocation on some events" },
-    { id: "CM-3", name: "Change Control", status: "fail", details: "Missing automated approval workflow" },
-    { id: "IR-4", name: "Incident Handling", status: "partial", details: "Automated containment pending OPA approval" },
-    { id: "IR-6", name: "Incident Reporting", status: "fail", details: "External SIEM integration not configured" },
-    { id: "SC-7", name: "Boundary Protection", status: "partial", details: "Rate limiting active, egress filtering TODO" },
-  ],
-};
-
-const demoAudit: AuditEvent[] = [
-  { id: "aud-001", timestamp: new Date(Date.now() - 300000).toISOString(), actor: "ResponseAgent", action: "BLOCK_IP", resource: "198.51.100.42", outcome: "success", details: {}, hmac: "a1b2c3..." },
-  { id: "aud-002", timestamp: new Date(Date.now() - 600000).toISOString(), actor: "SupervisorAgent", action: "APPROVE_ACTION", resource: "DetectionAgent.propose_response", outcome: "success", details: {}, hmac: "d4e5f6..." },
-  { id: "aud-003", timestamp: new Date(Date.now() - 900000).toISOString(), actor: "ComplianceAgent", action: "AUDIT_TRAIL_VERIFY", resource: "chain-integrity", outcome: "success", details: {}, hmac: "g7h8i9..." },
-  { id: "aud-004", timestamp: new Date(Date.now() - 1200000).toISOString(), actor: "DetectionAgent", action: "ANOMALY_DETECTED", resource: "svc-redis-01", outcome: "success", details: {}, hmac: "j0k1l2..." },
-  { id: "aud-005", timestamp: new Date(Date.now() - 1500000).toISOString(), actor: "NotificationAgent", action: "SEND_ALERT", resource: "slack-soc-channel", outcome: "success", details: {}, hmac: "m3n4o5..." },
-];
+import React, { useState, useEffect, useCallback } from "react";
+import Shell from "@/components/Shell";
+import { api, endpoints, type ComplianceReport, type AuditEvent } from "@/lib/api";
+import { timeAgo, complianceColor } from "@/lib/utils";
 
 export default function GovernancePage() {
-  const [compliance, setCompliance] = useState<ComplianceReport>(demoCompliance);
+  const [report, setReport] = useState<ComplianceReport | null>(null);
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"compliance" | "audit">("compliance");
-  const [expanded, setExpanded] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [c, a] = await Promise.allSettled([endpoints.compliance(), endpoints.audit({ limit: "50" })]);
-      if (c.status === "fulfilled" && c.value) setCompliance(c.value);
-      if (a.status === "fulfilled" && a.value?.events?.length) setAuditEvents(a.value.events);
-      else setAuditEvents(demoAudit);
-    } catch { setAuditEvents(demoAudit); } finally { setLoading(false); }
+      const [reportData, auditData] = await Promise.allSettled([
+        api.get<ComplianceReport>(endpoints.compliance()),
+        api.get<{ events: AuditEvent[] }>(endpoints.audit()),
+      ]);
+      if (reportData.status === "fulfilled") setReport(reportData.value);
+      if (auditData.status === "fulfilled") setAuditEvents(auditData.value.events || []);
+    } catch (_e) {
+      // ignore
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  const score = report?.score ?? 87;
+  const scoreColor = complianceColor(score);
+
   return (
-    <Shell title="Governance & Compliance" subtitle="SOC 2 compliance controls and audit trail">
-      <div className="p-6 space-y-5">
-        <div className="tab-group w-fit">
-          <button onClick={() => setTab("compliance")} className={cn("tab-btn", tab === "compliance" && "active")}>
-            <Shield className="w-3.5 h-3.5" /> Compliance
+    <Shell>
+      <div style={{ display: "flex", flexDirection: "column", gap: 20, animation: "fade-in 0.4s ease" }}>
+        <div>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: "#f8fafc", marginBottom: 4 }}>Governance & Compliance</h1>
+          <p style={{ fontSize: 13, color: "#64748b" }}>SOC 2 compliance, audit trail, and HMAC verification</p>
+        </div>
+
+        {/* Tab Switcher */}
+        <div className="tab-group">
+          <button className={`tab-btn ${tab === "compliance" ? "active" : ""}`} onClick={() => setTab("compliance")}>
+            Compliance
           </button>
-          <button onClick={() => setTab("audit")} className={cn("tab-btn", tab === "audit" && "active")}>
-            <FileText className="w-3.5 h-3.5" /> Audit Trail
+          <button className={`tab-btn ${tab === "audit" ? "active" : ""}`} onClick={() => setTab("audit")}>
+            Audit Trail
           </button>
         </div>
 
-        {tab === "compliance" && (
+        {loading ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="skeleton" style={{ height: 60, borderRadius: 10 }} />
+            ))}
+          </div>
+        ) : tab === "compliance" ? (
           <>
-            <div className="grid grid-cols-5 gap-4">
-              <div className="glass-card p-3 text-center"><p className="text-3xl font-bold text-cyan-400">{compliance.score}%</p><p className="text-[10px] text-slate-500 font-mono mt-0.5">SCORE</p></div>
-              <div className="glass-card p-3 text-center"><p className="text-2xl font-bold text-white">{compliance.total_controls}</p><p className="text-[10px] text-slate-500 font-mono mt-0.5">TOTAL</p></div>
-              <div className="glass-card card-success p-3 text-center"><p className="text-2xl font-bold text-emerald-400">{compliance.passed}</p><p className="text-[10px] text-slate-500 font-mono mt-0.5">PASSED</p></div>
-              <div className="glass-card card-warning p-3 text-center"><p className="text-2xl font-bold text-yellow-400">{compliance.partial}</p><p className="text-[10px] text-slate-500 font-mono mt-0.5">PARTIAL</p></div>
-              <div className="glass-card card-critical p-3 text-center"><p className="text-2xl font-bold text-red-400">{compliance.failed}</p><p className="text-[10px] text-slate-500 font-mono mt-0.5">FAILED</p></div>
-            </div>
+            {/* Compliance Score */}
+            <div className="glass-panel" style={{ padding: 24, display: "flex", alignItems: "center", gap: 32 }}>
+              {/* Gauge */}
+              <div style={{ position: "relative", width: 140, height: 140, flexShrink: 0 }}>
+                <svg width={140} height={140} viewBox="0 0 140 140">
+                  <circle cx={70} cy={70} r={58} fill="none" stroke="rgba(51, 65, 85, 0.3)" strokeWidth={10} />
+                  <circle
+                    cx={70}
+                    cy={70}
+                    r={58}
+                    fill="none"
+                    stroke={scoreColor}
+                    strokeWidth={10}
+                    strokeDasharray={`${(score / 100) * 364.4} 364.4`}
+                    strokeLinecap="round"
+                    style={{ transform: "rotate(-90deg)", transformOrigin: "center", transition: "stroke-dasharray 1s ease" }}
+                  />
+                </svg>
+                <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+                  <span style={{ fontSize: 32, fontWeight: 800, fontFamily: "JetBrains Mono, monospace", color: scoreColor }}>{score}</span>
+                  <span style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>/100</span>
+                </div>
+              </div>
 
-            <div className="glass-card p-2">
-              <div className="progress-bar">
-                <div className="flex h-full rounded-full overflow-hidden">
-                  <div className="progress-success transition-all" style={{ width: `${(compliance.passed / compliance.total_controls) * 100}%` }} />
-                  <div className="progress-medium transition-all" style={{ width: `${(compliance.partial / compliance.total_controls) * 100}%` }} />
-                  <div className="progress-critical transition-all" style={{ width: `${(compliance.failed / compliance.total_controls) * 100}%` }} />
+              <div style={{ flex: 1 }}>
+                <h2 style={{ fontSize: 18, fontWeight: 700, color: "#f8fafc", marginBottom: 4 }}>
+                  SOC 2 Compliance Score
+                </h2>
+                <p style={{ fontSize: 13, color: "#94a3b8", marginBottom: 12 }}>
+                  {score >= 90 ? "Excellent compliance posture" : score >= 70 ? "Good compliance posture" : "Compliance needs attention"}
+                </p>
+                <div style={{ display: "flex", gap: 16 }}>
+                  <div>
+                    <div style={{ fontSize: 20, fontWeight: 800, fontFamily: "JetBrains Mono, monospace", color: "#22c55e" }}>
+                      {report?.controls?.filter((c) => c.status === "pass").length ?? 8}
+                    </div>
+                    <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase" }}>Passed</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 20, fontWeight: 800, fontFamily: "JetBrains Mono, monospace", color: "#f59e0b" }}>
+                      {report?.controls?.filter((c) => c.status === "partial").length ?? 2}
+                    </div>
+                    <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase" }}>Partial</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 20, fontWeight: 800, fontFamily: "JetBrains Mono, monospace", color: "#ef4444" }}>
+                      {report?.controls?.filter((c) => c.status === "fail").length ?? 1}
+                    </div>
+                    <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase" }}>Failed</div>
+                  </div>
                 </div>
               </div>
             </div>
 
-            {loading ? <div className="flex justify-center py-16"><Shield className="w-6 h-6 text-cyan-500 animate-pulse" /></div> : (
-              <div className="space-y-1.5">
-                {compliance.controls.map((ctrl) => (
-                  <div key={ctrl.id} className="glass-card p-3 cursor-pointer hover:border-slate-600 transition-colors"
-                    onClick={() => setExpanded(expanded === ctrl.id ? null : ctrl.id)}
-                    role="button" tabIndex={0} aria-expanded={expanded === ctrl.id}
-                    onKeyDown={(e) => e.key === "Enter" && setExpanded(expanded === ctrl.id ? null : ctrl.id)}
+            {/* Controls List */}
+            <div className="glass-panel" style={{ overflow: "hidden" }}>
+              <div style={{ padding: "14px 18px", borderBottom: "1px solid rgba(51, 65, 85, 0.5)", fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                Compliance Controls
+              </div>
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                {(report?.controls || [
+                  { name: "Access Control", status: "pass", description: "Role-based access control with RBAC" },
+                  { name: "Audit Logging", status: "pass", description: "HMAC-verified audit trail with chain validation" },
+                  { name: "Data Encryption", status: "pass", description: "AES-256 encryption at rest and TLS 1.3 in transit" },
+                  { name: "Incident Response", status: "pass", description: "Automated response with human approval checkpoints" },
+                  { name: "Vulnerability Management", status: "partial", description: "Continuous scanning with scheduled assessments" },
+                  { name: "Business Continuity", status: "pass", description: "Automated failover and disaster recovery" },
+                  { name: "Change Management", status: "pass", description: "Approval workflow for all infrastructure changes" },
+                  { name: "Vendor Management", status: "pass", description: "Third-party risk assessment program" },
+                  { name: "Security Training", status: "partial", description: "Annual security awareness training" },
+                  { name: "Penetration Testing", status: "fail", description: "Quarterly penetration testing required" },
+                ]).map((control, i) => (
+                  <div
+                    key={control.name}
+                    style={{
+                      padding: "12px 18px",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 12,
+                      borderBottom: "1px solid rgba(51, 65, 85, 0.2)",
+                      animation: `fade-in 0.3s ${i * 0.05}s both`,
+                    }}
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3 min-w-0 flex-1">
-                        {ctrl.status === "pass" ? <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" /> :
-                         ctrl.status === "fail" ? <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" /> :
-                         <Clock className="w-4 h-4 text-yellow-400 shrink-0" />}
-                        <span className="text-slate-400 font-mono text-xs">{ctrl.id}</span>
-                        <span className="text-white text-sm truncate">{ctrl.name}</span>
-                      </div>
-                      <span className={statusBadge(ctrl.status)}>{ctrl.status}</span>
+                    <div style={{
+                      width: 24,
+                      height: 24,
+                      borderRadius: 6,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: 12,
+                      background: control.status === "pass" ? "rgba(34, 197, 94, 0.15)" : control.status === "partial" ? "rgba(245, 158, 11, 0.15)" : "rgba(239, 68, 68, 0.15)",
+                      color: control.status === "pass" ? "#22c55e" : control.status === "partial" ? "#f59e0b" : "#ef4444",
+                      flexShrink: 0,
+                    }}>
+                      {control.status === "pass" ? "✓" : control.status === "partial" ? "◐" : "✗"}
                     </div>
-                    {expanded === ctrl.id && (
-                      <div className="mt-2 pt-2 border-t border-slate-800"><p className="text-slate-400 text-sm">{ctrl.details}</p></div>
-                    )}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "#f8fafc" }}>{control.name}</div>
+                      <div style={{ fontSize: 11, color: "#64748b" }}>{control.description}</div>
+                    </div>
+                    <span className={`badge ${control.status === "pass" ? "badge-success" : control.status === "partial" ? "badge-warning" : "badge-critical"}`}>
+                      {control.status}
+                    </span>
                   </div>
                 ))}
               </div>
-            )}
-          </>
-        )}
-
-        {tab === "audit" && (
-          <>
-            <div className="grid grid-cols-3 gap-4">
-              <div className="glass-card p-3 text-center"><p className="text-2xl font-bold text-white">{auditEvents.length}</p><p className="text-[10px] text-slate-500 font-mono mt-0.5">ENTRIES</p></div>
-              <div className="glass-card card-success p-3 text-center"><p className="text-2xl font-bold text-emerald-400">{auditEvents.filter((e) => e.outcome === "success").length}</p><p className="text-[10px] text-slate-500 font-mono mt-0.5">SUCCESS</p></div>
-              <div className="glass-card card-critical p-3 text-center"><p className="text-2xl font-bold text-red-400">{auditEvents.filter((e) => e.outcome === "failure").length}</p><p className="text-[10px] text-slate-500 font-mono mt-0.5">FAILURES</p></div>
             </div>
-
-            {loading ? <div className="flex justify-center py-16"><Shield className="w-6 h-6 text-cyan-500 animate-pulse" /></div> : (
-              <div className="glass-card overflow-hidden">
+          </>
+        ) : (
+          /* Audit Trail */
+          <div className="glass-panel" style={{ overflow: "hidden" }}>
+            {auditEvents.length === 0 ? (
+              <div className="empty-state" style={{ padding: 48 }}>
+                <h3>No audit events</h3>
+                <p>Audit trail events will appear here</p>
+              </div>
+            ) : (
+              <div style={{ overflowX: "auto" }}>
                 <table className="data-table">
-                  <thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Resource</th><th>Outcome</th><th>HMAC</th></tr></thead>
+                  <thead>
+                    <tr>
+                      <th>Timestamp</th>
+                      <th>Actor</th>
+                      <th>Action</th>
+                      <th>Resource</th>
+                      <th>Details</th>
+                      <th>HMAC</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
                   <tbody>
-                    {auditEvents.map((event) => (
-                      <tr key={event.id}>
-                        <td className="font-mono text-xs">{formatDate(event.timestamp)}</td>
-                        <td><span className="badge badge-info">{event.actor}</span></td>
-                        <td className="font-mono text-xs text-white">{event.action}</td>
-                        <td className="font-mono text-xs">{event.resource}</td>
-                        <td><span className={cn("badge", event.outcome === "success" ? "badge-success" : "badge-critical")}>{event.outcome}</span></td>
-                        <td className="font-mono text-xs text-slate-600">{event.hmac}</td>
+                    {auditEvents.map((evt) => (
+                      <tr key={evt.id}>
+                        <td style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 11, color: "#94a3b8" }}>
+                          {timeAgo(evt.timestamp)}
+                        </td>
+                        <td style={{ fontWeight: 600, color: "#06b6d4" }}>{evt.actor}</td>
+                        <td>
+                          <span className="badge badge-neutral">{evt.action}</span>
+                        </td>
+                        <td style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 12 }}>{evt.resource}</td>
+                        <td style={{ color: "#94a3b8", fontSize: 12, maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {evt.details}
+                        </td>
+                        <td>
+                          <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 9, color: "#475569" }}>
+                            {evt.hmac?.slice(0, 12)}...
+                          </span>
+                        </td>
+                        <td>
+                          <span className={evt.verified ? "badge badge-success" : "badge badge-critical"}>
+                            {evt.verified ? "Verified" : "Invalid"}
+                          </span>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
             )}
-          </>
+          </div>
         )}
       </div>
     </Shell>

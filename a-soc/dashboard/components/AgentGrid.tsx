@@ -1,76 +1,92 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import { cn, agentColor } from "@/lib/utils";
+import React, { useState, useEffect } from "react";
 import { config } from "@/lib/config";
+
+interface Agent {
+  name: string;
+  role: string;
+  icon: string;
+  color: string;
+}
 
 interface AgentGridProps {
   running?: boolean;
 }
 
-interface AgentLoad {
-  name: string;
-  role: string;
-  load: number;
-  pid: number;
-  color: string;
-}
-
-export function AgentGrid({ running = false }: AgentGridProps) {
-  const [agents, setAgents] = useState<AgentLoad[]>(() =>
-    config.agents.map((a) => ({
-      ...a,
-      load: Math.floor(Math.random() * 40 + 10),
-      pid: Math.floor(Math.random() * 9000 + 1000),
-    }))
-  );
+export default function AgentGrid({ running = true }: AgentGridProps) {
+  const [loads, setLoads] = useState<Record<string, number>>({});
 
   useEffect(() => {
     if (!running) return;
+    const initial: Record<string, number> = {};
+    config.agents.forEach((a) => { initial[a.name] = Math.random() * 40 + 20; });
+    setLoads(initial);
+
     const interval = setInterval(() => {
-      setAgents((prev) =>
-        prev.map((a) => ({
-          ...a,
-          load: Math.max(0, Math.min(100, a.load + (Math.random() > 0.5 ? 1 : -1) * Math.floor(Math.random() * 8))),
-        }))
-      );
+      setLoads((prev) => {
+        const next = { ...prev };
+        config.agents.forEach((a) => {
+          const delta = (Math.random() - 0.5) * 15;
+          next[a.name] = Math.max(5, Math.min(95, (prev[a.name] || 30) + delta));
+        });
+        return next;
+      });
     }, 2000);
     return () => clearInterval(interval);
   }, [running]);
 
   return (
-    <div className="grid grid-cols-1 gap-2">
-      {agents.map((agent) => (
-        <div
-          key={agent.name}
-          className="flex items-center gap-3 p-2.5 rounded-lg bg-slate-900/50 border border-slate-800/50 hover:border-slate-700/50 transition-colors"
-        >
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ fontSize: 12, fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em", padding: "0 4px" }}>
+        AI Agent Operations
+      </div>
+      {config.agents.map((agent, i) => {
+        const load = loads[agent.name] || 0;
+        return (
           <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0"
-            style={{ backgroundColor: `${agent.color}15`, color: agent.color }}
+            key={agent.name}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              padding: "8px 12px",
+              borderRadius: 8,
+              background: "rgba(15, 23, 42, 0.5)",
+              border: "1px solid rgba(51, 65, 85, 0.3)",
+              transition: "all 0.2s ease",
+              animation: `slide-left 0.3s ${i * 0.05}s both`,
+            }}
           >
-            {agent.name.replace("Agent", "").slice(0, 2).toUpperCase()}
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-slate-300 truncate">{agent.name}</span>
-              <span className="text-[10px] font-mono text-slate-600">PID {agent.pid}</span>
-            </div>
-            <div className="flex items-center gap-2 mt-1.5">
-              <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+            <span style={{ fontSize: 16, width: 28, textAlign: "center" }}>{agent.icon}</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: "#f8fafc", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {agent.name.replace("Agent", "")}
+                </span>
+                <span style={{
+                  fontSize: 10,
+                  fontFamily: "JetBrains Mono, monospace",
+                  color: load > 70 ? "#ef4444" : load > 40 ? "#f59e0b" : "#22c55e",
+                  fontWeight: 600,
+                }}>
+                  {Math.round(load)}%
+                </span>
+              </div>
+              <div className="agent-load-bar">
                 <div
-                  className="h-full rounded-full transition-all duration-500"
+                  className="agent-load-bar-fill"
                   style={{
-                    width: `${agent.load}%`,
-                    backgroundColor: agent.load > 80 ? "#ef4444" : agent.load > 50 ? "#f59e0b" : agent.color,
+                    width: `${load}%`,
+                    background: `linear-gradient(90deg, ${agent.color}, ${agent.color}88)`,
                   }}
                 />
               </div>
-              <span className="text-[10px] font-mono text-slate-500 w-8 text-right">{agent.load}%</span>
+              <div style={{ fontSize: 10, color: "#475569", marginTop: 3 }}>{agent.role}</div>
             </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
