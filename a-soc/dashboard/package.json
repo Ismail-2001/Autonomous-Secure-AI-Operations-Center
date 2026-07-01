@@ -10,11 +10,16 @@
     "generate:types": "datamodel-code_generator --input ../../src/asoc --output types/generated --output-model-type pydantic_v2.BaseModel"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5",
+    "clsx": "^2",
     "d3": "^7.9.0",
+    "framer-motion": "^11",
     "lucide-react": "^0.563.0",
     "next": "15.3.3",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "tailwind-merge": "^2",
+    "zustand": "^5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

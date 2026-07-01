@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useCallback } from "react";
+import { motion } from "framer-motion";
 import Shell from "@/components/Shell";
 import StatCard from "@/components/StatCard";
 import TerminalFeed from "@/components/TerminalFeed";
@@ -53,16 +54,20 @@ export default function LiveMonitoringPage() {
 
   return (
     <Shell onSimulate={handleSimulate} simulating={simulating}>
-      <div style={{ display: "flex", flexDirection: "column", gap: 20, animation: "fade-in 0.4s ease" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
         {/* Page Header */}
-        <div>
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+        >
           <h1 style={{ fontSize: 22, fontWeight: 800, color: "#f8fafc", marginBottom: 4 }}>
             Security Operations Dashboard
           </h1>
           <p style={{ fontSize: 13, color: "#64748b" }}>
             Real-time autonomous threat detection, investigation, and response
           </p>
-        </div>
+        </motion.div>
 
         {/* KPI Row */}
         <div className="grid-4">
@@ -72,6 +77,7 @@ export default function LiveMonitoringPage() {
             value={feed.stats.threats}
             subValue="↑ 12% from yesterday"
             color="rose"
+            delay={0}
           />
           <StatCard
             icon={<svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>}
@@ -79,6 +85,7 @@ export default function LiveMonitoringPage() {
             value={feed.stats.neutralized}
             subValue="99.7% detection rate"
             color="emerald"
+            delay={0.1}
           />
           <StatCard
             icon={<svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><circle cx={12} cy={12} r={10} /><polyline points="12 6 12 12 16 14" /></svg>}
@@ -86,6 +93,7 @@ export default function LiveMonitoringPage() {
             value={`${feed.stats.mttr || 4.2}m`}
             subValue="↓ 23% improvement"
             color="cyan"
+            delay={0.2}
           />
           <StatCard
             icon={<svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" /><circle cx={9} cy={7} r={4} /><path d="M23 21v-2a4 4 0 00-3-3.87m-4-12a4 4 0 010 7.75" /></svg>}
@@ -93,6 +101,7 @@ export default function LiveMonitoringPage() {
             value={feed.stats.agents || 7}
             subValue="All operational"
             color="purple"
+            delay={0.3}
           />
         </div>
 
@@ -101,45 +110,74 @@ export default function LiveMonitoringPage() {
           {/* Left Column */}
           <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
             {/* Blast Radius */}
-            <div className="glass-panel" style={{ padding: 16, animation: "slide-up 0.5s 0.1s both" }}>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.2 }}
+              className="glass-panel"
+              style={{ padding: 16 }}
+            >
               <BlastRadiusGraph data={feed.blastRadius.nodes.length ? feed.blastRadius : DEFAULT_BLAST_RADIUS} width={700} height={380} />
-            </div>
+            </motion.div>
 
             {/* Terminal Feeds */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-              <TerminalFeed
-                title="INCIDENT LOG"
-                events={incidentEvents.slice(0, 20)}
-                color="#ef4444"
-                maxHeight={250}
-                icon={<svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>}
-              />
-              <TerminalFeed
-                title="SYSTEM TELEMETRY"
-                events={telemetryEvents.slice(0, 20)}
-                color="#06b6d4"
-                maxHeight={250}
-                icon={<svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#06b6d4" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></svg>}
-              />
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: 0.3 }}
+              >
+                <TerminalFeed
+                  title="INCIDENT LOG"
+                  events={incidentEvents.slice(0, 20)}
+                  color="#ef4444"
+                  maxHeight={250}
+                  icon={<svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>}
+                />
+              </motion.div>
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: 0.4 }}
+              >
+                <TerminalFeed
+                  title="SYSTEM TELEMETRY"
+                  events={telemetryEvents.slice(0, 20)}
+                  color="#06b6d4"
+                  maxHeight={250}
+                  icon={<svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#06b6d4" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></svg>}
+                />
+              </motion.div>
             </div>
           </div>
 
           {/* Right Column — Agent Grid */}
-          <div className="glass-panel" style={{ padding: 16, animation: "slide-left 0.5s 0.2s both" }}>
+          <motion.div
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.5, delay: 0.3 }}
+            className="glass-panel"
+            style={{ padding: 16 }}
+          >
             <AgentGrid running={true} />
-          </div>
+          </motion.div>
         </div>
 
         {/* Connection Status Bar */}
-        <div style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "10px 16px",
-          background: "rgba(15, 23, 42, 0.5)",
-          borderRadius: 8,
-          border: "1px solid rgba(51, 65, 85, 0.3)",
-        }}>
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.5 }}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "10px 16px",
+            background: "rgba(15, 23, 42, 0.5)",
+            borderRadius: 8,
+            border: "1px solid rgba(51, 65, 85, 0.3)",
+          }}
+        >
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div className={`status-dot status-dot-${feed.connectionState === "OPEN" ? "online" : feed.connectionState === "RECONNECTING" ? "warning" : "offline"}`} />
             <span style={{ fontSize: 12, color: "#94a3b8" }}>
@@ -154,7 +192,7 @@ export default function LiveMonitoringPage() {
           <span style={{ fontSize: 11, color: "#475569", fontFamily: "JetBrains Mono, monospace" }}>
             {feed.events.length} threats · {feed.backgroundEvents.length} telemetry events
           </span>
-        </div>
+        </motion.div>
       </div>
 
       {/* Approval Modal */}

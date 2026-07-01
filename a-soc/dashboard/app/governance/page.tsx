@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import Shell from "@/components/Shell";
 import { api, endpoints, type ComplianceReport, type AuditEvent } from "@/lib/api";
 import { timeAgo, complianceColor } from "@/lib/utils";
@@ -34,50 +35,82 @@ export default function GovernancePage() {
 
   return (
     <Shell>
-      <div style={{ display: "flex", flexDirection: "column", gap: 20, animation: "fade-in 0.4s ease" }}>
-        <div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+        >
           <h1 style={{ fontSize: 22, fontWeight: 800, color: "#f8fafc", marginBottom: 4 }}>Governance & Compliance</h1>
           <p style={{ fontSize: 13, color: "#64748b" }}>SOC 2 compliance, audit trail, and HMAC verification</p>
-        </div>
+        </motion.div>
 
         {/* Tab Switcher */}
-        <div className="tab-group">
-          <button className={`tab-btn ${tab === "compliance" ? "active" : ""}`} onClick={() => setTab("compliance")}>
-            Compliance
-          </button>
-          <button className={`tab-btn ${tab === "audit" ? "active" : ""}`} onClick={() => setTab("audit")}>
-            Audit Trail
-          </button>
-        </div>
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.1 }}
+        >
+          <div className="tab-group">
+            <button className={`tab-btn ${tab === "compliance" ? "active" : ""}`} onClick={() => setTab("compliance")}>
+              Compliance
+            </button>
+            <button className={`tab-btn ${tab === "audit" ? "active" : ""}`} onClick={() => setTab("audit")}>
+              Audit Trail
+            </button>
+          </div>
+        </motion.div>
 
         {loading ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="skeleton" style={{ height: 60, borderRadius: 10 }} />
+              <motion.div
+                key={i}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: i * 0.1 }}
+                className="skeleton"
+                style={{ height: 60, borderRadius: 10 }}
+              />
             ))}
           </div>
         ) : tab === "compliance" ? (
           <>
             {/* Compliance Score */}
-            <div className="glass-panel" style={{ padding: 24, display: "flex", alignItems: "center", gap: 32 }}>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.2 }}
+              className="glass-panel"
+              style={{ padding: 24, display: "flex", alignItems: "center", gap: 32 }}
+            >
               {/* Gauge */}
               <div style={{ position: "relative", width: 140, height: 140, flexShrink: 0 }}>
                 <svg width={140} height={140} viewBox="0 0 140 140">
                   <circle cx={70} cy={70} r={58} fill="none" stroke="rgba(51, 65, 85, 0.3)" strokeWidth={10} />
-                  <circle
+                  <motion.circle
                     cx={70}
                     cy={70}
                     r={58}
                     fill="none"
                     stroke={scoreColor}
                     strokeWidth={10}
-                    strokeDasharray={`${(score / 100) * 364.4} 364.4`}
                     strokeLinecap="round"
-                    style={{ transform: "rotate(-90deg)", transformOrigin: "center", transition: "stroke-dasharray 1s ease" }}
+                    initial={{ strokeDasharray: "0 364.4" }}
+                    animate={{ strokeDasharray: `${(score / 100) * 364.4} 364.4` }}
+                    transition={{ duration: 1.5, ease: "easeOut", delay: 0.5 }}
+                    style={{ transform: "rotate(-90deg)", transformOrigin: "center" }}
                   />
                 </svg>
                 <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-                  <span style={{ fontSize: 32, fontWeight: 800, fontFamily: "JetBrains Mono, monospace", color: scoreColor }}>{score}</span>
+                  <motion.span
+                    initial={{ opacity: 0, scale: 0.5 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.5, delay: 0.8 }}
+                    style={{ fontSize: 32, fontWeight: 800, fontFamily: "JetBrains Mono, monospace", color: scoreColor }}
+                  >
+                    {score}
+                  </motion.span>
                   <span style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>/100</span>
                 </div>
               </div>
@@ -110,10 +143,16 @@ export default function GovernancePage() {
                   </div>
                 </div>
               </div>
-            </div>
+            </motion.div>
 
             {/* Controls List */}
-            <div className="glass-panel" style={{ overflow: "hidden" }}>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.3 }}
+              className="glass-panel"
+              style={{ overflow: "hidden" }}
+            >
               <div style={{ padding: "14px 18px", borderBottom: "1px solid rgba(51, 65, 85, 0.5)", fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                 Compliance Controls
               </div>
@@ -130,15 +169,17 @@ export default function GovernancePage() {
                   { name: "Security Training", status: "partial", description: "Annual security awareness training" },
                   { name: "Penetration Testing", status: "fail", description: "Quarterly penetration testing required" },
                 ]).map((control, i) => (
-                  <div
+                  <motion.div
                     key={control.name}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.3, delay: 0.4 + i * 0.05 }}
                     style={{
                       padding: "12px 18px",
                       display: "flex",
                       alignItems: "center",
                       gap: 12,
                       borderBottom: "1px solid rgba(51, 65, 85, 0.2)",
-                      animation: `fade-in 0.3s ${i * 0.05}s both`,
                     }}
                   >
                     <div style={{
@@ -162,14 +203,20 @@ export default function GovernancePage() {
                     <span className={`badge ${control.status === "pass" ? "badge-success" : control.status === "partial" ? "badge-warning" : "badge-critical"}`}>
                       {control.status}
                     </span>
-                  </div>
+                  </motion.div>
                 ))}
               </div>
-            </div>
+            </motion.div>
           </>
         ) : (
           /* Audit Trail */
-          <div className="glass-panel" style={{ overflow: "hidden" }}>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.2 }}
+            className="glass-panel"
+            style={{ overflow: "hidden" }}
+          >
             {auditEvents.length === 0 ? (
               <div className="empty-state" style={{ padding: 48 }}>
                 <h3>No audit events</h3>
@@ -190,8 +237,13 @@ export default function GovernancePage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {auditEvents.map((evt) => (
-                      <tr key={evt.id}>
+                    {auditEvents.map((evt, i) => (
+                      <motion.tr
+                        key={evt.id}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: i * 0.05 }}
+                      >
                         <td style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 11, color: "#94a3b8" }}>
                           {timeAgo(evt.timestamp)}
                         </td>
@@ -213,13 +265,13 @@ export default function GovernancePage() {
                             {evt.verified ? "Verified" : "Invalid"}
                           </span>
                         </td>
-                      </tr>
+                      </motion.tr>
                     ))}
                   </tbody>
                 </table>
               </div>
             )}
-          </div>
+          </motion.div>
         )}
       </div>
     </Shell>

@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /* ============================================================
-   A-SOC — Enterprise Design System v3.0
+   A-SOC — Enterprise Design System v4.0
    Fortune 500 Cybersecurity Platform
    ============================================================ */
 
@@ -681,6 +681,17 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes ripple {
+  0% { transform: scale(0.8); opacity: 1; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+
+@keyframes border-flow {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
 /* ── Reduced Motion ── */
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -999,4 +1010,100 @@ body {
 .empty-state p {
   font-size: 0.85rem;
   max-width: 360px;
+}
+
+/* ── Framer Motion Container ── */
+.motion-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* ── Enhanced Card Hover ── */
+.enhanced-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.enhanced-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(6, 182, 212, 0.5), transparent);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.enhanced-card:hover::before {
+  opacity: 1;
+}
+
+/* ── Threat Pulse Ring ── */
+.threat-pulse-ring {
+  position: relative;
+}
+
+.threat-pulse-ring::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: inherit;
+  border: 2px solid var(--severity-critical);
+  animation: threat-pulse 2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* ── Data Flow Animation ── */
+.data-flow {
+  background: linear-gradient(90deg, transparent 0%, rgba(6, 182, 212, 0.1) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: data-flow 3s linear infinite;
+}
+
+/* ── Neon Border ── */
+.neon-border {
+  position: relative;
+}
+
+.neon-border::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, var(--brand-cyan), var(--brand-purple), var(--brand-cyan));
+  background-size: 200% 200%;
+  animation: border-flow 4s ease infinite;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* ── Responsive Sidebar ── */
+@media (max-width: 768px) {
+  .sidebar-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 39;
+  }
+}
+
+/* ── Print Styles ── */
+@media print {
+  .cyber-grid,
+  .scanlines,
+  .sidebar,
+  .topbar {
+    display: none !important;
+  }
+
+  body {
+    background: white;
+    color: black;
+  }
 }

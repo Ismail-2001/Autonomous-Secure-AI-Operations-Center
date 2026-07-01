@@ -1,14 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { motion } from "framer-motion";
 import { config } from "@/lib/config";
-
-interface Agent {
-  name: string;
-  role: string;
-  icon: string;
-  color: string;
-}
 
 interface AgentGridProps {
   running?: boolean;
@@ -44,8 +38,12 @@ export default function AgentGrid({ running = true }: AgentGridProps) {
       {config.agents.map((agent, i) => {
         const load = loads[agent.name] || 0;
         return (
-          <div
+          <motion.div
             key={agent.name}
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: i * 0.05, duration: 0.4 }}
+            whileHover={{ x: 4, background: "rgba(30, 41, 59, 0.8)" }}
             style={{
               display: "flex",
               alignItems: "center",
@@ -55,7 +53,6 @@ export default function AgentGrid({ running = true }: AgentGridProps) {
               background: "rgba(15, 23, 42, 0.5)",
               border: "1px solid rgba(51, 65, 85, 0.3)",
               transition: "all 0.2s ease",
-              animation: `slide-left 0.3s ${i * 0.05}s both`,
             }}
           >
             <span style={{ fontSize: 16, width: 28, textAlign: "center" }}>{agent.icon}</span>
@@ -74,17 +71,19 @@ export default function AgentGrid({ running = true }: AgentGridProps) {
                 </span>
               </div>
               <div className="agent-load-bar">
-                <div
+                <motion.div
                   className="agent-load-bar-fill"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${load}%` }}
+                  transition={{ duration: 0.8, ease: "easeOut" }}
                   style={{
-                    width: `${load}%`,
                     background: `linear-gradient(90deg, ${agent.color}, ${agent.color}88)`,
                   }}
                 />
               </div>
               <div style={{ fontSize: 10, color: "#475569", marginTop: 3 }}>{agent.role}</div>
             </div>
-          </div>
+          </motion.div>
         );
       })}
     </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { severityColor } from "@/lib/utils";
 
 export interface FeedEvent {
@@ -33,7 +34,11 @@ export default function TerminalFeed({ title, events, color = "#06b6d4", maxHeig
       <div className="terminal-header" style={{ borderColor: `${color}33` }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {icon || (
-            <div style={{ width: 6, height: 6, borderRadius: "50%", background: color, boxShadow: `0 0 6px ${color}` }} />
+            <motion.div
+              animate={{ opacity: [1, 0.5, 1] }}
+              transition={{ duration: 2, repeat: Infinity }}
+              style={{ width: 6, height: 6, borderRadius: "50%", background: color, boxShadow: `0 0 6px ${color}` }}
+            />
           )}
           <span style={{ color }}>{title}</span>
         </div>
@@ -47,18 +52,27 @@ export default function TerminalFeed({ title, events, color = "#06b6d4", maxHeig
             Waiting for events...
           </div>
         ) : (
-          events.map((evt) => (
-            <div key={evt.id} className="terminal-line" style={{ animation: "fade-in 0.3s ease" }}>
-              <span className="terminal-timestamp">
-                {new Date(evt.timestamp).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })}
-              </span>
-              <span className="terminal-severity" style={{ color: severityColor(evt.severity) }}>
-                [{evt.severity.toUpperCase().padEnd(8)}]
-              </span>
-              <span className="terminal-source">{evt.source}</span>
-              <span className="terminal-message">{evt.description}</span>
-            </div>
-          ))
+          <AnimatePresence>
+            {events.map((evt) => (
+              <motion.div
+                key={evt.id}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="terminal-line"
+              >
+                <span className="terminal-timestamp">
+                  {new Date(evt.timestamp).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })}
+                </span>
+                <span className="terminal-severity" style={{ color: severityColor(evt.severity) }}>
+                  [{evt.severity.toUpperCase().padEnd(8)}]
+                </span>
+                <span className="terminal-source">{evt.source}</span>
+                <span className="terminal-message">{evt.description}</span>
+              </motion.div>
+            ))}
+          </AnimatePresence>
         )}
       </div>
     </div>

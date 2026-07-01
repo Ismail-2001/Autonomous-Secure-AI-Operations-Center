@@ -1,5 +1,8 @@
-export function cn(...classes: (string | false | null | undefined)[]): string {
-  return classes.filter(Boolean).join(" ");
+import { clsx, type ClassValue } from "clsx";
+import { twMerge } from "tailwind-merge";
+
+export function cn(...inputs: ClassValue[]): string {
+  return twMerge(clsx(inputs));
 }
 
 export function formatDate(d: string | number | Date): string {
@@ -90,4 +93,12 @@ export function complianceColor(score: number): string {
   if (score >= 70) return "#eab308";
   if (score >= 50) return "#f97316";
   return "#ef4444";
+}
+
+export function generateId(): string {
+  return `id-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+export function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

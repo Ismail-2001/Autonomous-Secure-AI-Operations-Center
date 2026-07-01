@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { motion, AnimatePresence } from "framer-motion";
 
 const NAV_ITEMS = [
   { href: "/", label: "Live Monitoring", icon: "M13 10V3L4 14h7v7l9-11h-7z" },
@@ -17,19 +18,19 @@ const NAV_ITEMS = [
 export default function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
-  const [hovered, setHovered] = useState<string | null>(null);
 
   return (
-    <aside
+    <motion.aside
+      initial={{ width: 240 }}
+      animate={{ width: collapsed ? 68 : 240 }}
+      transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
       style={{
-        width: collapsed ? 68 : 240,
         minHeight: "100vh",
         background: "rgba(15, 23, 42, 0.95)",
         backdropFilter: "blur(12px)",
         borderRight: "1px solid rgba(51, 65, 85, 0.5)",
         display: "flex",
         flexDirection: "column",
-        transition: "width 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
         zIndex: 40,
         position: "relative",
         overflow: "hidden",
@@ -46,78 +47,103 @@ export default function Sidebar() {
         minHeight: 72,
         justifyContent: collapsed ? "center" : "flex-start",
       }}>
-        <div style={{
-          width: 36,
-          height: 36,
-          borderRadius: 10,
-          background: "linear-gradient(135deg, #06b6d4, #8b5cf6)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: 18,
-          flexShrink: 0,
-          boxShadow: "0 0 20px rgba(6, 182, 212, 0.3)",
-        }}>
+        <motion.div
+          whileHover={{ scale: 1.05 }}
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: 10,
+            background: "linear-gradient(135deg, #06b6d4, #8b5cf6)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 18,
+            flexShrink: 0,
+            boxShadow: "0 0 20px rgba(6, 182, 212, 0.3)",
+          }}
+        >
           🛡️
-        </div>
-        {!collapsed && (
-          <div style={{ overflow: "hidden" }}>
-            <div style={{ fontSize: 16, fontWeight: 800, color: "#f8fafc", letterSpacing: "0.02em", whiteSpace: "nowrap" }}>
-              A-SOC
-            </div>
-            <div style={{ fontSize: 10, color: "#64748b", fontWeight: 500, letterSpacing: "0.05em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
-              Autonomous Security
-            </div>
-          </div>
-        )}
+        </motion.div>
+        <AnimatePresence>
+          {!collapsed && (
+            <motion.div
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -10 }}
+              transition={{ duration: 0.2 }}
+              style={{ overflow: "hidden" }}
+            >
+              <div style={{ fontSize: 16, fontWeight: 800, color: "#f8fafc", letterSpacing: "0.02em", whiteSpace: "nowrap" }}>
+                A-SOC
+              </div>
+              <div style={{ fontSize: 10, color: "#64748b", fontWeight: 500, letterSpacing: "0.05em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
+                Autonomous Security
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Navigation */}
       <nav style={{ flex: 1, padding: "12px 8px", display: "flex", flexDirection: "column", gap: 2 }}>
-        {NAV_ITEMS.map((item) => {
+        {NAV_ITEMS.map((item, i) => {
           const active = pathname === item.href;
           return (
-            <Link
+            <motion.div
               key={item.href}
-              href={item.href}
-              onMouseEnter={() => setHovered(item.href)}
-              onMouseLeave={() => setHovered(null)}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 12,
-                padding: collapsed ? "10px 0" : "10px 14px",
-                borderRadius: 8,
-                textDecoration: "none",
-                color: active ? "#06b6d4" : "#94a3b8",
-                background: active
-                  ? "rgba(6, 182, 212, 0.1)"
-                  : hovered === item.href
-                    ? "rgba(51, 65, 85, 0.3)"
-                    : "transparent",
-                borderLeft: active ? "3px solid #06b6d4" : "3px solid transparent",
-                transition: "all 0.2s ease",
-                justifyContent: collapsed ? "center" : "flex-start",
-                position: "relative",
-                fontWeight: active ? 600 : 500,
-                fontSize: 13.5,
-              }}
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: i * 0.05, duration: 0.3 }}
             >
-              <svg
-                width={20}
-                height={20}
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={active ? 2.2 : 1.8}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                style={{ flexShrink: 0 }}
+              <Link
+                href={item.href}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  padding: collapsed ? "10px 0" : "10px 14px",
+                  borderRadius: 8,
+                  textDecoration: "none",
+                  color: active ? "#06b6d4" : "#94a3b8",
+                  background: active
+                    ? "rgba(6, 182, 212, 0.1)"
+                    : "transparent",
+                  borderLeft: active ? "3px solid #06b6d4" : "3px solid transparent",
+                  transition: "all 0.2s ease",
+                  justifyContent: collapsed ? "center" : "flex-start",
+                  position: "relative",
+                  fontWeight: active ? 600 : 500,
+                  fontSize: 13.5,
+                }}
               >
-                <path d={item.icon} />
-              </svg>
-              {!collapsed && <span style={{ whiteSpace: "nowrap" }}>{item.label}</span>}
-            </Link>
+                <svg
+                  width={20}
+                  height={20}
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={active ? 2.2 : 1.8}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  style={{ flexShrink: 0 }}
+                >
+                  <path d={item.icon} />
+                </svg>
+                <AnimatePresence>
+                  {!collapsed && (
+                    <motion.span
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -10 }}
+                      transition={{ duration: 0.2 }}
+                      style={{ whiteSpace: "nowrap" }}
+                    >
+                      {item.label}
+                    </motion.span>
+                  )}
+                </AnimatePresence>
+              </Link>
+            </motion.div>
           );
         })}
       </nav>
@@ -132,13 +158,24 @@ export default function Sidebar() {
         justifyContent: collapsed ? "center" : "flex-start",
       }}>
         <div className="status-dot status-dot-online" />
-        {!collapsed && (
-          <span style={{ fontSize: 11, color: "#64748b", fontWeight: 500 }}>System Online</span>
-        )}
+        <AnimatePresence>
+          {!collapsed && (
+            <motion.span
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              style={{ fontSize: 11, color: "#64748b", fontWeight: 500 }}
+            >
+              System Online
+            </motion.span>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Collapse Toggle */}
-      <button
+      <motion.button
+        whileHover={{ scale: 1.1 }}
+        whileTap={{ scale: 0.95 }}
         onClick={() => setCollapsed(!collapsed)}
         style={{
           position: "absolute",
@@ -160,7 +197,7 @@ export default function Sidebar() {
         }}
       >
         {collapsed ? "→" : "←"}
-      </button>
-    </aside>
+      </motion.button>
+    </motion.aside>
   );
 }

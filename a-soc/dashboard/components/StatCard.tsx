@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 interface StatCardProps {
@@ -10,6 +11,7 @@ interface StatCardProps {
   subValue?: string;
   color?: "cyan" | "purple" | "rose" | "emerald" | "amber" | "blue";
   className?: string;
+  delay?: number;
 }
 
 const colorMap = {
@@ -51,10 +53,14 @@ const colorMap = {
   },
 };
 
-export default function StatCard({ icon, label, value, subValue, color = "cyan", className }: StatCardProps) {
+export default function StatCard({ icon, label, value, subValue, color = "cyan", className, delay = 0 }: StatCardProps) {
   const c = colorMap[color];
   return (
-    <div
+    <motion.div
+      initial={{ opacity: 0, y: 20, scale: 0.95 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.5, delay, ease: [0.34, 1.56, 0.64, 1] }}
+      whileHover={{ y: -2, boxShadow: c.glow }}
       className={cn("glass-card", className)}
       style={{
         padding: "18px 20px",
@@ -63,23 +69,25 @@ export default function StatCard({ icon, label, value, subValue, color = "cyan",
         gap: 12,
         borderColor: c.border,
         boxShadow: c.glow,
-        animation: "slide-up 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both",
       }}
     >
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{
-          width: 40,
-          height: 40,
-          borderRadius: 10,
-          background: c.bg,
-          border: `1px solid ${c.border}`,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          color: c.icon,
-        }}>
+        <motion.div
+          whileHover={{ rotate: 5, scale: 1.1 }}
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: 10,
+            background: c.bg,
+            border: `1px solid ${c.border}`,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: c.icon,
+          }}
+        >
           {icon}
-        </div>
+        </motion.div>
       </div>
       <div>
         <div style={{ fontSize: 28, fontWeight: 800, color: "#f8fafc", fontFamily: "JetBrains Mono, monospace", lineHeight: 1.1 }}>
@@ -94,6 +102,6 @@ export default function StatCard({ icon, label, value, subValue, color = "cyan",
           </div>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 }

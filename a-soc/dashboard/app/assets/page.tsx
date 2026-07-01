@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import Shell from "@/components/Shell";
 import { api, endpoints, type Asset } from "@/lib/api";
 import { statusBadge, riskColor, timeAgo } from "@/lib/utils";
@@ -70,14 +71,24 @@ export default function AssetInventoryPage() {
 
   return (
     <Shell>
-      <div style={{ display: "flex", flexDirection: "column", gap: 20, animation: "fade-in 0.4s ease" }}>
-        <div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+        >
           <h1 style={{ fontSize: 22, fontWeight: 800, color: "#f8fafc", marginBottom: 4 }}>Asset Inventory</h1>
           <p style={{ fontSize: 13, color: "#64748b" }}>Infrastructure assets, risk scores, and vulnerability tracking</p>
-        </div>
+        </motion.div>
 
         {/* Filters */}
-        <div className="glass-panel" style={{ padding: 16, display: "flex", gap: 12, alignItems: "center" }}>
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.1 }}
+          className="glass-panel"
+          style={{ padding: 16, display: "flex", gap: 12, alignItems: "center" }}
+        >
           <select className="select" style={{ width: 160 }} value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
             <option value="">All Types</option>
             <option value="server">Server</option>
@@ -97,10 +108,16 @@ export default function AssetInventoryPage() {
           <span style={{ fontSize: 12, color: "#64748b", marginLeft: "auto" }}>
             {filtered.length} assets
           </span>
-        </div>
+        </motion.div>
 
         {/* Table */}
-        <div className="glass-panel" style={{ overflow: "hidden" }}>
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.2 }}
+          className="glass-panel"
+          style={{ overflow: "hidden" }}
+        >
           {loading ? (
             <div style={{ padding: 24 }}>
               {Array.from({ length: 5 }).map((_, i) => (
@@ -138,8 +155,15 @@ export default function AssetInventoryPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((asset) => (
-                    <tr key={asset.id} onClick={() => setSelectedAsset(asset)} style={{ cursor: "pointer" }}>
+                  {filtered.map((asset, i) => (
+                    <motion.tr
+                      key={asset.id}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: i * 0.03 }}
+                      onClick={() => setSelectedAsset(asset)}
+                      style={{ cursor: "pointer" }}
+                    >
                       <td>
                         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                           <div style={{
@@ -198,51 +222,74 @@ export default function AssetInventoryPage() {
                       <td style={{ color: "#64748b", fontSize: 11, fontFamily: "JetBrains Mono, monospace" }}>
                         {asset.last_scan ? timeAgo(asset.last_scan) : "—"}
                       </td>
-                    </tr>
+                    </motion.tr>
                   ))}
                 </tbody>
               </table>
             </div>
           )}
-        </div>
+        </motion.div>
 
         {/* Asset Detail Modal */}
-        {selectedAsset && (
-          <div className="modal-overlay" onClick={() => setSelectedAsset(null)}>
-            <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 600 }}>
-              <div style={{ padding: "20px 24px", borderBottom: "1px solid rgba(51, 65, 85, 0.5)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div>
-                  <h2 style={{ fontSize: 18, fontWeight: 700, color: "#f8fafc" }}>{selectedAsset.name}</h2>
-                  <p style={{ fontSize: 12, color: "#64748b", fontFamily: "JetBrains Mono, monospace" }}>{selectedAsset.id}</p>
-                </div>
-                <button onClick={() => setSelectedAsset(null)} className="btn-icon">✕</button>
-              </div>
-              <div style={{ padding: "20px 24px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                {[
-                  { label: "Type", value: selectedAsset.type, color: typeColors[selectedAsset.type] || "#94a3b8" },
-                  { label: "IP Address", value: selectedAsset.ip_address, mono: true },
-                  { label: "OS", value: selectedAsset.os || "Unknown" },
-                  { label: "Status", value: selectedAsset.status },
-                  { label: "Risk Score", value: `${selectedAsset.risk_score}/100`, color: riskColor(selectedAsset.risk_score) },
-                  { label: "Vulnerabilities", value: String(selectedAsset.vulnerabilities), color: selectedAsset.vulnerabilities > 5 ? "#ef4444" : "#22c55e" },
-                  { label: "Owner", value: selectedAsset.owner || "Unassigned" },
-                  { label: "Location", value: selectedAsset.location || "Unknown" },
-                ].map((field) => (
-                  <div key={field.label}>
-                    <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>{field.label}</div>
-                    <div style={{ fontSize: 13, color: field.color || "#f8fafc", fontWeight: 600, fontFamily: field.mono ? "JetBrains Mono, monospace" : "inherit" }}>
-                      {field.value}
-                    </div>
+        <AnimatePresence>
+          {selectedAsset && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="modal-overlay"
+              onClick={() => setSelectedAsset(null)}
+            >
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                transition={{ type: "spring", damping: 25, stiffness: 300 }}
+                className="modal-content"
+                onClick={(e) => e.stopPropagation()}
+                style={{ maxWidth: 600 }}
+              >
+                <div style={{ padding: "20px 24px", borderBottom: "1px solid rgba(51, 65, 85, 0.5)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    <h2 style={{ fontSize: 18, fontWeight: 700, color: "#f8fafc" }}>{selectedAsset.name}</h2>
+                    <p style={{ fontSize: 12, color: "#64748b", fontFamily: "JetBrains Mono, monospace" }}>{selectedAsset.id}</p>
                   </div>
-                ))}
-              </div>
-              <div style={{ padding: "16px 24px", borderTop: "1px solid rgba(51, 65, 85, 0.5)", display: "flex", gap: 10, justifyContent: "flex-end" }}>
-                <button className="btn-ghost btn-sm">Scan Asset</button>
-                <button className="btn-primary btn-sm">View Incidents</button>
-              </div>
-            </div>
-          </div>
-        )}
+                  <motion.button
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.9 }}
+                    onClick={() => setSelectedAsset(null)}
+                    className="btn-icon"
+                  >
+                    ✕
+                  </motion.button>
+                </div>
+                <div style={{ padding: "20px 24px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                  {[
+                    { label: "Type", value: selectedAsset.type, color: typeColors[selectedAsset.type] || "#94a3b8" },
+                    { label: "IP Address", value: selectedAsset.ip_address, mono: true },
+                    { label: "OS", value: selectedAsset.os || "Unknown" },
+                    { label: "Status", value: selectedAsset.status },
+                    { label: "Risk Score", value: `${selectedAsset.risk_score}/100`, color: riskColor(selectedAsset.risk_score) },
+                    { label: "Vulnerabilities", value: String(selectedAsset.vulnerabilities), color: selectedAsset.vulnerabilities > 5 ? "#ef4444" : "#22c55e" },
+                    { label: "Owner", value: selectedAsset.owner || "Unassigned" },
+                    { label: "Location", value: selectedAsset.location || "Unknown" },
+                  ].map((field) => (
+                    <div key={field.label}>
+                      <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>{field.label}</div>
+                      <div style={{ fontSize: 13, color: field.color || "#f8fafc", fontWeight: 600, fontFamily: field.mono ? "JetBrains Mono, monospace" : "inherit" }}>
+                        {field.value}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ padding: "16px 24px", borderTop: "1px solid rgba(51, 65, 85, 0.5)", display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                  <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="btn-ghost btn-sm">Scan Asset</motion.button>
+                  <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="btn-primary btn-sm">View Incidents</motion.button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </Shell>
   );

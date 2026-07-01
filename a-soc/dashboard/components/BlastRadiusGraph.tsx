@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useRef, useEffect, useState, useCallback } from "react";
+import { motion } from "framer-motion";
 
 interface Node {
   id: string;
@@ -134,7 +135,12 @@ export default function BlastRadiusGraph({ data, width = 700, height = 420 }: Bl
   const nodes = nodesRef.current;
 
   return (
-    <div style={{ position: "relative", width, height, overflow: "hidden", borderRadius: 10, background: "rgba(2, 6, 23, 0.6)", border: "1px solid rgba(51, 65, 85, 0.3)" }}>
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
+      style={{ position: "relative", width, height, overflow: "hidden", borderRadius: 10, background: "rgba(2, 6, 23, 0.6)", border: "1px solid rgba(51, 65, 85, 0.3)" }}
+    >
       <svg
         ref={svgRef}
         width={width}
@@ -233,14 +239,28 @@ export default function BlastRadiusGraph({ data, width = 700, height = 420 }: Bl
 
       {/* Zoom controls */}
       <div style={{ position: "absolute", top: 12, right: 12, display: "flex", flexDirection: "column", gap: 4 }}>
-        <button onClick={() => setZoom((z) => Math.min(3, z + 0.2))} style={{ width: 28, height: 28, borderRadius: 6, background: "rgba(15, 23, 42, 0.8)", border: "1px solid rgba(51, 65, 85, 0.5)", color: "#94a3b8", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>+</button>
-        <button onClick={() => setZoom((z) => Math.max(0.3, z - 0.2))} style={{ width: 28, height: 28, borderRadius: 6, background: "rgba(15, 23, 42, 0.8)", border: "1px solid rgba(51, 65, 85, 0.5)", color: "#94a3b8", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>−</button>
+        <motion.button
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.9 }}
+          onClick={() => setZoom((z) => Math.min(3, z + 0.2))}
+          style={{ width: 28, height: 28, borderRadius: 6, background: "rgba(15, 23, 42, 0.8)", border: "1px solid rgba(51, 65, 85, 0.5)", color: "#94a3b8", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}
+        >
+          +
+        </motion.button>
+        <motion.button
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.9 }}
+          onClick={() => setZoom((z) => Math.max(0.3, z - 0.2))}
+          style={{ width: 28, height: 28, borderRadius: 6, background: "rgba(15, 23, 42, 0.8)", border: "1px solid rgba(51, 65, 85, 0.5)", color: "#94a3b8", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}
+        >
+          −
+        </motion.button>
       </div>
 
       {/* Title */}
       <div style={{ position: "absolute", top: 12, left: 12, fontSize: 12, fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>
         Blast Radius Map
       </div>
-    </div>
+    </motion.div>
   );
 }
