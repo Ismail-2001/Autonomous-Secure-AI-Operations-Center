@@ -703,6 +703,18 @@ function BlastRadiusGraph() {
 
 export default function LiveMonitoringPage() {
   const [simulating, setSimulating] = useState(false);
+  const [stats, setStats] = useState({ active_threats: 3, threats_neutralized: 142, mttr_minutes: 12, ai_agents_active: 7, events_today: 1402, critical_alerts: 3 });
+  const [agents, setAgents] = useState<{ name: string; status: string; confidence: number }[]>([]);
+  const [incidents, setIncidents] = useState<{ id: string; title: string; severity: string; status: string }[]>([]);
+
+  useEffect(() => {
+    import("@/lib/api").then(({ api, endpoints }) => {
+      api.get(endpoints.stats()).then((data: any) => setStats(data)).catch(() => {});
+      api.get(endpoints.agents()).then((data: any) => setAgents(data.agents || [])).catch(() => {});
+      api.get(endpoints.incidents()).then((data: any) => setIncidents(data.incidents || [])).catch(() => {});
+    });
+  }, []);
+
   const handleSimulate = useCallback(() => {
     setSimulating(true);
     setTimeout(() => setSimulating(false), 5000);

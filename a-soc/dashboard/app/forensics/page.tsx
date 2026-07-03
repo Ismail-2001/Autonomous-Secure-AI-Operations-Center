@@ -1,11 +1,29 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import Shell from "@/components/Shell";
 
 export default function ForensicsPage() {
   const [searchQuery, setSearchQuery] = useState("");
+  const [evidenceData, setEvidenceData] = useState<any[]>([]);
+
+  useEffect(() => {
+    import("@/lib/api").then(({ api, endpoints }) => {
+      api.get(endpoints.forensics()).then((data: any) => {
+        if (data?.jobs?.length) {
+          setEvidenceData(data.jobs.map((j: any) => ({
+            type: j.type?.toUpperCase() || "VOLATILE",
+            name: j.artifacts?.[0] || `${j.id}.raw`,
+            size: "16.0 GB",
+            progress: j.status === "completed" ? 100 : j.status === "in_progress" ? 65 : 0,
+            status: j.status?.toUpperCase() || "PENDING",
+            borderColor: j.type === "volatile" ? "border-cyan-500" : j.type === "network" ? "border-blue-500" : "border-purple-500",
+          })));
+        }
+      }).catch(() => {});
+    });
+  }, []);
 
   const evidenceCards = [
     {

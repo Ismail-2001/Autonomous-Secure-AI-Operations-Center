@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Shell from "@/components/Shell";
 
 interface Tag {
@@ -134,8 +134,28 @@ export default function AssetsPage() {
   const [filterLoc, setFilterLoc] = useState("GLOBAL");
   const [filterRisk, setFilterRisk] = useState("CRITICAL_ONLY");
   const [appliedFilters, setAppliedFilters] = useState({ os: "ALL_SYS", loc: "GLOBAL", risk: "CRITICAL_ONLY" });
+  const [liveAssets, setLiveAssets] = useState<Asset[]>(assets);
 
-  const filteredAssets = assets.filter((asset) => {
+  useEffect(() => {
+    import("@/lib/api").then(({ api, endpoints }) => {
+      api.get(endpoints.assets()).then((data: any) => {
+        if (data?.assets?.length) {
+          setLiveAssets(data.assets.map((a: any) => ({
+            name: a.name,
+            ip: a.ip_address,
+            riskScore: a.risk_score,
+            tags: a.vulnerabilities > 0
+              ? [{ label: `${a.vulnerabilities} CVE`, color: "bg-red-500/20 text-red-400 border-red-500/30" }]
+              : [{ label: "HEALTHY", color: "bg-green-500/20 text-green-400 border-green-500/30" }],
+            owner: a.owner || "UNKNOWN",
+            os: a.os || "UNKNOWN",
+          })));
+        }
+      }).catch(() => {});
+    });
+  }, []);
+
+  const filteredAssets = liveAssets.filter((asset) => {
     if (appliedFilters.os !== "ALL_SYS" && asset.os !== appliedFilters.os) return false;
     if (appliedFilters.risk === "CRITICAL_ONLY" && asset.riskScore < 60) return false;
     if (appliedFilters.risk === "HIGH" && asset.riskScore < 30) return false;

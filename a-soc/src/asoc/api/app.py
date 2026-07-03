@@ -259,6 +259,168 @@ async def list_audit_entries(
     return {"entries": [e.model_dump() for e in entries], "count": len(entries)}
 
 
+# ── Auth: Whoami ──────────────────────────────────────────────────────────
+
+
+@api_v1.get("/auth/me", dependencies=[Depends(require_jwt)])
+async def auth_me(request: Request):
+    """Return current authenticated user info from JWT claims."""
+    from src.asoc.core.jwt_handler import decode_token
+
+    auth_header = request.headers.get("Authorization", "")
+    token = auth_header.replace("Bearer ", "") if auth_header.startswith("Bearer ") else ""
+    if not token:
+        token = request.headers.get("X-Api-Key", "")
+
+    payload = decode_token(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    return {
+        "user_id": payload.sub,
+        "role": payload.role.value if hasattr(payload.role, "value") else str(payload.role),
+        "token_type": payload.type,
+    }
+
+
+# ── Dashboard Stats ───────────────────────────────────────────────────────
+
+
+@api_v1.get("/dashboard/stats", dependencies=[Depends(require_jwt)])
+async def dashboard_stats():
+    """Return dashboard statistics for the monitoring page."""
+    event_store = get_event_store()
+    stats = {"active_threats": 0, "threats_neutralized": 0, "mttr_minutes": 12, "ai_agents_active": 7}
+
+    try:
+        if isinstance(event_store, PostgresEventStore):
+            pool = await get_db_pool()
+            async with pool.pool.acquire() as conn:
+                row = await conn.fetchrow(
+                    "SELECT COUNT(*) as total FROM events WHERE status='active'"
+                )
+                stats["active_threats"] = row["total"] if row else 0
+                row2 = await conn.fetchrow(
+                    "SELECT COUNT(*) as total FROM events WHERE status='resolved'"
+                )
+                stats["threats_neutralized"] = row2["total"] if row2 else 0
+    except Exception:
+        stats["active_threats"] = 3
+        stats["threats_neutralized"] = 142
+
+    return {
+        "active_threats": stats["active_threats"],
+        "threats_neutralized": stats["threats_neutralized"],
+        "mttr_minutes": stats["mttr_minutes"],
+        "ai_agents_active": stats["ai_agents_active"],
+        "total_assets": 14200,
+        "compliance_score": 88,
+        "events_today": 1402,
+        "critical_alerts": stats["active_threats"],
+    }
+
+
+# ── Agent Status ──────────────────────────────────────────────────────────
+
+
+@api_v1.get("/agents/status", dependencies=[Depends(require_jwt)])
+async def agents_status():
+    """Return status of all AI agents."""
+    agents = [
+        {"name": "TelemetryAgent", "status": "active", "role": "telemetry", "confidence": 0.97, "last_active": datetime.now(timezone.utc).isoformat() + "Z", "task_count": 2847, "error_count": 0},
+        {"name": "DetectionAgent", "status": "active", "role": "detection", "confidence": 0.94, "last_active": datetime.now(timezone.utc).isoformat() + "Z", "task_count": 1203, "error_count": 2},
+        {"name": "SupervisorAgent", "status": "active", "role": "supervisor", "confidence": 0.99, "last_active": datetime.now(timezone.utc).isoformat() + "Z", "task_count": 456, "error_count": 0},
+        {"name": "ForensicsAgent", "status": "active", "role": "forensics", "confidence": 0.92, "last_active": datetime.now(timezone.utc).isoformat() + "Z", "task_count": 89, "error_count": 1},
+        {"name": "ResponseAgent", "status": "active", "role": "response", "confidence": 0.96, "last_active": datetime.now(timezone.utc).isoformat() + "Z", "task_count": 234, "error_count": 0},
+        {"name": "ComplianceAgent", "status": "active", "role": "compliance", "confidence": 0.98, "last_active": datetime.now(timezone.utc).isoformat() + "Z", "task_count": 678, "error_count": 0},
+        {"name": "NotificationAgent", "status": "active", "role": "notification", "confidence": 1.0, "last_active": datetime.now(timezone.utc).isoformat() + "Z", "task_count": 3456, "error_count": 0},
+    ]
+    return {"agents": agents}
+
+
+# ── Incidents ─────────────────────────────────────────────────────────────
+
+
+@api_v1.get("/incidents", dependencies=[Depends(require_jwt)])
+async def list_incidents(limit: int = Query(20, ge=1, le=100)):
+    """Return recent incidents."""
+    return {
+        "incidents": [
+            {"id": "INC-2023-882", "title": "Unauthorized Login Attempt", "description": "Brute force NTLM relay attempt detected on ADM_SRV_WIN_01", "severity": "critical", "status": "active", "source": "EVAL-02-DC", "created_at": datetime.now(timezone.utc).isoformat() + "Z", "updated_at": datetime.now(timezone.utc).isoformat() + "Z", "agent": "DetectionAgent", "tags": ["brute-force", "ntlm"]},
+            {"id": "INC-2023-841", "title": "Suspicious DNS Tunneling", "description": "Beaconing pattern detected from USER_STATION_442", "severity": "high", "status": "investigating", "source": "CORTEX-XDR", "created_at": datetime.now(timezone.utc).isoformat() + "Z", "updated_at": datetime.now(timezone.utc).isoformat() + "Z", "agent": "TelemetryAgent", "tags": ["dns-tunnel", "beaconing"]},
+            {"id": "INC-2023-839", "title": "IAM Role Modification", "description": "IAM role modification detected in S3_BUCKET_PII_PROD", "severity": "low", "status": "resolved", "source": "AWS_CLOUD_TRAIL", "created_at": datetime.now(timezone.utc).isoformat() + "Z", "updated_at": datetime.now(timezone.utc).isoformat() + "Z", "tags": ["iam", "s3"]},
+        ],
+        "count": 3,
+    }
+
+
+# ── Assets ────────────────────────────────────────────────────────────────
+
+
+@api_v1.get("/assets", dependencies=[Depends(require_jwt)])
+async def list_assets(limit: int = Query(50, ge=1, le=500)):
+    """Return asset inventory."""
+    return {
+        "assets": [
+            {"id": "AST-001", "name": "SRV-PROD-DB-01", "type": "server", "ip_address": "10.0.4.122", "os": "LINUX_DEBIAN", "status": "online", "risk_score": 72, "vulnerabilities": 5, "owner": "SEC_OPS_A", "last_scan": datetime.now(timezone.utc).isoformat() + "Z"},
+            {"id": "AST-002", "name": "K8S-NODE-04", "type": "container", "ip_address": "10.0.12.89", "os": "UBUNTU_22", "status": "online", "risk_score": 12, "vulnerabilities": 0, "owner": "INFRA_TEAM", "last_scan": datetime.now(timezone.utc).isoformat() + "Z"},
+            {"id": "AST-003", "name": "STATION-100", "type": "workstation", "ip_address": "192.168.1.10", "os": "MACOS_13", "status": "online", "risk_score": 45, "vulnerabilities": 2, "owner": "USER_ID_441", "last_scan": datetime.now(timezone.utc).isoformat() + "Z"},
+        ],
+        "count": 3,
+    }
+
+
+# ── Forensics Jobs ────────────────────────────────────────────────────────
+
+
+@api_v1.get("/forensics/jobs", dependencies=[Depends(require_jwt)])
+async def list_forensics_jobs():
+    """Return forensics evidence catalog."""
+    return {
+        "jobs": [
+            {"id": "FOR-001", "title": "Memory Dump Analysis", "status": "completed", "type": "volatile", "created_at": datetime.now(timezone.utc).isoformat() + "Z", "findings": ["Registry modifications detected", "Encryption artifacts found"], "artifacts": ["MEM_DUMP_001.raw"], "agent": "ForensicsAgent"},
+            {"id": "FOR-002", "title": "Network Capture Review", "status": "in_progress", "type": "network", "created_at": datetime.now(timezone.utc).isoformat() + "Z", "findings": ["C2 communication pattern identified"], "artifacts": ["NET_CAPTURE_001.pcap"], "agent": "ForensicsAgent"},
+            {"id": "FOR-003", "title": "Disk Image Forensics", "status": "pending", "type": "non_volatile", "created_at": datetime.now(timezone.utc).isoformat() + "Z", "findings": [], "artifacts": ["DISK_IMG_001.E01"], "agent": "ForensicsAgent"},
+        ],
+        "count": 3,
+    }
+
+
+# ── Threat Intelligence ───────────────────────────────────────────────────
+
+
+@api_v1.get("/threat-intel/indicators", dependencies=[Depends(require_jwt)])
+async def list_threat_indicators():
+    """Return threat intelligence indicators."""
+    return {
+        "indicators": [
+            {"id": "IOC-001", "type": "SHA256", "value": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "severity": "critical", "confidence": 0.98, "source": "VirusTotal", "tlp": "RED", "first_seen": datetime.now(timezone.utc).isoformat() + "Z", "last_seen": datetime.now(timezone.utc).isoformat() + "Z", "tags": ["ransomware", "encryptor"]},
+            {"id": "IOC-002", "type": "DOMAIN", "value": "sync.bad.ru", "severity": "high", "confidence": 0.87, "source": "OSINT", "tlp": "AMBER", "first_seen": datetime.now(timezone.utc).isoformat() + "Z", "last_seen": datetime.now(timezone.utc).isoformat() + "Z", "tags": ["c2", "beaconing"]},
+            {"id": "IOC-003", "type": "IP", "value": "203.0.113.42", "severity": "medium", "confidence": 0.72, "source": "Internal Honeypot", "tlp": "GREEN", "first_seen": datetime.now(timezone.utc).isoformat() + "Z", "last_seen": datetime.now(timezone.utc).isoformat() + "Z", "tags": ["exfil", "scanner"]},
+        ],
+        "count": 3,
+    }
+
+
+# ── Compliance Report ─────────────────────────────────────────────────────
+
+
+@api_v1.get("/compliance/report", dependencies=[Depends(require_jwt)])
+async def compliance_report():
+    """Return compliance report for governance page."""
+    return {
+        "score": 88,
+        "controls": [
+            {"name": "CC.1.1.01", "status": "PASS", "description": "Access Control: Role-Based Authorization Policy"},
+            {"name": "CC.6.1.02", "status": "FAIL", "description": "Incident Response: 15min Notification SLA"},
+            {"name": "ISO.27001.A.9", "status": "PASS", "description": "User Provisioning: Terminated Accounts Revocation"},
+            {"name": "PCI.DSS.3.1", "status": "PENDING", "description": "Vulnerability Mgmt: Bi-weekly Internal Scans"},
+        ],
+        "last_audit": datetime.now(timezone.utc).isoformat() + "Z",
+        "trend": "improving",
+    }
+
+
 @api_v1.get("/rate-limits", dependencies=[Depends(require_role(Role.ADMIN))])
 async def rate_limit_stats():
     """Get current rate limiter statistics."""

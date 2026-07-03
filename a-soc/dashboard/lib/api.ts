@@ -165,8 +165,10 @@ export const endpoints = {
   threatIntel: () => `${BASE_URL}/api/v1/threat-intel/indicators`,
   audit: () => `${BASE_URL}/api/v1/audit/events`,
   compliance: () => `${BASE_URL}/api/v1/compliance/report`,
+  huntingEvents: () => `${BASE_URL}/api/v1/hunting/events`,
   searchEvents: () => `${BASE_URL}/api/v1/events/search`,
   auth: {
     token: () => `${BASE_URL}/api/v1/auth/token`,
+    me: () => `${BASE_URL}/api/v1/auth/me`,
   },
 };

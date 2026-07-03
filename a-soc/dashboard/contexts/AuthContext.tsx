@@ -25,7 +25,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    api.get<{ access_token: string }>(endpoints.auth.token())
+    api.post<{ access_token: string }>(endpoints.auth.token(), {
+      user_id: "dashboard-user",
+      role: "analyst",
+      client_id: "dashboard",
+    })
       .then((data) => {
         if (data?.access_token) {
           setToken(data.access_token);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import Shell from "@/components/Shell";
 
@@ -39,6 +39,13 @@ export default function GovernancePage() {
   const [controlFilter, setControlFilter] = useState<"all" | "fail">("all");
   const [activeTab, setActiveTab] = useState<"governance" | "monitoring" | "hunting">("governance");
   const [searchQuery, setSearchQuery] = useState("");
+  const [complianceData, setComplianceData] = useState<any>(null);
+
+  useEffect(() => {
+    import("@/lib/api").then(({ api, endpoints }) => {
+      api.get(endpoints.compliance()).then((data: any) => setComplianceData(data)).catch(() => {});
+    });
+  }, []);
 
   const filteredControls = controlFilter === "fail"
     ? controls.filter((c) => c.status === "FAIL")

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { motion } from "framer-motion";
 import Shell from "@/components/Shell";
 
@@ -58,6 +58,25 @@ const incidents: Incident[] = [
 export default function HuntingPage() {
   const [page, setPage] = useState(1);
   const [iocList, setIocList] = useState(iocs);
+  const [liveEvents, setLiveEvents] = useState<EventRow[]>(events);
+
+  useEffect(() => {
+    import("@/lib/api").then(({ api, endpoints }) => {
+      api.get(endpoints.huntingEvents()).then((data: any) => {
+        if (data?.events?.length) {
+          setLiveEvents(data.events.slice(0, 10).map((e: any) => ({
+            ts: e.timestamp?.slice(0, 19)?.replace("T", " ") || "",
+            source: e.source || "unknown",
+            sev: e.severity?.toUpperCase()?.slice(0, 4) || "INFO",
+            sevNum: e.confidence || 1.0,
+            asset: e.agent || "UNKNOWN",
+            threat: e.description || e.type || "",
+            icon: e.severity === "critical" ? "⚠" : e.severity === "high" ? "◼" : "ℹ",
+          })));
+        }
+      }).catch(() => {});
+    });
+  }, []);
 
   const maxBar = useMemo(() => Math.max(...bars), []);
 
@@ -120,7 +139,7 @@ export default function HuntingPage() {
               </div>
 
               {/* rows */}
-              {events.map((ev, i) => {
+              {liveEvents.map((ev, i) => {
                 const sev = sevBadge(ev.sev, ev.sevNum);
                 return (
                   <motion.div key={i} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.18 + i * 0.04 }}
