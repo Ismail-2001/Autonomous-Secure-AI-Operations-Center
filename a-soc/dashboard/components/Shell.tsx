@@ -1,9 +1,9 @@
 "use client";
 
 import React from "react";
-import { motion } from "framer-motion";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
+import StatusBar from "./StatusBar";
 
 interface ShellProps {
   children: React.ReactNode;
@@ -13,21 +13,15 @@ interface ShellProps {
 
 export default function Shell({ children, onSimulate, simulating }: ShellProps) {
   return (
-    <div style={{ display: "flex", minHeight: "100vh", background: "#020617" }}>
+    <div style={{ display: "flex", minHeight: "100vh", background: "#0a0e1a" }}>
       <Sidebar />
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, marginLeft: 0 }}>
         <TopBar onSimulate={onSimulate} simulating={simulating} />
-        <main style={{ flex: 1, padding: 24, overflow: "auto", position: "relative" }}>
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
-          >
-            {children}
-          </motion.div>
+        <main style={{ flex: 1, padding: "20px 24px 48px", overflow: "auto" }}>
+          {children}
         </main>
       </div>
-      <div className="cyber-grid" />
+      <StatusBar />
     </div>
   );
 }

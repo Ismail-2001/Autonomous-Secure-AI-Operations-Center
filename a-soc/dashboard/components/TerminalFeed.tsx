@@ -20,35 +20,29 @@ interface TerminalFeedProps {
   icon?: React.ReactNode;
 }
 
-export default function TerminalFeed({ title, events, color = "#06b6d4", maxHeight = 300, icon }: TerminalFeedProps) {
+export default function TerminalFeed({ title, events, color = "#1a73e8", maxHeight = 300, icon }: TerminalFeedProps) {
   const bodyRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (bodyRef.current) {
-      bodyRef.current.scrollTop = 0;
-    }
+    if (bodyRef.current) bodyRef.current.scrollTop = 0;
   }, [events.length]);
 
   return (
     <div className="terminal-block" style={{ height: maxHeight + 80 }}>
-      <div className="terminal-header" style={{ borderColor: `${color}33` }}>
+      <div className="terminal-header">
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {icon || (
-            <motion.div
-              animate={{ opacity: [1, 0.5, 1] }}
-              transition={{ duration: 2, repeat: Infinity }}
-              style={{ width: 6, height: 6, borderRadius: "50%", background: color, boxShadow: `0 0 6px ${color}` }}
-            />
+            <div style={{ width: 6, height: 6, borderRadius: "50%", background: color }} />
           )}
-          <span style={{ color }}>{title}</span>
+          <span style={{ color: "#374151" }}>{title}</span>
         </div>
-        <span style={{ marginLeft: "auto", fontFamily: "JetBrains Mono, monospace", fontSize: 10, color: "#475569" }}>
+        <span style={{ marginLeft: "auto", fontFamily: "var(--font-mono)", fontSize: 10, color: "#9ca3af" }}>
           {events.length} events
         </span>
       </div>
       <div className="terminal-body" ref={bodyRef} style={{ maxHeight }}>
         {events.length === 0 ? (
-          <div style={{ color: "#475569", fontSize: 12, padding: "12px 0", textAlign: "center" }}>
+          <div style={{ color: "#9ca3af", fontSize: 12, padding: "12px 0", textAlign: "center" }}>
             Waiting for events...
           </div>
         ) : (
@@ -56,10 +50,8 @@ export default function TerminalFeed({ title, events, color = "#06b6d4", maxHeig
             {events.map((evt) => (
               <motion.div
                 key={evt.id}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.2 }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
                 className="terminal-line"
               >
                 <span className="terminal-timestamp">

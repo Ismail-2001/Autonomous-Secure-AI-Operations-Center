@@ -31,8 +31,8 @@ export default function AgentGrid({ running = true }: AgentGridProps) {
   }, [running]);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      <div style={{ fontSize: 12, fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em", padding: "0 4px" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <div style={{ fontSize: 12, fontWeight: 500, color: "#6b7280", padding: "0 4px", marginBottom: 4 }}>
         AI Agent Operations
       </div>
       {config.agents.map((agent, i) => {
@@ -40,48 +40,42 @@ export default function AgentGrid({ running = true }: AgentGridProps) {
         return (
           <motion.div
             key={agent.name}
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: i * 0.05, duration: 0.4 }}
-            whileHover={{ x: 4, background: "rgba(30, 41, 59, 0.8)" }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: i * 0.03 }}
             style={{
               display: "flex",
               alignItems: "center",
               gap: 10,
               padding: "8px 12px",
               borderRadius: 8,
-              background: "rgba(15, 23, 42, 0.5)",
-              border: "1px solid rgba(51, 65, 85, 0.3)",
-              transition: "all 0.2s ease",
+              background: "#f9fafb",
+              border: "1px solid #f3f4f6",
+              transition: "all 0.15s ease",
             }}
           >
-            <span style={{ fontSize: 16, width: 28, textAlign: "center" }}>{agent.icon}</span>
+            <span style={{ fontSize: 14, width: 24, textAlign: "center" }}>{agent.icon}</span>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
-                <span style={{ fontSize: 12, fontWeight: 600, color: "#f8fafc", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 3 }}>
+                <span style={{ fontSize: 12, fontWeight: 500, color: "#111827", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                   {agent.name.replace("Agent", "")}
                 </span>
                 <span style={{
                   fontSize: 10,
-                  fontFamily: "JetBrains Mono, monospace",
-                  color: load > 70 ? "#ef4444" : load > 40 ? "#f59e0b" : "#22c55e",
-                  fontWeight: 600,
+                  fontFamily: "var(--font-mono)",
+                  color: load > 70 ? "#c5221f" : load > 40 ? "#e37400" : "#137333",
+                  fontWeight: 500,
                 }}>
                   {Math.round(load)}%
                 </span>
               </div>
               <div className="agent-load-bar">
-                <motion.div
+                <div
                   className="agent-load-bar-fill"
-                  initial={{ width: 0 }}
-                  animate={{ width: `${load}%` }}
-                  transition={{ duration: 0.8, ease: "easeOut" }}
-                  style={{
-                    background: `linear-gradient(90deg, ${agent.color}, ${agent.color}88)`,
-                  }}
+                  style={{ width: `${load}%`, background: agent.color }}
                 />
               </div>
-              <div style={{ fontSize: 10, color: "#475569", marginTop: 3 }}>{agent.role}</div>
+              <div style={{ fontSize: 10, color: "#9ca3af", marginTop: 2 }}>{agent.role}</div>
             </div>
           </motion.div>
         );

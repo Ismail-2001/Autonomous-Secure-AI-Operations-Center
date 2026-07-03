@@ -1,203 +1,310 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 
 const NAV_ITEMS = [
-  { href: "/", label: "Live Monitoring", icon: "M13 10V3L4 14h7v7l9-11h-7z" },
-  { href: "/hunting", label: "Threat Hunting", icon: "M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" },
-  { href: "/assets", label: "Asset Inventory", icon: "M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" },
-  { href: "/forensics", label: "Forensics Lab", icon: "M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" },
-  { href: "/threat-intel", label: "Threat Intel", icon: "M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" },
-  { href: "/governance", label: "Governance", icon: "M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" },
+  {
+    href: "/",
+    label: "Monitoring",
+    icon: (
+      <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+      </svg>
+    ),
+  },
+  {
+    href: "/hunting",
+    label: "Hunting",
+    icon: (
+      <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10" />
+        <line x1="22" y1="12" x2="18" y2="12" />
+        <line x1="6" y1="12" x2="2" y2="12" />
+        <line x1="12" y1="6" x2="12" y2="2" />
+        <line x1="12" y1="22" x2="12" y2="18" />
+      </svg>
+    ),
+  },
+  {
+    href: "/assets",
+    label: "Assets",
+    icon: (
+      <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+        <rect x="2" y="2" width="20" height="8" rx="2" ry="2" />
+        <rect x="2" y="14" width="20" height="8" rx="2" ry="2" />
+        <line x1="6" y1="6" x2="6.01" y2="6" />
+        <line x1="6" y1="18" x2="6.01" y2="18" />
+      </svg>
+    ),
+  },
+  {
+    href: "/forensics",
+    label: "Forensics",
+    icon: (
+      <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="11" cy="11" r="8" />
+        <line x1="21" y1="21" x2="16.65" y2="16.65" />
+      </svg>
+    ),
+  },
+  {
+    href: "/threat-intel",
+    label: "Intelligence",
+    icon: (
+      <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10" />
+        <line x1="2" y1="12" x2="22" y2="12" />
+        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+      </svg>
+    ),
+  },
+  {
+    href: "/governance",
+    label: "Governance",
+    icon: (
+      <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+        <polyline points="9 12 11 14 15 10" />
+      </svg>
+    ),
+  },
+];
+
+const BOTTOM_ITEMS = [
+  {
+    href: "/settings",
+    label: "Settings",
+    icon: (
+      <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="3" />
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+      </svg>
+    ),
+  },
+  {
+    href: "/support",
+    label: "Support",
+    icon: (
+      <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10" />
+        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+        <line x1="12" y1="17" x2="12.01" y2="17" />
+      </svg>
+    ),
+  },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const [collapsed, setCollapsed] = useState(false);
 
   return (
-    <motion.aside
-      initial={{ width: 240 }}
-      animate={{ width: collapsed ? 68 : 240 }}
-      transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
+    <aside
       style={{
-        minHeight: "100vh",
-        background: "rgba(15, 23, 42, 0.95)",
-        backdropFilter: "blur(12px)",
-        borderRight: "1px solid rgba(51, 65, 85, 0.5)",
+        width: 260,
+        minWidth: 260,
+        height: "100vh",
+        background: "#0a0e1a",
         display: "flex",
         flexDirection: "column",
         zIndex: 40,
         position: "relative",
-        overflow: "hidden",
         flexShrink: 0,
+        borderRight: "1px solid rgba(0, 255, 255, 0.06)",
       }}
     >
       {/* Logo */}
-      <div style={{
-        padding: collapsed ? "20px 0" : "20px 20px",
-        display: "flex",
-        alignItems: "center",
-        gap: 12,
-        borderBottom: "1px solid rgba(51, 65, 85, 0.5)",
-        minHeight: 72,
-        justifyContent: collapsed ? "center" : "flex-start",
-      }}>
-        <motion.div
-          whileHover={{ scale: 1.05 }}
+      <div
+        style={{
+          padding: "24px 20px 20px",
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          borderBottom: "1px solid rgba(0, 255, 255, 0.08)",
+        }}
+      >
+        <div
           style={{
             width: 36,
             height: 36,
-            borderRadius: 10,
-            background: "linear-gradient(135deg, #06b6d4, #8b5cf6)",
+            borderRadius: 8,
+            background: "linear-gradient(135deg, rgba(0,255,255,0.15), rgba(0,255,255,0.05))",
+            border: "1px solid rgba(0,255,255,0.2)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            fontSize: 18,
             flexShrink: 0,
-            boxShadow: "0 0 20px rgba(6, 182, 212, 0.3)",
           }}
         >
-          🛡️
-        </motion.div>
-        <AnimatePresence>
-          {!collapsed && (
-            <motion.div
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -10 }}
-              transition={{ duration: 0.2 }}
-              style={{ overflow: "hidden" }}
-            >
-              <div style={{ fontSize: 16, fontWeight: 800, color: "#f8fafc", letterSpacing: "0.02em", whiteSpace: "nowrap" }}>
-                A-SOC
-              </div>
-              <div style={{ fontSize: 10, color: "#64748b", fontWeight: 500, letterSpacing: "0.05em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
-                Autonomous Security
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+          <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="#00ffff" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+          </svg>
+        </div>
+        <div>
+          <div
+            style={{
+              fontSize: 16,
+              fontWeight: 700,
+              color: "#ffffff",
+              fontFamily: "var(--font-mono)",
+              letterSpacing: "0.05em",
+              lineHeight: 1.2,
+            }}
+          >
+            A-SOC
+          </div>
+          <div
+            style={{
+              fontSize: 9,
+              color: "rgba(0,255,255,0.5)",
+              fontWeight: 500,
+              fontFamily: "var(--font-mono)",
+              letterSpacing: "0.12em",
+              textTransform: "uppercase",
+            }}
+          >
+            AUTONOMOUS OPS
+          </div>
+        </div>
       </div>
 
       {/* Navigation */}
-      <nav style={{ flex: 1, padding: "12px 8px", display: "flex", flexDirection: "column", gap: 2 }}>
-        {NAV_ITEMS.map((item, i) => {
+      <nav
+        style={{
+          flex: 1,
+          padding: "16px 10px",
+          display: "flex",
+          flexDirection: "column",
+          gap: 2,
+          overflowY: "auto",
+        }}
+      >
+        {NAV_ITEMS.map((item) => {
           const active = pathname === item.href;
           return (
-            <motion.div
+            <Link
               key={item.href}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: i * 0.05, duration: 0.3 }}
+              href={item.href}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                padding: "10px 14px",
+                borderRadius: 6,
+                textDecoration: "none",
+                color: active ? "#00ffff" : "#5a6a8a",
+                background: active
+                  ? "rgba(0, 255, 255, 0.06)"
+                  : "transparent",
+                fontWeight: 500,
+                fontSize: 12,
+                fontFamily: "var(--font-mono)",
+                textTransform: "uppercase",
+                letterSpacing: "0.06em",
+                transition: "all 0.15s ease",
+                borderLeft: active
+                  ? "3px solid #00ffff"
+                  : "3px solid transparent",
+                position: "relative",
+              }}
+              onMouseEnter={(e) => {
+                if (!active) {
+                  e.currentTarget.style.color = "#8899bb";
+                  e.currentTarget.style.background = "rgba(255,255,255,0.03)";
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!active) {
+                  e.currentTarget.style.color = "#5a6a8a";
+                  e.currentTarget.style.background = "transparent";
+                }
+              }}
             >
-              <Link
-                href={item.href}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 12,
-                  padding: collapsed ? "10px 0" : "10px 14px",
-                  borderRadius: 8,
-                  textDecoration: "none",
-                  color: active ? "#06b6d4" : "#94a3b8",
-                  background: active
-                    ? "rgba(6, 182, 212, 0.1)"
-                    : "transparent",
-                  borderLeft: active ? "3px solid #06b6d4" : "3px solid transparent",
-                  transition: "all 0.2s ease",
-                  justifyContent: collapsed ? "center" : "flex-start",
-                  position: "relative",
-                  fontWeight: active ? 600 : 500,
-                  fontSize: 13.5,
-                }}
-              >
-                <svg
-                  width={20}
-                  height={20}
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={active ? 2.2 : 1.8}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  style={{ flexShrink: 0 }}
-                >
-                  <path d={item.icon} />
-                </svg>
-                <AnimatePresence>
-                  {!collapsed && (
-                    <motion.span
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: -10 }}
-                      transition={{ duration: 0.2 }}
-                      style={{ whiteSpace: "nowrap" }}
-                    >
-                      {item.label}
-                    </motion.span>
-                  )}
-                </AnimatePresence>
-              </Link>
-            </motion.div>
+              <span style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
+                {item.icon}
+              </span>
+              <span style={{ whiteSpace: "nowrap" }}>{item.label}</span>
+              {active && (
+                <motion.div
+                  layoutId="activeNav"
+                  style={{
+                    position: "absolute",
+                    left: 0,
+                    top: 0,
+                    bottom: 0,
+                    width: 3,
+                    background: "#00ffff",
+                    borderRadius: "0 2px 2px 0",
+                  }}
+                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                />
+              )}
+            </Link>
           );
         })}
       </nav>
 
-      {/* Connection Status */}
-      <div style={{
-        padding: collapsed ? "16px 0" : "16px 20px",
-        borderTop: "1px solid rgba(51, 65, 85, 0.5)",
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
-        justifyContent: collapsed ? "center" : "flex-start",
-      }}>
-        <div className="status-dot status-dot-online" />
-        <AnimatePresence>
-          {!collapsed && (
-            <motion.span
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              style={{ fontSize: 11, color: "#64748b", fontWeight: 500 }}
-            >
-              System Online
-            </motion.span>
-          )}
-        </AnimatePresence>
-      </div>
-
-      {/* Collapse Toggle */}
-      <motion.button
-        whileHover={{ scale: 1.1 }}
-        whileTap={{ scale: 0.95 }}
-        onClick={() => setCollapsed(!collapsed)}
+      {/* Bottom Section */}
+      <div
         style={{
-          position: "absolute",
-          top: 28,
-          right: -12,
-          width: 24,
-          height: 24,
-          borderRadius: "50%",
-          background: "#1e293b",
-          border: "1px solid rgba(51, 65, 85, 0.5)",
-          color: "#94a3b8",
-          cursor: "pointer",
+          padding: "12px 10px",
+          borderTop: "1px solid rgba(0, 255, 255, 0.08)",
           display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: 12,
-          zIndex: 50,
-          transition: "all 0.2s ease",
+          flexDirection: "column",
+          gap: 2,
         }}
       >
-        {collapsed ? "→" : "←"}
-      </motion.button>
-    </motion.aside>
+        {BOTTOM_ITEMS.map((item) => {
+          const active = pathname === item.href;
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                padding: "10px 14px",
+                borderRadius: 6,
+                textDecoration: "none",
+                color: active ? "#00ffff" : "#5a6a8a",
+                background: active
+                  ? "rgba(0, 255, 255, 0.06)"
+                  : "transparent",
+                fontWeight: 500,
+                fontSize: 12,
+                fontFamily: "var(--font-mono)",
+                textTransform: "uppercase",
+                letterSpacing: "0.06em",
+                transition: "all 0.15s ease",
+                borderLeft: active
+                  ? "3px solid #00ffff"
+                  : "3px solid transparent",
+              }}
+              onMouseEnter={(e) => {
+                if (!active) {
+                  e.currentTarget.style.color = "#8899bb";
+                  e.currentTarget.style.background = "rgba(255,255,255,0.03)";
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!active) {
+                  e.currentTarget.style.color = "#5a6a8a";
+                  e.currentTarget.style.background = "transparent";
+                }
+              }}
+            >
+              <span style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
+                {item.icon}
+              </span>
+              <span style={{ whiteSpace: "nowrap" }}>{item.label}</span>
+            </Link>
+          );
+        })}
+      </div>
+    </aside>
   );
 }
