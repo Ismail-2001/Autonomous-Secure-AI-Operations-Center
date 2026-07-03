@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
+import Shell from "@/components/Shell";
 
 export default function ForensicsPage() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -86,8 +87,9 @@ export default function ForensicsPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100 p-6">
-      <div className="flex gap-6 max-w-7xl mx-auto">
+    <Shell>
+      <div className="max-w-7xl mx-auto">
+        <div className="flex gap-6">
         {/* Main Content */}
         <div className="flex-1">
           {/* Header */}
@@ -170,7 +172,8 @@ export default function ForensicsPage() {
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.15 + index * 0.05 }}
-                  className={`bg-gray-900 border ${card.borderColor}/30 rounded-lg p-4`}
+                  className={`bg-gray-900 border rounded-lg p-4`}
+                  style={{ borderColor: `${card.borderColor}30` }}
                 >
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center gap-2">
@@ -399,6 +402,7 @@ export default function ForensicsPage() {
           </div>
         </motion.div>
       </div>
-    </div>
+      </div>
+    </Shell>
   );
 }

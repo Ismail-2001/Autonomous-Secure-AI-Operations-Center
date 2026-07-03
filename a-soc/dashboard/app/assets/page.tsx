@@ -2,10 +2,7 @@
 
 import { motion } from "framer-motion";
 import { useState } from "react";
-
-const Shell = ({ children }: { children: React.ReactNode }) => (
-  <div className="min-h-screen bg-[#0a0a0f] text-white font-mono">{children}</div>
-);
+import Shell from "@/components/Shell";
 
 interface Tag {
   label: string;

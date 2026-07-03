@@ -9,9 +9,10 @@ interface ShellProps {
   children: React.ReactNode;
   onSimulate?: () => void;
   simulating?: boolean;
+  connectionState?: "CLOSED" | "CONNECTING" | "OPEN" | "RECONNECTING";
 }
 
-export default function Shell({ children, onSimulate, simulating }: ShellProps) {
+export default function Shell({ children, onSimulate, simulating, connectionState }: ShellProps) {
   return (
     <div style={{ display: "flex", minHeight: "100vh", background: "#0a0e1a" }}>
       <Sidebar />
@@ -21,7 +22,7 @@ export default function Shell({ children, onSimulate, simulating }: ShellProps) 
           {children}
         </main>
       </div>
-      <StatusBar />
+      <StatusBar connectionState={connectionState} />
     </div>
   );
 }

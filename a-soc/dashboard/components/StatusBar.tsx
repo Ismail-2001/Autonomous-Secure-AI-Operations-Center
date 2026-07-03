@@ -1,12 +1,15 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 
-export default function StatusBar() {
+interface StatusBarProps {
+  connectionState?: "CLOSED" | "CONNECTING" | "OPEN" | "RECONNECTING";
+}
+
+export default function StatusBar({ connectionState = "OPEN" }: StatusBarProps) {
   const [utcTime, setUtcTime] = useState("");
-  const [latency] = useState(() => Math.floor(8 + Math.random() * 10));
+  const [latency, setLatency] = useState(() => Math.floor(8 + Math.random() * 10));
 
   useEffect(() => {
     const tick = () => {
@@ -20,6 +23,15 @@ export default function StatusBar() {
     const timer = setInterval(tick, 1000);
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setLatency((prev) => prev + Math.floor(Math.random() * 3) - 1);
+    }, 3000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const wsConnected = connectionState === "OPEN";
 
   return (
     <footer
@@ -56,13 +68,15 @@ export default function StatusBar() {
               width: 6,
               height: 6,
               borderRadius: "50%",
-              background: "#22c55e",
+              background: wsConnected ? "#22c55e" : connectionState === "CONNECTING" || connectionState === "RECONNECTING" ? "#f59e0b" : "#ef4444",
               flexShrink: 0,
             }}
-            animate={{ opacity: [1, 0.4, 1] }}
-            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+            animate={{ opacity: wsConnected ? [1, 0.4, 1] : 1 }}
+            transition={{ duration: 2, repeat: wsConnected ? Infinity : 0, ease: "easeInOut" }}
           />
-          <span style={{ color: "#22c55e", textTransform: "uppercase", fontWeight: 600 }}>CONNECTED</span>
+          <span style={{ color: wsConnected ? "#22c55e" : connectionState === "CONNECTING" || connectionState === "RECONNECTING" ? "#f59e0b" : "#ef4444", textTransform: "uppercase", fontWeight: 600 }}>
+            {connectionState}
+          </span>
         </span>
       </div>
 

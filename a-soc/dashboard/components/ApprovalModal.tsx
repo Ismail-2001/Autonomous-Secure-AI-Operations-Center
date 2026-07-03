@@ -15,7 +15,14 @@ interface ApprovalModalProps {
 
 export default function ApprovalModal({ action, target, riskScore, reasoning, agent, onApprove, onDeny }: ApprovalModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
-  useEffect(() => { dialogRef.current?.focus(); }, []);
+  useEffect(() => {
+    dialogRef.current?.focus();
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onDeny();
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [onDeny]);
 
   const riskColor = riskScore >= 70 ? "#ea4335" : riskScore >= 40 ? "#f9ab00" : "#34a853";
 

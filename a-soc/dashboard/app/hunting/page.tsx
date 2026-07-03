@@ -6,7 +6,7 @@ import Shell from "@/components/Shell";
 
 /* ── helpers ── */
 
-const sevBadge = (s: string, num?: number) => {
+const sevBadge = (_s: string, num?: number) => {
   if (num !== undefined && num >= 9) return { bg: "#3b1010", fg: "#ef4444", border: "#7f1d1d" };
   if (num !== undefined && num >= 5) return { bg: "#3b2510", fg: "#f97316", border: "#78350f" };
   if (num !== undefined && num >= 2) return { bg: "#3b3510", fg: "#eab308", border: "#713f12" };

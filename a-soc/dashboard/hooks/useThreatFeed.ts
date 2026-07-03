@@ -97,6 +97,7 @@ export function useThreatFeed() {
   const wsRef = useRef<WebSocket | null>(null);
   const mountedRef = useRef(true);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectAttemptsRef = useRef(0);
   const { token } = useAuth();
   const [simulating, setSimulating] = useState(false);
 
@@ -113,6 +114,7 @@ export function useThreatFeed() {
 
       ws.onopen = () => {
         if (!mountedRef.current) return;
+        reconnectAttemptsRef.current = 0;
         dispatch({ type: "SET_STATE", payload: { connectionState: "OPEN", reconnectAttempts: 0 } });
       };
 
@@ -191,7 +193,8 @@ export function useThreatFeed() {
       ws.onclose = () => {
         if (!mountedRef.current) return;
         wsRef.current = null;
-        const attempts = state.reconnectAttempts + 1;
+        const attempts = reconnectAttemptsRef.current + 1;
+        reconnectAttemptsRef.current = attempts;
 
         if (attempts < config.ws.maxReconnect) {
           dispatch({ type: "SET_STATE", payload: { connectionState: "RECONNECTING", reconnectAttempts: attempts } });
@@ -208,7 +211,7 @@ export function useThreatFeed() {
     } catch (_e) {
       dispatch({ type: "SET_STATE", payload: { connectionState: "CLOSED" } });
     }
-  }, [token, state.reconnectAttempts]);
+  }, [token]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -225,6 +228,11 @@ export function useThreatFeed() {
       wsRef.current.send(JSON.stringify(msg));
     }
   }, []);
+
+  const stopSimulation = useCallback(() => {
+    setSimulating(false);
+    sendMessage({ type: "STOP_SIMULATION" });
+  }, [sendMessage]);
 
   const startSimulation = useCallback(() => {
     setSimulating(true);
@@ -245,6 +253,7 @@ export function useThreatFeed() {
     ...state,
     simulating,
     startSimulation,
+    stopSimulation,
     approveAction,
     denyAction,
     sendMessage,
