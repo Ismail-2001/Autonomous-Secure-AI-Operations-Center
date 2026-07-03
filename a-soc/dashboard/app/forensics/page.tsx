@@ -299,12 +299,12 @@ export default function ForensicsPage() {
                     />
 
                     <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs text-gray-500 font-mono">
+                      <div className="flex items-center justify-between mb-2 gap-3">
+                        <span className="text-xs text-gray-500 font-mono whitespace-nowrap flex-shrink-0">
                           {entry.time}
                         </span>
                         <span
-                          className={`text-xs font-medium ${
+                          className={`text-xs font-medium flex-shrink-0 whitespace-nowrap ${
                             entry.hmacStatus === "VALID"
                               ? "text-green-400"
                               : "text-red-400"

@@ -140,7 +140,7 @@ export default function AssetsPage() {
     import("@/lib/api").then(({ api, endpoints }) => {
       api.get(endpoints.assets()).then((data: any) => {
         if (data?.assets?.length) {
-          setLiveAssets(data.assets.map((a: any) => ({
+          const apiAssets = data.assets.map((a: any) => ({
             name: a.name,
             ip: a.ip_address,
             riskScore: a.risk_score,
@@ -149,7 +149,10 @@ export default function AssetsPage() {
               : [{ label: "HEALTHY", color: "bg-green-500/20 text-green-400 border-green-500/30" }],
             owner: a.owner || "UNKNOWN",
             os: a.os || "UNKNOWN",
-          })));
+          }));
+          const existingNames = new Set(apiAssets.map((a: Asset) => a.name));
+          const merged = [...apiAssets, ...assets.filter((a) => !existingNames.has(a.name))];
+          setLiveAssets(merged);
         }
       }).catch(() => {});
     });
