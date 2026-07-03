@@ -4,6 +4,110 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import Shell from "@/components/Shell";
 
+const DARK = {
+  bg: "#0a0e1a",
+  card: "#111827",
+  cardBorder: "rgba(51,65,85,0.5)",
+  cyan: "#22d3ee",
+  cyanDim: "rgba(34,211,238,0.15)",
+  red: "#ef4444",
+  orange: "#f97316",
+  green: "#34a853",
+  purple: "#a78bfa",
+  textPrimary: "#e2e8f0",
+  textSecondary: "#94a3b8",
+  textMuted: "#64748b",
+  fontMono: '"JetBrains Mono", "SF Mono", "Fira Code", monospace',
+};
+
+const evidenceCards = [
+  {
+    type: "VOLATILE",
+    name: "MEM_DUMP_001.raw",
+    size: "16.0 GB",
+    detail: "Physical RAM",
+    progress: 100,
+    status: "INDEXED",
+    statusColor: DARK.cyan,
+    sha256: "8F2A...D4C1",
+    borderColor: DARK.cyan,
+    icon: "⚡",
+  },
+  {
+    type: "NETWORK",
+    name: "TRAFFIC_SNIFF.pcap",
+    size: "452 MB",
+    detail: "Wireshark Capture",
+    progress: 100,
+    status: "DECRYPTED",
+    statusColor: DARK.cyan,
+    sha256: "4C1B...8E7F",
+    borderColor: DARK.cyan,
+    icon: "🌐",
+  },
+  {
+    type: "NON-VOLATILE",
+    name: "SYSTEM_ROOT.e01",
+    size: "500 GB",
+    detail: "EnCase Image",
+    progress: 65,
+    status: "SCANNING...",
+    statusColor: DARK.red,
+    sha256: "12E9...A3B7",
+    borderColor: DARK.red,
+    icon: "💾",
+  },
+];
+
+const timelineEntries = [
+  {
+    time: "14:02:01.321",
+    title: "KERNEL HOOK DETECTED",
+    description: "System calls intercepted via LKM manipulation. Modification detected at memory address 0x7FFD4A2B.",
+    hmacStatus: "VALID",
+    hmacColor: DARK.green,
+    dotColor: DARK.cyan,
+  },
+  {
+    time: "14:02:05.881",
+    title: "PROCESS EXECUTION",
+    description: "Execution of powershell.exe -enc ... initiated by parent process explorer.exe.",
+    hmacStatus: "VALID",
+    hmacColor: DARK.green,
+    dotColor: DARK.cyan,
+  },
+  {
+    time: "14:03:12.110",
+    title: "EXFILTRATION ATTEMPT",
+    description: "Encrypted tunnel established to 192.168.10.42 (Target). Integrity seal...",
+    hmacStatus: "MISSING",
+    hmacColor: DARK.red,
+    dotColor: DARK.red,
+  },
+  {
+    time: "14:04:30.005",
+    title: "REGISTRY MODIFICATION",
+    description: "Persistence mechanism installed at HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+    hmacStatus: "VALID",
+    hmacColor: DARK.green,
+    dotColor: DARK.cyan,
+  },
+];
+
+const agents = [
+  { name: "Telemetry Stream", icon: "📡", active: false, task: "Monitoring" },
+  { name: "Threat Detection", icon: "🛡️", active: false, task: "Analyzing" },
+  { name: "Supervisor Mode", icon: "👁️", active: false, task: "Coordinating" },
+  { name: "Deep Forensics", icon: "🔬", active: true, task: "Analyzing memory dump" },
+];
+
+const keyFindings = [
+  { text: "Registry persistence detected (HKLM...)", success: true },
+  { text: "Encrypted files found (C:\\Users\\...)", success: true },
+  { text: "Original exfil endpoint unreachable", success: false },
+  { text: "Memory signature matches BlackCat v3", success: true },
+];
+
 export default function ForensicsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [evidenceData, setEvidenceData] = useState<any[]>([]);
@@ -18,411 +122,232 @@ export default function ForensicsPage() {
             size: "16.0 GB",
             progress: j.status === "completed" ? 100 : j.status === "in_progress" ? 65 : 0,
             status: j.status?.toUpperCase() || "PENDING",
-            borderColor: j.type === "volatile" ? "border-cyan-500" : j.type === "network" ? "border-blue-500" : "border-purple-500",
           })));
         }
       }).catch(() => {});
     });
   }, []);
 
-  const evidenceCards = [
-    {
-      type: "VOLATILE",
-      name: "MEM_DUMP_001.raw",
-      size: "16.0 GB • Physical RAM",
-      progress: 100,
-      status: "INDEXED",
-      statusColor: "text-cyan-400",
-      sha256: "8F2A...",
-      borderColor: "border-cyan-500",
-      progressColor: "bg-cyan-500",
-    },
-    {
-      type: "NETWORK",
-      name: "TRAFFIC_SNIFF.pcap",
-      size: "452 MB • Wireshark Capture",
-      progress: 100,
-      status: "DECRYPTED",
-      statusColor: "text-cyan-400",
-      sha256: "4C1B...",
-      borderColor: "border-cyan-500",
-      progressColor: "bg-cyan-500",
-    },
-    {
-      type: "NON-VOLATILE",
-      name: "SYSTEM_ROOT.e01",
-      size: "500 GB • EnCase Image",
-      progress: 65,
-      status: "SCANNING...",
-      statusColor: "text-red-400",
-      sha256: "12E9...",
-      borderColor: "border-red-500",
-      progressColor: "bg-red-500",
-    },
-  ];
-
-  const timelineEntries = [
-    {
-      time: "14:02:01.321",
-      title: "KERNEL HOOK DETECTED",
-      description:
-        "System calls intercepted via LKM manipulation. Modification detected at memory address 0x7FFD4A2B.",
-      hmacStatus: "VALID",
-      hmacColor: "text-green-400",
-      dotColor: "bg-cyan-500",
-    },
-    {
-      time: "14:02:05.881",
-      title: "PROCESS EXECUTION",
-      description:
-        'Execution of powershell.exe -enc ... initiated by parent process explorer.exe.',
-      hmacStatus: "VALID",
-      hmacColor: "text-green-400",
-      dotColor: "bg-cyan-500",
-    },
-    {
-      time: "14:03:12.110",
-      title: "EXFILTRATION ATTEMPT",
-      description:
-        "Encrypted tunnel established to 192.168.10.42 (Target). Integrity seal...",
-      hmacStatus: "MISSING",
-      hmacColor: "text-red-400",
-      dotColor: "bg-red-500",
-    },
-  ];
-
-  const agents = [
-    { name: "Telemetry Stream", icon: "📡", active: false },
-    { name: "Threat Detection", icon: "🛡️", active: false },
-    { name: "Supervisor Mode", icon: "👁️", active: false },
-    { name: "Deep Forensics", icon: "🔬", active: true },
-  ];
-
-  const keyFindings = [
-    { text: "Registry... (HKLM...)", success: true },
-    { text: "Encryption... (C:\\Use...)", success: true },
-    { text: "Original... network...", success: false },
-  ];
-
   return (
     <Shell>
-      <div className="max-w-7xl mx-auto">
-        <div className="flex gap-6">
-        {/* Main Content */}
-        <div className="flex-1">
-          {/* Header */}
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-8"
-          >
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-cyan-500/20 rounded-lg flex items-center justify-center border border-cyan-500/30">
-                <svg
-                  className="w-6 h-6 text-cyan-400"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23.693L5 14.5m14.8.8l1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0112 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5"
-                  />
-                </svg>
+      <div style={{ background: DARK.bg, minHeight: "100vh", margin: "-24px", padding: 20, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', color: DARK.textPrimary, overflow: "auto" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: 16, flex: 1 }}>
+
+          {/* ════════ LEFT: MAIN CONTENT ════════ */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+
+            {/* ── HEADER + SEARCH ── */}
+            <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+                <div style={{ width: 40, height: 40, background: `${DARK.cyan}20`, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", border: `1px solid ${DARK.cyan}30` }}>
+                  <svg className="w-5 h-5" style={{ width: 20, height: 20, color: DARK.cyan }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23.693L5 14.5m14.8.8l1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0112 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" />
+                  </svg>
+                </div>
+                <div>
+                  <h1 style={{ fontSize: 22, fontWeight: 700, color: DARK.textPrimary, margin: 0 }}>Forensics Lab</h1>
+                  <span style={{ fontSize: 11, color: DARK.cyan, fontFamily: DARK.fontMono }}>CASE: 2023-DELTA-9</span>
+                </div>
               </div>
-              <h1 className="text-2xl font-bold text-white">Forensics Lab</h1>
-              <span className="px-3 py-1 bg-cyan-500/20 text-cyan-400 text-sm rounded-full border border-cyan-500/30">
-                CASE: 2023-DELTA-9
-              </span>
-            </div>
 
-            <div className="flex items-center gap-3">
-              <div className="flex-1 relative">
-                <svg
-                  className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  aria-hidden="true"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"
+              <div style={{ display: "flex", gap: 12 }}>
+                <div style={{ flex: 1, position: "relative" }}>
+                  <svg style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", width: 16, height: 16, color: DARK.textMuted }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                  </svg>
+                  <input
+                    type="text"
+                    placeholder="Search evidence logs..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    style={{ width: "100%", paddingLeft: 36, paddingRight: 16, paddingTop: 10, paddingBottom: 10, background: "#0d1117", border: `1px solid ${DARK.cardBorder}`, borderRadius: 8, color: DARK.textPrimary, fontSize: 13, outline: "none", fontFamily: DARK.fontMono }}
                   />
-                </svg>
-                <input
-                  id="forensics-search"
-                  type="text"
-                  placeholder="Search evidence logs..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  aria-label="Search evidence logs"
-                  className="w-full pl-10 pr-4 py-2.5 bg-gray-900 border border-gray-700 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
-                />
-              </div>
-              <button className="px-4 py-2.5 border border-cyan-500 text-cyan-400 rounded-lg hover:bg-cyan-500/10 transition-colors font-medium">
-                Ingest New Image
-              </button>
-            </div>
-          </motion.div>
-
-          {/* Evidence Catalog */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="mb-8"
-          >
-            <div className="mb-4">
-              <h2 className="text-sm font-semibold text-gray-400 tracking-wider">
-                EVIDENCE CATALOG
-              </h2>
-              <p className="text-sm text-gray-500">
-                Verified forensic acquisitions for Case Delta-9
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {evidenceCards.map((card, index) => (
-                <motion.div
-                  key={card.name}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.15 + index * 0.05 }}
-                  className={`bg-gray-900 border rounded-lg p-4`}
-                  style={{ borderColor: `${card.borderColor}30` }}
+                </div>
+                <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                  style={{ padding: "10px 20px", fontSize: 12, fontWeight: 600, color: DARK.cyan, background: "transparent", border: `1px solid ${DARK.cyan}60`, borderRadius: 8, cursor: "pointer", fontFamily: DARK.fontMono, whiteSpace: "nowrap" }}
                 >
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <div
-                        className={`w-8 h-8 rounded flex items-center justify-center ${
-                          card.type === "VOLATILE"
-                            ? "bg-purple-500/20"
-                            : card.type === "NETWORK"
-                            ? "bg-cyan-500/20"
-                            : "bg-orange-500/20"
-                        }`}
-                      >
-                        <span className="text-lg">
-                          {card.type === "VOLATILE"
-                            ? "⚡"
-                            : card.type === "NETWORK"
-                            ? "🌐"
-                            : "💾"}
-                        </span>
+                  INGEST NEW IMAGE
+                </motion.button>
+              </div>
+            </motion.div>
+
+            {/* ── EVIDENCE CATALOG ── */}
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.1em", color: DARK.textMuted, marginBottom: 4, fontFamily: DARK.fontMono }}>EVIDENCE CATALOG</div>
+              <div style={{ fontSize: 11, color: DARK.textMuted, marginBottom: 12 }}>Verified forensic acquisitions for Case Delta-9</div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+                {evidenceCards.map((card, i) => (
+                  <motion.div
+                    key={card.name}
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.15 + i * 0.06 }}
+                    style={{ background: DARK.card, border: `1px solid ${card.borderColor}30`, borderRadius: 10, padding: 18 }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+                      <div style={{ width: 36, height: 36, borderRadius: 8, background: `${card.borderColor}15`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>
+                        {card.icon}
                       </div>
-                      <span className="text-xs text-gray-400 uppercase tracking-wider">
-                        {card.type}
-                      </span>
+                      <div>
+                        <div style={{ fontSize: 10, fontWeight: 600, color: DARK.textMuted, letterSpacing: "0.06em" }}>{card.type}</div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: DARK.textPrimary, fontFamily: DARK.fontMono }}>{card.name}</div>
+                      </div>
                     </div>
-                  </div>
 
-                  <h3 className="text-sm font-medium text-white mb-1">
-                    {card.name}
-                  </h3>
-                  <p className="text-xs text-gray-500 mb-3">{card.size}</p>
+                    <div style={{ fontSize: 11, color: DARK.textMuted, marginBottom: 10 }}>
+                      {card.size} · {card.detail}
+                    </div>
 
-                  <div className="mb-3">
-                    <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full ${card.progressColor} rounded-full`}
-                        style={{ width: `${card.progress}%` }}
+                    <div style={{ width: "100%", height: 4, background: `${DARK.textMuted}30`, borderRadius: 2, overflow: "hidden", marginBottom: 12 }}>
+                      <motion.div initial={{ width: 0 }} animate={{ width: `${card.progress}%` }} transition={{ duration: 1.2, delay: 0.3 + i * 0.1 }}
+                        style={{ height: "100%", background: `linear-gradient(90deg, ${card.borderColor}, ${card.borderColor}cc)`, borderRadius: 2, boxShadow: card.progress < 100 ? `0 0 8px ${DARK.orange}40` : "none" }}
                       />
                     </div>
-                  </div>
 
-                  <div className="flex items-center justify-between">
-                    <span className={`text-xs font-medium ${card.statusColor}`}>
-                      STATUS: {card.status}
-                    </span>
-                    <span className="text-xs text-gray-500">
-                      SHA-256: {card.sha256}
-                    </span>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          </motion.div>
-
-          {/* Evidence Timeline */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.25 }}
-          >
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-semibold text-gray-400 tracking-wider">
-                Evidence Timeline
-              </h2>
-              <div className="flex items-center gap-2">
-                <button className="px-3 py-1.5 bg-green-500/20 text-green-400 text-xs rounded-lg border border-green-500/30">
-                  HMAC VERIFIED
-                </button>
-                <button className="p-1.5 text-gray-400 hover:text-white transition-colors">
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
-                    />
-                  </svg>
-                </button>
-              </div>
-            </div>
-
-            <div className="relative">
-              {/* Timeline line */}
-              <div className="absolute left-[7px] top-2 bottom-2 w-0.5 bg-gray-800" />
-
-              <div className="space-y-6">
-                {timelineEntries.map((entry, index) => (
-                  <motion.div
-                    key={entry.time}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.3 + index * 0.1 }}
-                    className="relative pl-8"
-                  >
-                    {/* Dot */}
-                    <div
-                      className={`absolute left-0 top-2 w-4 h-4 rounded-full ${entry.dotColor} border-2 border-gray-950`}
-                    />
-
-                    <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-                      <div className="flex items-center justify-between mb-2 gap-3">
-                        <span className="text-xs text-gray-500 font-mono whitespace-nowrap flex-shrink-0">
-                          {entry.time}
-                        </span>
-                        <span
-                          className={`text-xs font-medium flex-shrink-0 whitespace-nowrap ${
-                            entry.hmacStatus === "VALID"
-                              ? "text-green-400"
-                              : "text-red-400"
-                          }`}
-                        >
-                          HMAC-SIGNATURE: {entry.hmacStatus}
-                        </span>
-                      </div>
-                      <h4 className="text-sm font-semibold text-white mb-2">
-                        {entry.title}
-                      </h4>
-                      <p className="text-sm text-gray-400 leading-relaxed">
-                        {entry.description}
-                      </p>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <span style={{ fontSize: 10, fontWeight: 600, color: card.statusColor, fontFamily: DARK.fontMono }}>STATUS: {card.status}</span>
+                      <span style={{ fontSize: 9, color: DARK.textMuted, fontFamily: DARK.fontMono }}>SHA: {card.sha256}</span>
                     </div>
                   </motion.div>
                 ))}
               </div>
-            </div>
-          </motion.div>
-        </div>
+            </motion.div>
 
-        {/* Right Sidebar */}
-        <motion.div
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.2 }}
-          className="w-80 flex-shrink-0"
-        >
-          <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 sticky top-6">
-            <div className="mb-4">
-              <h3 className="text-sm font-semibold text-gray-400 tracking-wider">
-                AI AGENTS
-              </h3>
-              <p className="text-xs text-gray-500">Active Forensic Tasks</p>
-            </div>
-
-            <div className="mb-4">
-              <span className="px-3 py-1 bg-cyan-500/20 text-cyan-400 text-xs rounded-full border border-cyan-500/30">
-                AGENTS ONLINE: 04
-              </span>
-            </div>
-
-            <div className="space-y-2 mb-6">
-              {agents.map((agent) => (
-                <div
-                  key={agent.name}
-                  className={`flex items-center gap-3 p-3 rounded-lg ${
-                    agent.active
-                      ? "bg-cyan-500/10 border border-cyan-500/30"
-                      : "bg-gray-800/50 border border-gray-700/50"
-                  }`}
-                >
-                  <span className="text-lg">{agent.icon}</span>
-                  <span
-                    className={`text-sm ${
-                      agent.active ? "text-cyan-400" : "text-gray-300"
-                    }`}
-                  >
-                    {agent.name}
-                  </span>
-                </div>
-              ))}
-            </div>
-
-            <div className="mb-4">
-              <h4 className="text-xs font-semibold text-gray-400 tracking-wider mb-2">
-                CURRENT HYPOTHESIS
-              </h4>
-              <div className="bg-gray-800/50 border border-gray-700/50 rounded-lg p-3">
-                <p className="text-xs text-gray-400">Pending analysis...</p>
-              </div>
-            </div>
-
-            <div className="mb-4">
-              <h4 className="text-xs font-semibold text-gray-400 tracking-wider mb-2">
-                ANALYSIS
-              </h4>
-              <div className="space-y-2">
-                <div className="bg-gray-800/50 border border-gray-700/50 rounded-lg p-3">
-                  <p className="text-xs text-gray-300">Artifact A...</p>
-                </div>
-                <div className="bg-gray-800/50 border border-gray-700/50 rounded-lg p-3">
-                  <p className="text-xs text-gray-300">Timeline I...</p>
-                </div>
-                <div className="bg-gray-800/50 border border-gray-700/50 rounded-lg p-3">
-                  <p className="text-xs text-gray-300">Payload Id...</p>
+            {/* ── EVIDENCE TIMELINE ── */}
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.1em", color: DARK.textMuted, fontFamily: DARK.fontMono }}>EVIDENCE TIMELINE</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 9, fontWeight: 600, color: DARK.green, background: `${DARK.green}15`, padding: "3px 8px", borderRadius: 4, fontFamily: DARK.fontMono }}>HMAC VERIFIED</span>
+                  <button style={{ background: "transparent", border: `1px solid ${DARK.cardBorder}`, borderRadius: 4, padding: "4px 8px", color: DARK.textMuted, cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontSize: 10, fontFamily: DARK.fontMono }}>
+                    <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></svg>
+                    FILTER
+                  </button>
                 </div>
               </div>
-            </div>
 
-            <div className="mb-4">
-              <h4 className="text-xs font-semibold text-gray-400 tracking-wider mb-2">
-                KEY FINDINGS
-              </h4>
-              <div className="space-y-2">
-                {keyFindings.map((finding, index) => (
-                  <div
-                    key={index}
-                    className="flex items-start gap-2 text-xs text-gray-400"
+              <div style={{ position: "relative", paddingLeft: 24 }}>
+                <div style={{ position: "absolute", left: 7, top: 8, bottom: 8, width: 2, background: `${DARK.textMuted}30` }} />
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                  {timelineEntries.map((entry, i) => (
+                    <motion.div
+                      key={entry.time}
+                      initial={{ opacity: 0, x: -15 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.3 + i * 0.08 }}
+                      style={{ position: "relative" }}
+                    >
+                      <div style={{ position: "absolute", left: -20, top: 8, width: 10, height: 10, borderRadius: "50%", background: entry.dotColor, border: `2px solid ${DARK.bg}` }} />
+
+                      <div style={{ background: DARK.card, border: `1px solid ${DARK.cardBorder}`, borderRadius: 10, padding: 16 }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                          <span style={{ fontSize: 11, color: DARK.textMuted, fontFamily: DARK.fontMono }}>{entry.time}</span>
+                          <span style={{ fontSize: 10, fontWeight: 600, color: entry.hmacColor, fontFamily: DARK.fontMono }}>HMAC-SIGNATURE: {entry.hmacStatus}</span>
+                        </div>
+                        <h4 style={{ fontSize: 13, fontWeight: 700, color: DARK.textPrimary, margin: "0 0 6px 0" }}>{entry.title}</h4>
+                        <p style={{ fontSize: 12, color: DARK.textSecondary, lineHeight: 1.6, margin: 0 }}>{entry.description}</p>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          </div>
+
+          {/* ════════ RIGHT SIDEBAR ════════ */}
+          <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }}
+            style={{ display: "flex", flexDirection: "column", gap: 16 }}
+          >
+            {/* ── AI AGENT FLEET ── */}
+            <div style={{ background: DARK.card, border: `1px solid ${DARK.cardBorder}`, borderRadius: 12, padding: 20 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+                <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.1em", color: DARK.textMuted, fontFamily: DARK.fontMono }}>AI AGENT FLEET</span>
+                <span style={{ fontSize: 9, fontWeight: 600, color: DARK.cyan, background: `${DARK.cyan}15`, padding: "3px 8px", borderRadius: 4, fontFamily: DARK.fontMono }}>4 ONLINE</span>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {agents.map((agent, i) => (
+                  <motion.div
+                    key={agent.name}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.3 + i * 0.06 }}
+                    style={{
+                      background: agent.active ? `${DARK.cyan}10` : DARK.card,
+                      border: `1px solid ${agent.active ? `${DARK.cyan}40` : DARK.cardBorder}`,
+                      borderRadius: 8,
+                      padding: "12px 14px",
+                    }}
                   >
-                    {finding.success ? (
-                      <span className="text-green-400 mt-0.5">✓</span>
-                    ) : (
-                      <span className="text-red-400 mt-0.5">✗</span>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                      <span style={{ fontSize: 14 }}>{agent.icon}</span>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: agent.active ? DARK.cyan : DARK.textPrimary, fontFamily: DARK.fontMono, flex: 1 }}>{agent.name}</span>
+                      {agent.active && <div style={{ width: 8, height: 8, borderRadius: "50%", background: DARK.green, boxShadow: `0 0 8px ${DARK.green}` }} />}
+                    </div>
+                    <div style={{ fontSize: 10, color: DARK.textMuted }}>{agent.task}</div>
+                    {agent.active && (
+                      <div style={{ width: "100%", height: 3, background: `${DARK.textMuted}30`, borderRadius: 2, overflow: "hidden", marginTop: 8 }}>
+                        <motion.div initial={{ width: 0 }} animate={{ width: "72%" }} transition={{ duration: 1.5, delay: 0.5 }}
+                          style={{ height: "100%", background: `linear-gradient(90deg, ${DARK.cyan}, ${DARK.cyan}cc)`, borderRadius: 2 }}
+                        />
+                      </div>
                     )}
+                  </motion.div>
+                ))}
+              </div>
+            </div>
+
+            {/* ── CURRENT HYPOTHESIS ── */}
+            <div style={{ background: DARK.card, border: `1px solid ${DARK.cardBorder}`, borderRadius: 12, padding: 20 }}>
+              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", color: DARK.textMuted, marginBottom: 10 }}>CURRENT HYPOTHESIS</div>
+              <div style={{ background: "#0d1117", border: `1px solid ${DARK.cardBorder}`, borderRadius: 8, padding: 14, borderLeft: `3px solid ${DARK.purple}` }}>
+                <p style={{ fontSize: 12, color: DARK.textSecondary, lineHeight: 1.6, margin: 0, fontStyle: "italic" }}>
+                  &quot;Attacker leveraged Log4Shell vulnerability to establish persistence via scheduled task, then moved laterally to DB tier for data exfiltration.&quot;
+                </p>
+              </div>
+            </div>
+
+            {/* ── ANALYSIS ── */}
+            <div style={{ background: DARK.card, border: `1px solid ${DARK.cardBorder}`, borderRadius: 12, padding: 20 }}>
+              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", color: DARK.textMuted, marginBottom: 10 }}>ANALYSIS</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {[
+                  { title: "Artifact A", desc: "Memory analysis reveals injected shellcode in svchost.exe", color: DARK.cyan },
+                  { title: "Timeline I", desc: "Initial compromise at 13:45 UTC, 17 min dwell before detection", color: DARK.orange },
+                  { title: "Payload Id", desc: "Base64 encoded PowerShell with AES-256 encryption layer", color: DARK.purple },
+                ].map((item, i) => (
+                  <div key={i} style={{ background: "#0d1117", border: `1px solid ${DARK.cardBorder}`, borderRadius: 8, padding: 12, borderLeft: `3px solid ${item.color}` }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: item.color, marginBottom: 4, fontFamily: DARK.fontMono }}>{item.title}</div>
+                    <div style={{ fontSize: 11, color: DARK.textSecondary }}>{item.desc}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* ── KEY FINDINGS ── */}
+            <div style={{ background: DARK.card, border: `1px solid ${DARK.cardBorder}`, borderRadius: 12, padding: 20 }}>
+              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", color: DARK.textMuted, marginBottom: 10 }}>KEY FINDINGS</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {keyFindings.map((finding, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 12, color: DARK.textSecondary }}>
+                    <span style={{ color: finding.success ? DARK.green : DARK.red, marginTop: 2, flexShrink: 0 }}>{finding.success ? "✓" : "✗"}</span>
                     <span>{finding.text}</span>
                   </div>
                 ))}
               </div>
             </div>
 
-            <button className="w-full px-4 py-2.5 bg-cyan-500 text-gray-950 rounded-lg font-medium hover:bg-cyan-400 transition-colors">
-              GENERATE...
-            </button>
-          </div>
-        </motion.div>
-      </div>
+            {/* ── GENERATE REPORT ── */}
+            <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+              style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "12px 20px", fontSize: 13, fontWeight: 700, color: DARK.bg, background: `linear-gradient(135deg, ${DARK.cyan}, #06b6d4)`, border: "none", borderRadius: 8, cursor: "pointer", fontFamily: DARK.fontMono, letterSpacing: "0.05em" }}
+            >
+              <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /><polyline points="10 9 9 9 8 9" /></svg>
+              GENERATE REPORT
+            </motion.button>
+          </motion.div>
+        </div>
       </div>
     </Shell>
   );

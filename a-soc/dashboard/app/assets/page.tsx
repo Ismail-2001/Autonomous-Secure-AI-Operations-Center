@@ -4,9 +4,27 @@ import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
 import Shell from "@/components/Shell";
 
+const DARK = {
+  bg: "#0a0e1a",
+  card: "#111827",
+  cardBorder: "rgba(51,65,85,0.5)",
+  cyan: "#22d3ee",
+  cyanDim: "rgba(34,211,238,0.15)",
+  red: "#ef4444",
+  orange: "#f97316",
+  green: "#34a853",
+  purple: "#a78bfa",
+  textPrimary: "#e2e8f0",
+  textSecondary: "#94a3b8",
+  textMuted: "#64748b",
+  fontMono: '"JetBrains Mono", "SF Mono", "Fira Code", monospace',
+};
+
 interface Tag {
   label: string;
   color: string;
+  bg: string;
+  border: string;
 }
 
 interface Asset {
@@ -16,6 +34,9 @@ interface Asset {
   tags: Tag[];
   owner: string;
   os: string;
+  type: string;
+  lastSeen: string;
+  vulns: number;
 }
 
 const assets: Asset[] = [
@@ -24,116 +45,160 @@ const assets: Asset[] = [
     ip: "10.0.4.122",
     riskScore: 72,
     tags: [
-      { label: "LOG4SHELL", color: "bg-red-500/20 text-red-400 border-red-500/30" },
-      { label: "CVE-2023", color: "bg-orange-500/20 text-orange-400 border-orange-500/30" },
-      { label: "+3", color: "bg-gray-500/20 text-gray-400 border-gray-500/30" },
+      { label: "LOG4SHELL", color: DARK.red, bg: "#3b1010", border: "#7f1d1d" },
+      { label: "CVE-2023", color: DARK.orange, bg: "#3b2510", border: "#78350f" },
+      { label: "+3", color: DARK.textMuted, bg: "#1e293b", border: "#334155" },
     ],
     owner: "SEC_OPS_A",
     os: "LINUX_DEBIAN",
+    type: "SERVER",
+    lastSeen: "2s ago",
+    vulns: 5,
   },
   {
     name: "K8S-NODE-04",
     ip: "10.0.12.89",
     riskScore: 12,
     tags: [
-      { label: "HEALTHY", color: "bg-green-500/20 text-green-400 border-green-500/30" },
-      { label: "ENCRYPTED", color: "bg-green-500/20 text-green-400 border-green-500/30" },
+      { label: "HEALTHY", color: DARK.green, bg: "#103b20", border: "#14532d" },
+      { label: "ENCRYPTED", color: DARK.green, bg: "#103b20", border: "#14532d" },
     ],
     owner: "INFRA_TEAM",
     os: "UBUNTU_22",
+    type: "CONTAINER",
+    lastSeen: "5s ago",
+    vulns: 0,
   },
   {
     name: "STATION-100",
     ip: "192.168.1.10",
     riskScore: 45,
     tags: [
-      { label: "OUTDATED_OS", color: "bg-orange-500/20 text-orange-400 border-orange-500/30" },
+      { label: "OUTDATED_OS", color: DARK.orange, bg: "#3b2510", border: "#78350f" },
     ],
     owner: "USER_ID_441",
     os: "MACOS_13",
+    type: "ENDPOINT",
+    lastSeen: "1m ago",
+    vulns: 2,
   },
   {
     name: "STATION-101",
     ip: "192.168.1.11",
     riskScore: 46,
     tags: [
-      { label: "OUTDATED_OS", color: "bg-orange-500/20 text-orange-400 border-orange-500/30" },
+      { label: "OUTDATED_OS", color: DARK.orange, bg: "#3b2510", border: "#78350f" },
     ],
     owner: "USER_ID_442",
     os: "MACOS_13",
+    type: "ENDPOINT",
+    lastSeen: "3m ago",
+    vulns: 2,
   },
   {
     name: "STATION-102",
     ip: "192.168.1.12",
     riskScore: 44,
     tags: [
-      { label: "OUTDATED_OS", color: "bg-orange-500/20 text-orange-400 border-orange-500/30" },
+      { label: "OUTDATED_OS", color: DARK.orange, bg: "#3b2510", border: "#78350f" },
     ],
     owner: "USER_ID_443",
     os: "MACOS_13",
+    type: "ENDPOINT",
+    lastSeen: "45s ago",
+    vulns: 1,
   },
   {
-    name: "STATION-103",
-    ip: "192.168.1.13",
-    riskScore: 47,
+    name: "FW-CORE-01",
+    ip: "10.0.0.1",
+    riskScore: 8,
     tags: [
-      { label: "OUTDATED_OS", color: "bg-orange-500/20 text-orange-400 border-orange-500/30" },
+      { label: "HARDENED", color: DARK.green, bg: "#103b20", border: "#14532d" },
+      { label: "FIPS_140", color: DARK.cyan, bg: "#102a3b", border: "#1e3a5f" },
     ],
-    owner: "USER_ID_444",
-    os: "MACOS_13",
+    owner: "NETOPS",
+    os: "PANOS_11",
+    type: "FIREWALL",
+    lastSeen: "1s ago",
+    vulns: 0,
   },
   {
-    name: "STATION-104",
-    ip: "192.168.1.14",
-    riskScore: 43,
+    name: "SIEM-COLLECTOR",
+    ip: "10.0.5.200",
+    riskScore: 15,
     tags: [
-      { label: "OUTDATED_OS", color: "bg-orange-500/20 text-orange-400 border-orange-500/30" },
+      { label: "HEALTHY", color: DARK.green, bg: "#103b20", border: "#14532d" },
     ],
-    owner: "USER_ID_445",
-    os: "MACOS_13",
+    owner: "SOC_TEAM",
+    os: "RHEL_9",
+    type: "SERVER",
+    lastSeen: "0s ago",
+    vulns: 0,
   },
   {
-    name: "STATION-105",
-    ip: "192.168.1.15",
-    riskScore: 48,
+    name: "WORKSTATION-205",
+    ip: "192.168.1.205",
+    riskScore: 89,
     tags: [
-      { label: "OUTDATED_OS", color: "bg-orange-500/20 text-orange-400 border-orange-500/30" },
+      { label: "RANSOMWARE", color: DARK.red, bg: "#3b1010", border: "#7f1d1d" },
+      { label: "ENCRYPTING", color: DARK.red, bg: "#3b1010", border: "#7f1d1d" },
     ],
-    owner: "USER_ID_446",
-    os: "MACOS_13",
+    owner: "USER_ID_892",
+    os: "WIN_11",
+    type: "ENDPOINT",
+    lastSeen: "0s ago",
+    vulns: 8,
   },
 ];
 
 const telemetryLogs = [
-  { time: "14:02:01", tag: "CONN", msg: "INCOMING: 192.168.1.55:443 → LOCAL:60212" },
-  { time: "14:01:58", tag: "AUTH", msg: "FAILED_LOGIN: root FROM 182.1.2.91" },
-  { time: "14:01:44", tag: "SYS", msg: "KERNEL_UPDATE: COMPLETED_WITHOUT_REBOOT" },
-  { time: "13:59:12", tag: "CONN", msg: "ESTABLISHED: DB_REPL_SERVICE" },
-  { time: "13:58:20", tag: "WARN", msg: "DISK_USAGE: 88% ON /var/lib/docker" },
-  { time: "13:55:01", tag: "INFO", msg: "HEARTBEAT_ACK: LATENCY 12ms" },
+  { time: "14:02:01", tag: "CONN", tagColor: DARK.cyan, msg: "INCOMING: 192.168.1.55:443 → LOCAL:60212" },
+  { time: "14:01:58", tag: "AUTH", tagColor: DARK.red, msg: "FAILED_LOGIN: root FROM 182.1.2.91" },
+  { time: "14:01:44", tag: "SYS", tagColor: DARK.green, msg: "KERNEL_UPDATE: COMPLETED_WITHOUT_REBOOT" },
+  { time: "13:59:12", tag: "CONN", tagColor: DARK.cyan, msg: "ESTABLISHED: DB_REPL_SERVICE" },
+  { time: "13:58:20", tag: "WARN", tagColor: DARK.orange, msg: "DISK_USAGE: 88% ON /var/lib/docker" },
+  { time: "13:55:01", tag: "INFO", tagColor: DARK.textMuted, msg: "HEARTBEAT_ACK: LATENCY 12ms" },
+  { time: "13:52:30", tag: "SEC", tagColor: DARK.purple, msg: "CERT_ROTATION: TLS_CERT_2024_RENEWED" },
+  { time: "13:50:15", tag: "SCAN", tagColor: DARK.cyan, msg: "VULN_SCAN_COMPLETE: 0 NEW FINDINGS" },
+];
+
+const topologyNodes = [
+  { id: "gw", label: "GATEWAY", x: 60, y: 30, color: DARK.cyan },
+  { id: "fw", label: "FW-01", x: 160, y: 30, color: DARK.cyan },
+  { id: "srv", label: "SRV-01", x: 260, y: 30, color: DARK.red },
+  { id: "db", label: "DB-01", x: 360, y: 30, color: DARK.orange },
+  { id: "k8s", label: "K8S-04", x: 160, y: 80, color: DARK.green },
+  { id: "siem", label: "SIEM", x: 260, y: 80, color: DARK.cyan },
+];
+
+const topologyEdges = [
+  { from: "gw", to: "fw" },
+  { from: "fw", to: "srv" },
+  { from: "srv", to: "db" },
+  { from: "fw", to: "k8s" },
+  { from: "srv", to: "siem" },
 ];
 
 const riskColor = (score: number) => {
-  if (score >= 60) return "text-red-400";
-  if (score >= 30) return "text-orange-400";
-  return "text-green-400";
+  if (score >= 60) return DARK.red;
+  if (score >= 30) return DARK.orange;
+  return DARK.green;
 };
 
-const tagColorForTag = (label: string) => {
-  if (label === "LOG4SHELL") return "bg-red-500/20 text-red-400 border-red-500/30";
-  if (label === "CVE-2023") return "bg-orange-500/20 text-orange-400 border-orange-500/30";
-  if (label === "HEALTHY" || label === "ENCRYPTED") return "bg-green-500/20 text-green-400 border-green-500/30";
-  if (label === "OUTDATED_OS") return "bg-orange-500/20 text-orange-400 border-orange-500/30";
-  return "bg-gray-500/20 text-gray-400 border-gray-500/30";
+const typeIcon = (type: string) => {
+  switch (type) {
+    case "SERVER": return "🖥️";
+    case "CONTAINER": return "📦";
+    case "ENDPOINT": return "💻";
+    case "FIREWALL": return "🛡️";
+    default: return "📡";
+  }
 };
 
 export default function AssetsPage() {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [selectedAsset, setSelectedAsset] = useState<Asset>(assets[0]);
   const [filterOs, setFilterOs] = useState("ALL_SYS");
-  const [filterLoc, setFilterLoc] = useState("GLOBAL");
-  const [filterRisk, setFilterRisk] = useState("CRITICAL_ONLY");
-  const [appliedFilters, setAppliedFilters] = useState({ os: "ALL_SYS", loc: "GLOBAL", risk: "CRITICAL_ONLY" });
+  const [filterRisk, setFilterRisk] = useState("ALL");
   const [liveAssets, setLiveAssets] = useState<Asset[]>(assets);
 
   useEffect(() => {
@@ -145,10 +210,13 @@ export default function AssetsPage() {
             ip: a.ip_address,
             riskScore: a.risk_score,
             tags: a.vulnerabilities > 0
-              ? [{ label: `${a.vulnerabilities} CVE`, color: "bg-red-500/20 text-red-400 border-red-500/30" }]
-              : [{ label: "HEALTHY", color: "bg-green-500/20 text-green-400 border-green-500/30" }],
+              ? [{ label: `${a.vulnerabilities} CVE`, color: DARK.red, bg: "#3b1010", border: "#7f1d1d" }]
+              : [{ label: "HEALTHY", color: DARK.green, bg: "#103b20", border: "#14532d" }],
             owner: a.owner || "UNKNOWN",
             os: a.os || "UNKNOWN",
+            type: "SERVER",
+            lastSeen: "0s ago",
+            vulns: a.vulnerabilities || 0,
           }));
           const existingNames = new Set(apiAssets.map((a: Asset) => a.name));
           const merged = [...apiAssets, ...assets.filter((a) => !existingNames.has(a.name))];
@@ -159,266 +227,260 @@ export default function AssetsPage() {
   }, []);
 
   const filteredAssets = liveAssets.filter((asset) => {
-    if (appliedFilters.os !== "ALL_SYS" && asset.os !== appliedFilters.os) return false;
-    if (appliedFilters.risk === "CRITICAL_ONLY" && asset.riskScore < 60) return false;
-    if (appliedFilters.risk === "HIGH" && asset.riskScore < 30) return false;
+    if (filterOs !== "ALL_SYS" && asset.os !== filterOs) return false;
+    if (filterRisk === "CRITICAL" && asset.riskScore < 60) return false;
+    if (filterRisk === "HIGH" && (asset.riskScore < 30 || asset.riskScore >= 60)) return false;
     return true;
   });
 
-  const applyFilters = () => setAppliedFilters({ os: filterOs, loc: filterLoc, risk: filterRisk });
+  const totalAssets = liveAssets.length;
+  const criticalCount = liveAssets.filter((a) => a.riskScore >= 60).length;
+  const unmanagedCount = liveAssets.filter((a) => a.owner === "UNKNOWN").length;
+  const healthyCount = liveAssets.filter((a) => a.riskScore < 30).length;
 
   return (
     <Shell>
-      <div className="flex h-screen overflow-hidden">
-        {/* Main Content */}
-        <div className="flex-1 overflow-y-auto p-6">
-          {/* TOP KPI CARDS */}
-          <div className="grid grid-cols-3 gap-4 mb-6">
-            {/* Total Managed Assets */}
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3 }}
-              className="bg-[#111118] border border-cyan-500/20 rounded-lg p-5"
-            >
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-gray-400 text-xs tracking-wider">TOTAL_MANAGED_ASSETS</span>
-                <div className="w-8 h-8 rounded bg-cyan-500/10 flex items-center justify-center">
-                  <svg className="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
-                  </svg>
-                </div>
-              </div>
-              <div className="text-3xl font-bold text-white mb-1">14.2k</div>
-              <div className="text-xs text-cyan-400 mb-3">+2.4% vs last scan</div>
-              <div className="w-full h-1.5 bg-gray-800 rounded-full overflow-hidden">
-                <div className="h-full bg-cyan-500 rounded-full" style={{ width: "78%" }} />
-              </div>
-            </motion.div>
+      <div style={{ background: DARK.bg, minHeight: "100vh", margin: "-24px", padding: 20, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', color: DARK.textPrimary, overflow: "auto" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: 16, flex: 1 }}>
 
-            {/* Unmanaged Entities */}
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3, delay: 0.05 }}
-              className="bg-[#111118] border border-orange-500/20 rounded-lg p-5"
-            >
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-gray-400 text-xs tracking-wider">UNMANAGED_ENTITIES</span>
-                <div className="w-8 h-8 rounded bg-orange-500/10 flex items-center justify-center">
-                  <svg className="w-4 h-4 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                  </svg>
-                </div>
-              </div>
-              <div className="text-3xl font-bold text-white mb-1">82</div>
-              <div className="text-xs text-orange-400 mb-3">New discovery required</div>
-              <div className="w-full h-1.5 bg-gray-800 rounded-full overflow-hidden">
-                <div className="h-full bg-orange-500 rounded-full" style={{ width: "34%" }} />
-              </div>
-            </motion.div>
+          {/* ════════ LEFT: MAIN CONTENT ════════ */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
 
-            {/* Vulnerable Nodes */}
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3, delay: 0.1 }}
-              className="bg-[#111118] border border-red-500/20 rounded-lg p-5"
-            >
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-gray-400 text-xs tracking-wider">VULNERABLE_NODES</span>
-                <div className="w-8 h-8 rounded bg-red-500/10 flex items-center justify-center">
-                  <svg className="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                  </svg>
-                </div>
-              </div>
-              <div className="text-3xl font-bold text-white mb-1">312</div>
-              <div className="text-xs text-red-400 mb-3">Critical patching req.</div>
-              <div className="w-full h-1.5 bg-gray-800 rounded-full overflow-hidden">
-                <div className="h-full bg-red-500 rounded-full" style={{ width: "56%" }} />
-              </div>
-            </motion.div>
-          </div>
-
-          {/* FILTER BAR */}
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, delay: 0.15 }}
-            className="bg-[#111118] border border-gray-800 rounded-lg p-4 mb-6 flex items-center gap-4"
-          >
-            <span className="text-cyan-400 font-bold text-sm tracking-wider mr-4">Inventory Matrix</span>
-            <div className="flex items-center gap-2">
-              <label htmlFor="filter-os" className="text-gray-500 text-xs">OS:</label>
-              <select id="filter-os" value={filterOs} onChange={(e) => setFilterOs(e.target.value)} className="bg-gray-800 border border-gray-700 text-white text-xs px-3 py-1.5 rounded focus:outline-none focus:border-cyan-500/50">
-                <option>ALL_SYS</option>
-                <option>LINUX_DEBIAN</option>
-                <option>UBUNTU_22</option>
-                <option>MACOS_13</option>
-              </select>
-            </div>
-            <div className="flex items-center gap-2">
-              <label htmlFor="filter-loc" className="text-gray-500 text-xs">LOC:</label>
-              <select id="filter-loc" value={filterLoc} onChange={(e) => setFilterLoc(e.target.value)} className="bg-gray-800 border border-gray-700 text-white text-xs px-3 py-1.5 rounded focus:outline-none focus:border-cyan-500/50">
-                <option>GLOBAL</option>
-                <option>US_EAST</option>
-                <option>EU_WEST</option>
-              </select>
-            </div>
-            <div className="flex items-center gap-2">
-              <label htmlFor="filter-risk" className="text-gray-500 text-xs">RISK:</label>
-              <select id="filter-risk" value={filterRisk} onChange={(e) => setFilterRisk(e.target.value)} className="bg-gray-800 border border-gray-700 text-white text-xs px-3 py-1.5 rounded focus:outline-none focus:border-cyan-500/50">
-                <option>CRITICAL_ONLY</option>
-                <option>HIGH</option>
-                <option>ALL</option>
-              </select>
-            </div>
-            <button onClick={applyFilters} className="bg-cyan-600 hover:bg-cyan-500 text-black text-xs font-bold px-4 py-1.5 rounded transition-colors ml-auto cursor-pointer">
-              APPLY_FILTERS
-            </button>
-          </motion.div>
-
-          {/* ASSET GRID */}
-          <div className="grid grid-cols-2 gap-4">
-            {filteredAssets.map((asset, i) => (
-              <motion.div
-                key={asset.name}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: 0.02 * i }}
-                onClick={() => {
-                  setSelectedAsset(asset);
-                  setSidebarOpen(true);
-                }}
-                className="bg-[#111118] border border-gray-800 rounded-lg p-4 cursor-pointer hover:border-gray-700 transition-colors"
-              >
-                <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 rounded bg-gray-800 flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
-                    </svg>
+            {/* ── KPI ROW ── */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}>
+              {[
+                { label: "TOTAL ASSETS", value: `${totalAssets}`, sub: "+2.4% vs last scan", subColor: DARK.cyan, progress: 78, delay: 0 },
+                { label: "CRITICAL RISK", value: `${criticalCount}`, badge: "ACTION REQ", badgeColor: DARK.red, dots: criticalCount, delay: 0.05 },
+                { label: "UNMANAGED", value: `${unmanagedCount}`, sub: "Discovery needed", subColor: DARK.orange, progress: 34, delay: 0.1 },
+                { label: "HEALTHY", value: `${healthyCount}`, badge: "COMPLIANT", badgeColor: DARK.green, sub: "All checks passed", subColor: DARK.green, delay: 0.15 },
+              ].map((kpi, i) => (
+                <motion.div
+                  key={kpi.label}
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.4, delay: kpi.delay }}
+                  style={{ background: DARK.card, border: `1px solid ${DARK.cardBorder}`, borderRadius: 10, padding: "16px 18px", display: "flex", flexDirection: "column", gap: 8, position: "relative", overflow: "hidden" }}
+                >
+                  <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg, transparent, ${DARK.cyan}40, transparent)` }} />
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <span style={{ fontSize: 10, fontWeight: 600, color: DARK.textMuted, letterSpacing: "0.08em", fontFamily: DARK.fontMono }}>{kpi.label}</span>
+                    {kpi.badge && (
+                      <span style={{ fontSize: 9, fontWeight: 600, color: kpi.badgeColor, background: `${kpi.badgeColor}20`, padding: "2px 8px", borderRadius: 4, fontFamily: DARK.fontMono }}>{kpi.badge}</span>
+                    )}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="font-bold text-sm text-white tracking-wide">{asset.name}</span>
-                      <span className={`text-lg font-bold ${riskColor(asset.riskScore)}`}>{asset.riskScore}</span>
-                    </div>
-                    <div className="text-gray-500 text-xs mb-2">{asset.ip}</div>
-                    <div className="flex flex-wrap gap-1.5 mb-2">
-                      {asset.tags.map((tag) => (
-                        <span
-                          key={tag.label}
-                          className={`text-[10px] px-1.5 py-0.5 rounded border font-bold ${tagColorForTag(tag.label)}`}
-                        >
-                          {tag.label}
-                        </span>
+                  <div style={{ fontSize: 32, fontWeight: 700, color: DARK.textPrimary, fontFamily: DARK.fontMono, lineHeight: 1 }}>{kpi.value}</div>
+                  {kpi.sub && <div style={{ fontSize: 11, color: kpi.subColor, fontFamily: DARK.fontMono }}>{kpi.sub}</div>}
+                  {kpi.dots !== undefined && (
+                    <div style={{ display: "flex", gap: 5, marginTop: 2 }}>
+                      {Array.from({ length: 4 }).map((_, j) => (
+                        <div key={j} style={{ width: 8, height: 8, borderRadius: "50%", background: j < kpi.dots! ? DARK.red : `${DARK.textMuted}40`, boxShadow: j < kpi.dots! ? `0 0 6px ${DARK.red}80` : "none" }} />
                       ))}
                     </div>
-                    <div className="flex items-center gap-3 text-[10px] text-gray-500">
-                      <span>Owner: <span className="text-gray-300">{asset.owner}</span></span>
-                      <span>OS: <span className="text-gray-300">{asset.os}</span></span>
+                  )}
+                  {kpi.progress !== undefined && (
+                    <div style={{ width: "100%", height: 4, background: `${DARK.textMuted}30`, borderRadius: 2, overflow: "hidden", marginTop: 4 }}>
+                      <motion.div initial={{ width: 0 }} animate={{ width: `${kpi.progress}%` }} transition={{ duration: 1, delay: kpi.delay + 0.3 }} style={{ height: "100%", background: `linear-gradient(90deg, ${DARK.cyan}, ${DARK.cyan}cc)`, borderRadius: 2 }} />
                     </div>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-
-        {/* RIGHT SIDEBAR */}
-        {sidebarOpen && (
-          <motion.div
-            initial={{ opacity: 0, x: 30 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.3 }}
-            className="w-[380px] border-l border-gray-800 bg-[#0e0e14] flex flex-col overflow-hidden flex-shrink-0"
-          >
-            {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
-              <span className="text-cyan-400 font-bold text-xs tracking-wider">ASSET INTELLIGENCE UNIT</span>
-              <button
-                onClick={() => setSidebarOpen(false)}
-                className="w-6 h-6 rounded bg-gray-800 flex items-center justify-center hover:bg-gray-700 transition-colors cursor-pointer"
-                aria-label="Close sidebar"
-              >
-                <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+                  )}
+                </motion.div>
+              ))}
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-5">
+            {/* ── FILTER BAR ── */}
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
+              style={{ background: DARK.card, border: `1px solid ${DARK.cardBorder}`, borderRadius: 10, padding: "12px 18px", display: "flex", alignItems: "center", gap: 16 }}
+            >
+              <span style={{ fontSize: 11, fontWeight: 700, color: DARK.cyan, letterSpacing: "0.1em", fontFamily: DARK.fontMono }}>INVENTORY MATRIX</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ fontSize: 10, color: DARK.textMuted }}>OS:</span>
+                <select value={filterOs} onChange={(e) => setFilterOs(e.target.value)} style={{ background: "#1e293b", border: `1px solid ${DARK.cardBorder}`, color: DARK.textPrimary, fontSize: 11, padding: "4px 8px", borderRadius: 4, fontFamily: DARK.fontMono }}>
+                  <option value="ALL_SYS">ALL</option>
+                  <option value="LINUX_DEBIAN">LINUX</option>
+                  <option value="UBUNTU_22">UBUNTU</option>
+                  <option value="MACOS_13">MACOS</option>
+                  <option value="WIN_11">WINDOWS</option>
+                  <option value="RHEL_9">RHEL</option>
+                </select>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ fontSize: 10, color: DARK.textMuted }}>RISK:</span>
+                <select value={filterRisk} onChange={(e) => setFilterRisk(e.target.value)} style={{ background: "#1e293b", border: `1px solid ${DARK.cardBorder}`, color: DARK.textPrimary, fontSize: 11, padding: "4px 8px", borderRadius: 4, fontFamily: DARK.fontMono }}>
+                  <option value="ALL">ALL</option>
+                  <option value="CRITICAL">CRITICAL</option>
+                  <option value="HIGH">HIGH</option>
+                  <option value="LOW">LOW</option>
+                </select>
+              </div>
+              <div style={{ marginLeft: "auto", fontSize: 10, color: DARK.textMuted, fontFamily: DARK.fontMono }}>
+                DISPLAYING: <span style={{ color: DARK.cyan }}>{filteredAssets.length}</span> ASSETS
+              </div>
+            </motion.div>
+
+            {/* ── ASSET GRID ── */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }}>
+              {filteredAssets.map((asset, i) => {
+                const rc = riskColor(asset.riskScore);
+                const isSelected = selectedAsset.name === asset.name;
+                return (
+                  <motion.div
+                    key={asset.name}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: 0.25 + i * 0.04 }}
+                    onClick={() => setSelectedAsset(asset)}
+                    style={{
+                      background: isSelected ? `${DARK.cyan}08` : DARK.card,
+                      border: `1px solid ${isSelected ? `${DARK.cyan}60` : DARK.cardBorder}`,
+                      borderRadius: 10,
+                      padding: 16,
+                      cursor: "pointer",
+                      transition: "all 0.2s",
+                      position: "relative",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+                      <div style={{ width: 40, height: 40, borderRadius: 8, background: `${rc}15`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>
+                        {typeIcon(asset.type)}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: DARK.textPrimary, fontFamily: DARK.fontMono, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{asset.name}</span>
+                          <span style={{ fontSize: 18, fontWeight: 700, color: rc, fontFamily: DARK.fontMono }}>{asset.riskScore}</span>
+                        </div>
+                        <div style={{ fontSize: 11, color: DARK.textMuted, fontFamily: DARK.fontMono, marginBottom: 8 }}>{asset.ip} · {asset.type}</div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 }}>
+                          {asset.tags.map((tag) => (
+                            <span key={tag.label} style={{ fontSize: 9, fontWeight: 600, color: tag.color, background: tag.bg, border: `1px solid ${tag.border}`, padding: "2px 6px", borderRadius: 3, fontFamily: DARK.fontMono }}>{tag.label}</span>
+                          ))}
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 10, color: DARK.textMuted }}>
+                          <span>Owner: <span style={{ color: DARK.textSecondary }}>{asset.owner}</span></span>
+                          <span>OS: <span style={{ color: DARK.textSecondary }}>{asset.os}</span></span>
+                          <span style={{ marginLeft: "auto", color: `${DARK.cyan}90` }}>{asset.lastSeen}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* ════════ RIGHT SIDEBAR ════════ */}
+          <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }}
+            style={{ display: "flex", flexDirection: "column", gap: 16 }}
+          >
+            {/* ── ASSET INTELLIGENCE UNIT ── */}
+            <div style={{ background: DARK.card, border: `1px solid ${DARK.cardBorder}`, borderRadius: 12, padding: 20 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+                <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={DARK.cyan} strokeWidth={2}>
+                  <circle cx="12" cy="12" r="10" /><path d="M12 16v-4M12 8h.01" />
+                </svg>
+                <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.1em", color: DARK.textMuted }}>ASSET INTELLIGENCE UNIT</span>
+              </div>
+
               {/* Selected Target */}
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-gray-500 text-[10px] tracking-wider">SELECTED_TARGET</span>
-                  <svg className="w-3 h-3 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
+              <div style={{ background: "#0d1117", border: `1px solid ${DARK.cardBorder}`, borderRadius: 8, padding: 14, marginBottom: 16 }}>
+                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", color: DARK.textMuted, marginBottom: 6 }}>SELECTED TARGET</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: DARK.textPrimary, fontFamily: DARK.fontMono, marginBottom: 4 }}>{selectedAsset.name}</div>
+                <div style={{ fontSize: 12, color: DARK.textMuted, fontFamily: DARK.fontMono, marginBottom: 8 }}>IP: {selectedAsset.ip}</div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <span style={{ fontSize: 9, fontWeight: 600, color: riskColor(selectedAsset.riskScore), background: `${riskColor(selectedAsset.riskScore)}20`, padding: "3px 8px", borderRadius: 4, fontFamily: DARK.fontMono }}>
+                    RISK: {selectedAsset.riskScore >= 60 ? "CRITICAL" : selectedAsset.riskScore >= 30 ? "HIGH" : "LOW"}
+                  </span>
+                  <span style={{ fontSize: 9, fontWeight: 600, color: DARK.cyan, background: `${DARK.cyan}15`, padding: "3px 8px", borderRadius: 4, fontFamily: DARK.fontMono }}>
+                    {selectedAsset.vulns} VULNS
+                  </span>
                 </div>
-                <div className="font-bold text-white text-sm mb-1">{selectedAsset.name}</div>
-                <div className="flex items-center gap-2">
-                  <span className="text-gray-500 text-[10px]">UID:</span>
-                  <span className="text-gray-400 text-[10px]">ASSET_9921_XG192</span>
-                </div>
-                <span className="inline-block mt-1.5 text-[10px] px-2 py-0.5 bg-red-500/20 text-red-400 border border-red-500/30 rounded font-bold">
-                  CRITICAL_RISK
-                </span>
               </div>
 
               {/* Communication Topology */}
-              <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-gray-500 text-[10px] tracking-wider">COMMUNICATION TOPOLOGY</span>
-                </div>
-                <div className="bg-gray-900/50 border border-gray-800 rounded p-3 h-24 flex items-center justify-center">
-                  <svg width="120" height="60" viewBox="0 0 120 60">
-                    {/* Node 1 */}
-                    <circle cx="20" cy="30" r="6" fill="#06b6d4" opacity="0.8" />
-                    <text x="20" y="45" textAnchor="middle" fill="#6b7280" fontSize="6" fontFamily="monospace">A</text>
-                    {/* Node 2 */}
-                    <circle cx="60" cy="15" r="6" fill="#06b6d4" opacity="0.8" />
-                    <text x="60" y="30" textAnchor="middle" fill="#6b7280" fontSize="6" fontFamily="monospace">B</text>
-                    {/* Node 3 */}
-                    <circle cx="100" cy="30" r="6" fill="#06b6d4" opacity="0.8" />
-                    <text x="100" y="45" textAnchor="middle" fill="#6b7280" fontSize="6" fontFamily="monospace">C</text>
-                    {/* Lines */}
-                    <line x1="26" y1="27" x2="54" y2="17" stroke="#334155" strokeWidth="1" />
-                    <line x1="66" y1="17" x2="94" y2="27" stroke="#334155" strokeWidth="1" />
-                    <line x1="26" y1="33" x2="94" y2="33" stroke="#334155" strokeWidth="1" strokeDasharray="3,3" />
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", color: DARK.textMuted, marginBottom: 8 }}>COMMUNICATION TOPOLOGY</div>
+                <div style={{ background: "#0d1117", border: `1px solid ${DARK.cardBorder}`, borderRadius: 8, padding: 12, height: 120, position: "relative", overflow: "hidden" }}>
+                  <svg width="100%" height="100%" viewBox="0 0 420 100">
+                    {topologyEdges.map((edge, i) => {
+                      const from = topologyNodes.find((n) => n.id === edge.from)!;
+                      const to = topologyNodes.find((n) => n.id === edge.to)!;
+                      return <line key={i} x1={from.x} y1={from.y} x2={to.x} y2={to.y} stroke={`${DARK.textMuted}40`} strokeWidth={1} strokeDasharray="4 4" />;
+                    })}
+                    {topologyNodes.map((node) => (
+                      <g key={node.id}>
+                        <circle cx={node.x} cy={node.y} r={8} fill={`${node.color}20`} stroke={node.color} strokeWidth={1.5} />
+                        <circle cx={node.x} cy={node.y} r={3} fill={node.color} opacity={0.8} />
+                        <text x={node.x} y={node.y + 20} textAnchor="middle" fill={DARK.textMuted} fontSize={8} fontFamily={DARK.fontMono}>{node.label}</text>
+                      </g>
+                    ))}
                   </svg>
                 </div>
               </div>
 
               {/* Telemetry Logs */}
               <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-gray-500 text-[10px] tracking-wider">TELEMETRY_LOGS</span>
-                  <span className="text-[10px] px-1.5 py-0.5 bg-green-500/20 text-green-400 border border-green-500/30 rounded font-bold">
-                    LIVE_FEED
-                  </span>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                  <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", color: DARK.textMuted }}>TELEMETRY_LOGS</span>
+                  <span style={{ fontSize: 9, fontWeight: 600, color: DARK.green, background: `${DARK.green}15`, padding: "2px 6px", borderRadius: 3, fontFamily: DARK.fontMono }}>LIVE</span>
                 </div>
-                <div className="bg-gray-900/50 border border-gray-800 rounded p-3 space-y-2">
+                <div style={{ background: "#0d1117", border: `1px solid ${DARK.cardBorder}`, borderRadius: 8, padding: 12, maxHeight: 220, overflowY: "auto" }}>
                   {telemetryLogs.map((log, i) => (
-                    <div key={i} className="text-[10px] font-mono leading-relaxed">
-                      <span className="text-gray-500">{log.time}</span>{" "}
-                      <span className="text-cyan-400">[{log.tag}]</span>{" "}
-                      <span className="text-gray-300">{log.msg}</span>
+                    <div key={i} style={{ fontSize: 10, fontFamily: DARK.fontMono, lineHeight: 1.8, display: "flex", gap: 6 }}>
+                      <span style={{ color: DARK.textMuted, flexShrink: 0 }}>{log.time}</span>
+                      <span style={{ color: log.tagColor, fontWeight: 600, flexShrink: 0 }}>[{log.tag}]</span>
+                      <span style={{ color: DARK.textSecondary }}>{log.msg}</span>
                     </div>
                   ))}
                 </div>
               </div>
             </div>
 
-            {/* Quarantine Button */}
-            <div className="p-4 border-t border-gray-800">
-              <button className="w-full bg-cyan-600 hover:bg-cyan-500 text-black text-xs font-bold py-2.5 rounded transition-colors">
-                INITIATE_QUARANTINE
-              </button>
+            {/* ── QUICK ACTIONS ── */}
+            <div style={{ background: DARK.card, border: `1px solid ${DARK.cardBorder}`, borderRadius: 12, padding: 20 }}>
+              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", color: DARK.textMuted, marginBottom: 12 }}>QUICK ACTIONS</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                  style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "10px 16px", fontSize: 12, fontWeight: 600, background: `linear-gradient(135deg, ${DARK.red}, #dc2626)`, color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontFamily: DARK.fontMono }}
+                >
+                  <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>
+                  ISOLATE_ASSET
+                </motion.button>
+                <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                  style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "10px 16px", fontSize: 12, fontWeight: 600, background: "transparent", color: DARK.textPrimary, border: `1px solid ${DARK.cardBorder}`, borderRadius: 8, cursor: "pointer", fontFamily: DARK.fontMono }}
+                >
+                  <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" /><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07" /></svg>
+                  ALERT_TEAM
+                </motion.button>
+                <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                  style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "10px 16px", fontSize: 12, fontWeight: 600, background: "transparent", color: DARK.textPrimary, border: `1px solid ${DARK.cardBorder}`, borderRadius: 8, cursor: "pointer", fontFamily: DARK.fontMono }}
+                >
+                  <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z" /></svg>
+                  PATCH_ASSET
+                </motion.button>
+              </div>
+            </div>
+
+            {/* ── AI AGENT LOG ── */}
+            <div style={{ background: DARK.card, border: `1px solid ${DARK.cardBorder}`, borderRadius: 12, padding: 20 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                <div style={{ width: 8, height: 8, borderRadius: "50%", background: DARK.green, boxShadow: `0 0 8px ${DARK.green}` }} />
+                <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", color: DARK.textMuted }}>AI AGENT LOG</span>
+              </div>
+              <div style={{ background: "#0d1117", border: `1px solid ${DARK.cardBorder}`, borderRadius: 8, padding: 12, maxHeight: 180, overflowY: "auto" }}>
+                {[
+                  { time: "14:02:01", agent: "SCAN_ENGINE", msg: "Vulnerability scan completed on SRV-PROD-DB-01", color: DARK.cyan },
+                  { time: "14:01:58", agent: "DETECT_AI", msg: "Anomalous SSH pattern detected from 182.1.2.91", color: DARK.orange },
+                  { time: "14:01:44", agent: "RESPONSE_BOT", msg: "Auto-patch applied to K8S-NODE-04 successfully", color: DARK.green },
+                  { time: "14:01:30", agent: "FORENSICS", msg: "Memory dump initiated on WORKSTATION-205", color: DARK.purple },
+                ].map((log, i) => (
+                  <div key={i} style={{ fontSize: 10, fontFamily: DARK.fontMono, lineHeight: 1.8, display: "flex", gap: 6, marginBottom: 4 }}>
+                    <span style={{ color: DARK.textMuted, flexShrink: 0 }}>{log.time}</span>
+                    <span style={{ color: log.color, fontWeight: 600, flexShrink: 0 }}>[{log.agent}]</span>
+                    <span style={{ color: DARK.textSecondary }}>{log.msg}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </motion.div>
-        )}
+        </div>
       </div>
     </Shell>
   );

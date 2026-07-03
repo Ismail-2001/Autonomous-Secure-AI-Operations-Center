@@ -16,3 +16,5 @@ venv/
 *.egg-info/
 dist/
 build/
+dashboard/node_modules/
+dashboard/.next/
