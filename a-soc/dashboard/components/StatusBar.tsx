@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 
 interface StatusBarProps {
@@ -38,7 +38,7 @@ export default function StatusBar({ connectionState = "OPEN" }: StatusBarProps) 
       style={{
         position: "fixed",
         bottom: 0,
-        left: 260,
+        left: "var(--sidebar-width)",
         right: 0,
         height: 28,
         background: "#060a14",
@@ -54,7 +54,7 @@ export default function StatusBar({ connectionState = "OPEN" }: StatusBarProps) 
       }}
     >
       {/* System Clock */}
-      <StatusItem label="SYSTEM CLOCK" value={utcTime} />
+      <StatusItem label="SYSTEM CLOCK" value={utcTime} suppressHydrationWarning />
 
       {/* Separator */}
       <Divider />
@@ -98,11 +98,11 @@ export default function StatusBar({ connectionState = "OPEN" }: StatusBarProps) 
   );
 }
 
-function StatusItem({ label, value }: { label: string; value: string }) {
+function StatusItem({ label, value, suppressHydrationWarning }: { label: string; value: string; suppressHydrationWarning?: boolean }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
       <span style={{ color: "#00bcd4", textTransform: "uppercase" }}>{label}:</span>
-      <span style={{ color: "#8899bb", textTransform: "uppercase" }}>{value}</span>
+      <span suppressHydrationWarning={suppressHydrationWarning} style={{ color: "#8899bb", textTransform: "uppercase" }}>{value}</span>
     </div>
   );
 }

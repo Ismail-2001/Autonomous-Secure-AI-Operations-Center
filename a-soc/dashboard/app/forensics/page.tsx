@@ -127,6 +127,7 @@ export default function ForensicsPage() {
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
+                  aria-hidden="true"
                 >
                   <path
                     strokeLinecap="round"
@@ -136,10 +137,12 @@ export default function ForensicsPage() {
                   />
                 </svg>
                 <input
+                  id="forensics-search"
                   type="text"
                   placeholder="Search evidence logs..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
+                  aria-label="Search evidence logs"
                   className="w-full pl-10 pr-4 py-2.5 bg-gray-900 border border-gray-700 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
                 />
               </div>

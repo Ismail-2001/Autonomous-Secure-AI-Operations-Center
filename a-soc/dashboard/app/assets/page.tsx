@@ -130,6 +130,19 @@ const tagColorForTag = (label: string) => {
 export default function AssetsPage() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [selectedAsset, setSelectedAsset] = useState<Asset>(assets[0]);
+  const [filterOs, setFilterOs] = useState("ALL_SYS");
+  const [filterLoc, setFilterLoc] = useState("GLOBAL");
+  const [filterRisk, setFilterRisk] = useState("CRITICAL_ONLY");
+  const [appliedFilters, setAppliedFilters] = useState({ os: "ALL_SYS", loc: "GLOBAL", risk: "CRITICAL_ONLY" });
+
+  const filteredAssets = assets.filter((asset) => {
+    if (appliedFilters.os !== "ALL_SYS" && asset.os !== appliedFilters.os) return false;
+    if (appliedFilters.risk === "CRITICAL_ONLY" && asset.riskScore < 60) return false;
+    if (appliedFilters.risk === "HIGH" && asset.riskScore < 30) return false;
+    return true;
+  });
+
+  const applyFilters = () => setAppliedFilters({ os: filterOs, loc: filterLoc, risk: filterRisk });
 
   return (
     <Shell>
@@ -214,8 +227,8 @@ export default function AssetsPage() {
           >
             <span className="text-cyan-400 font-bold text-sm tracking-wider mr-4">Inventory Matrix</span>
             <div className="flex items-center gap-2">
-              <span className="text-gray-500 text-xs">OS:</span>
-              <select className="bg-gray-800 border border-gray-700 text-white text-xs px-3 py-1.5 rounded focus:outline-none focus:border-cyan-500/50">
+              <label htmlFor="filter-os" className="text-gray-500 text-xs">OS:</label>
+              <select id="filter-os" value={filterOs} onChange={(e) => setFilterOs(e.target.value)} className="bg-gray-800 border border-gray-700 text-white text-xs px-3 py-1.5 rounded focus:outline-none focus:border-cyan-500/50">
                 <option>ALL_SYS</option>
                 <option>LINUX_DEBIAN</option>
                 <option>UBUNTU_22</option>
@@ -223,29 +236,29 @@ export default function AssetsPage() {
               </select>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-gray-500 text-xs">LOC:</span>
-              <select className="bg-gray-800 border border-gray-700 text-white text-xs px-3 py-1.5 rounded focus:outline-none focus:border-cyan-500/50">
+              <label htmlFor="filter-loc" className="text-gray-500 text-xs">LOC:</label>
+              <select id="filter-loc" value={filterLoc} onChange={(e) => setFilterLoc(e.target.value)} className="bg-gray-800 border border-gray-700 text-white text-xs px-3 py-1.5 rounded focus:outline-none focus:border-cyan-500/50">
                 <option>GLOBAL</option>
                 <option>US_EAST</option>
                 <option>EU_WEST</option>
               </select>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-gray-500 text-xs">RISK:</span>
-              <select className="bg-gray-800 border border-gray-700 text-white text-xs px-3 py-1.5 rounded focus:outline-none focus:border-cyan-500/50">
+              <label htmlFor="filter-risk" className="text-gray-500 text-xs">RISK:</label>
+              <select id="filter-risk" value={filterRisk} onChange={(e) => setFilterRisk(e.target.value)} className="bg-gray-800 border border-gray-700 text-white text-xs px-3 py-1.5 rounded focus:outline-none focus:border-cyan-500/50">
                 <option>CRITICAL_ONLY</option>
                 <option>HIGH</option>
                 <option>ALL</option>
               </select>
             </div>
-            <button className="bg-cyan-600 hover:bg-cyan-500 text-black text-xs font-bold px-4 py-1.5 rounded transition-colors ml-auto">
+            <button onClick={applyFilters} className="bg-cyan-600 hover:bg-cyan-500 text-black text-xs font-bold px-4 py-1.5 rounded transition-colors ml-auto cursor-pointer">
               APPLY_FILTERS
             </button>
           </motion.div>
 
           {/* ASSET GRID */}
           <div className="grid grid-cols-2 gap-4">
-            {assets.map((asset, i) => (
+            {filteredAssets.map((asset, i) => (
               <motion.div
                 key={asset.name}
                 initial={{ opacity: 0, y: 10 }}
@@ -303,7 +316,8 @@ export default function AssetsPage() {
               <span className="text-cyan-400 font-bold text-xs tracking-wider">ASSET INTELLIGENCE UNIT</span>
               <button
                 onClick={() => setSidebarOpen(false)}
-                className="w-6 h-6 rounded bg-gray-800 flex items-center justify-center hover:bg-gray-700 transition-colors"
+                className="w-6 h-6 rounded bg-gray-800 flex items-center justify-center hover:bg-gray-700 transition-colors cursor-pointer"
+                aria-label="Close sidebar"
               >
                 <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

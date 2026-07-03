@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import { useState } from "react";
 import { motion } from "framer-motion";
 import Shell from "@/components/Shell";
 
@@ -37,6 +37,8 @@ const heatmapHasWarning = (r: number, c: number) => r === 4 && c === 4;
 
 export default function GovernancePage() {
   const [controlFilter, setControlFilter] = useState<"all" | "fail">("all");
+  const [activeTab, setActiveTab] = useState<"governance" | "monitoring" | "hunting">("governance");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const filteredControls = controlFilter === "fail"
     ? controls.filter((c) => c.status === "FAIL")
@@ -89,9 +91,9 @@ export default function GovernancePage() {
 
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <div style={{ display: "flex", gap: 0 }}>
-              <button className="tab-gov active">GOVERNANCE</button>
-              <button className="tab-gov">MONITORING</button>
-              <button className="tab-gov">THREAT HUNT</button>
+              <button className={`tab-gov ${activeTab === "governance" ? "active" : ""}`} onClick={() => setActiveTab("governance")}>GOVERNANCE</button>
+              <button className={`tab-gov ${activeTab === "monitoring" ? "active" : ""}`} onClick={() => setActiveTab("monitoring")}>MONITORING</button>
+              <button className={`tab-gov ${activeTab === "hunting" ? "active" : ""}`} onClick={() => setActiveTab("hunting")}>THREAT HUNT</button>
             </div>
             <div style={{ flex: 1 }} />
             <div style={{ position: "relative", minWidth: 240 }}>
@@ -100,6 +102,9 @@ export default function GovernancePage() {
               </svg>
               <input
                 placeholder="QUERY COMPLIANCE DATA..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                aria-label="Search compliance data"
                 style={{
                   background: PANEL_BG, border: `1px solid ${PANEL_BORDER}`, borderRadius: 6,
                   padding: "8px 12px 8px 34px", fontSize: 11, color: "#94a3b8",

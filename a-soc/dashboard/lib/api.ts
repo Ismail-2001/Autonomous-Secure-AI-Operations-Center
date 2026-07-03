@@ -7,20 +7,33 @@ export class ApiError extends Error {
   }
 }
 
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:9002";
+const REQUEST_TIMEOUT_MS = 15000;
+let cachedToken: string | null = null;
+
 async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
-  const token = typeof window !== "undefined" ? localStorage.getItem("asoc_token") : null;
+  if (cachedToken === null && typeof window !== "undefined") {
+    cachedToken = localStorage.getItem("asoc_token");
+  }
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     ...((options.headers as Record<string, string>) || {}),
   };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
+  if (cachedToken) headers["Authorization"] = `Bearer ${cachedToken}`;
 
-  const res = await fetch(url, { ...options, headers });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "Unknown error");
-    throw new ApiError(`${res.status}: ${text}`, res.status);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    const res = await fetch(url, { ...options, headers, signal: controller.signal });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "Unknown error");
+      throw new ApiError(`${res.status}: ${text}`, res.status);
+    }
+    return res.json();
+  } finally {
+    clearTimeout(timer);
   }
-  return res.json();
 }
 
 export const api = {
@@ -143,17 +156,17 @@ export interface ThreatEvent {
 }
 
 export const endpoints = {
-  health: () => `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:9002"}/api/v1/health`,
-  stats: () => `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:9002"}/api/v1/dashboard/stats`,
-  agents: () => `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:9002"}/api/v1/agents/status`,
-  incidents: () => `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:9002"}/api/v1/incidents`,
-  assets: () => `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:9002"}/api/v1/assets`,
-  forensics: () => `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:9002"}/api/v1/forensics/jobs`,
-  threatIntel: () => `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:9002"}/api/v1/threat-intel/indicators`,
-  audit: () => `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:9002"}/api/v1/audit/events`,
-  compliance: () => `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:9002"}/api/v1/compliance/report`,
-  searchEvents: () => `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:9002"}/api/v1/events/search`,
+  health: () => `${BASE_URL}/api/v1/health`,
+  stats: () => `${BASE_URL}/api/v1/dashboard/stats`,
+  agents: () => `${BASE_URL}/api/v1/agents/status`,
+  incidents: () => `${BASE_URL}/api/v1/incidents`,
+  assets: () => `${BASE_URL}/api/v1/assets`,
+  forensics: () => `${BASE_URL}/api/v1/forensics/jobs`,
+  threatIntel: () => `${BASE_URL}/api/v1/threat-intel/indicators`,
+  audit: () => `${BASE_URL}/api/v1/audit/events`,
+  compliance: () => `${BASE_URL}/api/v1/compliance/report`,
+  searchEvents: () => `${BASE_URL}/api/v1/events/search`,
   auth: {
-    token: () => `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:9002"}/api/v1/auth/token`,
+    token: () => `${BASE_URL}/api/v1/auth/token`,
   },
 };

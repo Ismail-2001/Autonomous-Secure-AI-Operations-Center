@@ -1,9 +1,7 @@
 "use client";
 
-import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 
 const NAV_ITEMS = [
@@ -139,7 +137,7 @@ export default function Sidebar() {
             flexShrink: 0,
           }}
         >
-          <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="#00ffff" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+          <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="#00ffff" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
           </svg>
         </div>
@@ -188,6 +186,7 @@ export default function Sidebar() {
             <Link
               key={item.href}
               href={item.href}
+              className={`sidebar-nav-link ${active ? "sidebar-nav-active" : ""}`}
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -204,32 +203,20 @@ export default function Sidebar() {
                 fontFamily: "var(--font-mono)",
                 textTransform: "uppercase",
                 letterSpacing: "0.06em",
-                transition: "all 0.15s ease",
                 borderLeft: active
                   ? "3px solid #00ffff"
                   : "3px solid transparent",
                 position: "relative",
-              }}
-              onMouseEnter={(e) => {
-                if (!active) {
-                  e.currentTarget.style.color = "#8899bb";
-                  e.currentTarget.style.background = "rgba(255,255,255,0.03)";
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!active) {
-                  e.currentTarget.style.color = "#5a6a8a";
-                  e.currentTarget.style.background = "transparent";
-                }
+                cursor: "pointer",
               }}
             >
-              <span style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
+              <span style={{ display: "flex", alignItems: "center", flexShrink: 0 }} aria-hidden="true">
                 {item.icon}
               </span>
               <span style={{ whiteSpace: "nowrap" }}>{item.label}</span>
               {active && (
                 <motion.div
-                  layoutId="activeNav"
+                  layoutId="activeNavMain"
                   style={{
                     position: "absolute",
                     left: 0,
@@ -263,6 +250,7 @@ export default function Sidebar() {
             <Link
               key={item.href}
               href={item.href}
+              className={`sidebar-nav-link ${active ? "sidebar-nav-active" : ""}`}
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -279,25 +267,13 @@ export default function Sidebar() {
                 fontFamily: "var(--font-mono)",
                 textTransform: "uppercase",
                 letterSpacing: "0.06em",
-                transition: "all 0.15s ease",
                 borderLeft: active
                   ? "3px solid #00ffff"
                   : "3px solid transparent",
-              }}
-              onMouseEnter={(e) => {
-                if (!active) {
-                  e.currentTarget.style.color = "#8899bb";
-                  e.currentTarget.style.background = "rgba(255,255,255,0.03)";
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!active) {
-                  e.currentTarget.style.color = "#5a6a8a";
-                  e.currentTarget.style.background = "transparent";
-                }
+                cursor: "pointer",
               }}
             >
-              <span style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
+              <span style={{ display: "flex", alignItems: "center", flexShrink: 0 }} aria-hidden="true">
                 {item.icon}
               </span>
               <span style={{ whiteSpace: "nowrap" }}>{item.label}</span>

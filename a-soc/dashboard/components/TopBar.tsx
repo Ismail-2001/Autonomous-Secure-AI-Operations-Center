@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 
 interface TopBarProps {
@@ -10,10 +10,22 @@ interface TopBarProps {
 
 export default function TopBar({ onSimulate, simulating }: TopBarProps) {
   const [time, setTime] = useState(new Date());
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     const timer = setInterval(() => setTime(new Date()), 1000);
     return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        document.getElementById("topbar-search")?.focus();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
   }, []);
 
   return (
@@ -96,8 +108,12 @@ export default function TopBar({ onSimulate, simulating }: TopBarProps) {
             <path d="M21 21l-4.35-4.35" />
           </svg>
           <input
+            id="topbar-search"
             type="text"
             placeholder="QUERY ASSETS (CMD+K)..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            aria-label="Search assets"
             style={{
               flex: 1,
               background: "transparent",
@@ -128,6 +144,7 @@ export default function TopBar({ onSimulate, simulating }: TopBarProps) {
       {/* Right */}
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <span
+          suppressHydrationWarning
           style={{
             fontSize: 11,
             color: "#484f58",
@@ -159,6 +176,7 @@ export default function TopBar({ onSimulate, simulating }: TopBarProps) {
             justifyContent: "center",
           }}
           title="Screen Cast"
+          aria-label="Screen Cast"
         >
           <svg
             width={16}
@@ -194,6 +212,7 @@ export default function TopBar({ onSimulate, simulating }: TopBarProps) {
             position: "relative",
           }}
           title="Notifications"
+          aria-label="Notifications"
         >
           <svg
             width={16}

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
 import Shell from "@/components/Shell";
 
@@ -281,14 +281,6 @@ export default function HuntingPage() {
           </div>
         </div>
       </div>
-
-      {/* keyframes */}
-      <style>{`
-        @keyframes pulse-ring {
-          0%, 100% { opacity: 0.6; transform: scale(1); }
-          50% { opacity: 1; transform: scale(1.15); }
-        }
-      `}</style>
     </Shell>
   );
 }
