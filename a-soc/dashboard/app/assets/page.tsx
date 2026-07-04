@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Shell from "@/components/Shell";
 
 const DARK = {
@@ -19,6 +19,8 @@ const DARK = {
   textMuted: "#64748b",
   fontMono: '"JetBrains Mono", "SF Mono", "Fira Code", monospace',
 };
+
+const ROWS_PER_PAGE = 6;
 
 interface Tag {
   label: string;
@@ -47,7 +49,6 @@ const assets: Asset[] = [
     tags: [
       { label: "LOG4SHELL", color: DARK.red, bg: "#3b1010", border: "#7f1d1d" },
       { label: "CVE-2023", color: DARK.orange, bg: "#3b2510", border: "#78350f" },
-      { label: "+3", color: DARK.textMuted, bg: "#1e293b", border: "#334155" },
     ],
     owner: "SEC_OPS_A",
     os: "LINUX_DEBIAN",
@@ -61,7 +62,6 @@ const assets: Asset[] = [
     riskScore: 12,
     tags: [
       { label: "HEALTHY", color: DARK.green, bg: "#103b20", border: "#14532d" },
-      { label: "ENCRYPTED", color: DARK.green, bg: "#103b20", border: "#14532d" },
     ],
     owner: "INFRA_TEAM",
     os: "UBUNTU_22",
@@ -149,6 +149,61 @@ const assets: Asset[] = [
     lastSeen: "0s ago",
     vulns: 8,
   },
+  {
+    name: "BACKUP-SRV-02",
+    ip: "10.0.6.50",
+    riskScore: 22,
+    tags: [
+      { label: "HEALTHY", color: DARK.green, bg: "#103b20", border: "#14532d" },
+      { label: "ENCRYPTED", color: DARK.green, bg: "#103b20", border: "#14532d" },
+    ],
+    owner: "BACKUP_OPS",
+    os: "RHEL_9",
+    type: "SERVER",
+    lastSeen: "10s ago",
+    vulns: 0,
+  },
+  {
+    name: "API-GATEWAY-01",
+    ip: "10.0.3.100",
+    riskScore: 34,
+    tags: [
+      { label: "WAF_ACTIVE", color: DARK.cyan, bg: "#102a3b", border: "#1e3a5f" },
+      { label: "RATE_LIMITED", color: DARK.purple, bg: "#2e1065", border: "#4c1d95" },
+    ],
+    owner: "NETOPS",
+    os: "ALPINE_3",
+    type: "CONTAINER",
+    lastSeen: "1s ago",
+    vulns: 1,
+  },
+  {
+    name: "WORKSTATION-310",
+    ip: "192.168.1.310",
+    riskScore: 67,
+    tags: [
+      { label: "MALWARE", color: DARK.red, bg: "#3b1010", border: "#7f1d1d" },
+      { label: "C2_DETECTED", color: DARK.red, bg: "#3b1010", border: "#7f1d1d" },
+    ],
+    owner: "USER_ID_118",
+    os: "WIN_11",
+    type: "ENDPOINT",
+    lastSeen: "0s ago",
+    vulns: 4,
+  },
+  {
+    name: "MONITORING-STACK",
+    ip: "10.0.7.200",
+    riskScore: 5,
+    tags: [
+      { label: "HEALTHY", color: DARK.green, bg: "#103b20", border: "#14532d" },
+    ],
+    owner: "SOC_TEAM",
+    os: "UBUNTU_22",
+    type: "SERVER",
+    lastSeen: "0s ago",
+    vulns: 0,
+  },
 ];
 
 const telemetryLogs = [
@@ -163,12 +218,13 @@ const telemetryLogs = [
 ];
 
 const topologyNodes = [
-  { id: "gw", label: "GATEWAY", x: 60, y: 30, color: DARK.cyan },
-  { id: "fw", label: "FW-01", x: 160, y: 30, color: DARK.cyan },
-  { id: "srv", label: "SRV-01", x: 260, y: 30, color: DARK.red },
-  { id: "db", label: "DB-01", x: 360, y: 30, color: DARK.orange },
-  { id: "k8s", label: "K8S-04", x: 160, y: 80, color: DARK.green },
-  { id: "siem", label: "SIEM", x: 260, y: 80, color: DARK.cyan },
+  { id: "gw", label: "GATEWAY", x: 60, y: 40, color: DARK.cyan },
+  { id: "fw", label: "FW-01", x: 160, y: 40, color: DARK.cyan },
+  { id: "srv", label: "SRV-01", x: 260, y: 40, color: DARK.red },
+  { id: "db", label: "DB-01", x: 360, y: 40, color: DARK.orange },
+  { id: "k8s", label: "K8S-04", x: 110, y: 100, color: DARK.green },
+  { id: "siem", label: "SIEM", x: 210, y: 100, color: DARK.cyan },
+  { id: "ws", label: "WS-205", x: 310, y: 100, color: DARK.red },
 ];
 
 const topologyEdges = [
@@ -177,6 +233,7 @@ const topologyEdges = [
   { from: "srv", to: "db" },
   { from: "fw", to: "k8s" },
   { from: "srv", to: "siem" },
+  { from: "srv", to: "ws" },
 ];
 
 const riskColor = (score: number) => {
@@ -195,10 +252,37 @@ const typeIcon = (type: string) => {
   }
 };
 
+function KpiCard({ label, value, sub, subColor, badge, badgeColor, progress, delay }: {
+  label: string; value: string; sub?: string; subColor?: string;
+  badge?: string; badgeColor?: string; progress?: number; delay?: number;
+}) {
+  return (
+    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: delay || 0 }}
+      style={{ background: DARK.card, border: `1px solid ${DARK.cardBorder}`, borderRadius: 10, padding: "16px 18px", display: "flex", flexDirection: "column", gap: 8, position: "relative", overflow: "hidden" }}
+    >
+      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg, transparent, ${DARK.cyan}40, transparent)` }} />
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <span style={{ fontSize: 10, fontWeight: 600, color: DARK.textMuted, letterSpacing: "0.08em", fontFamily: DARK.fontMono }}>{label}</span>
+        {badge && <span style={{ fontSize: 9, fontWeight: 600, color: badgeColor, background: `${badgeColor}20`, padding: "2px 8px", borderRadius: 4, fontFamily: DARK.fontMono }}>{badge}</span>}
+      </div>
+      <div style={{ fontSize: 32, fontWeight: 700, color: DARK.textPrimary, fontFamily: DARK.fontMono, lineHeight: 1 }}>{value}</div>
+      {sub && <div style={{ fontSize: 11, color: subColor, fontFamily: DARK.fontMono }}>{sub}</div>}
+      {progress !== undefined && (
+        <div style={{ width: "100%", height: 4, background: `${DARK.textMuted}30`, borderRadius: 2, overflow: "hidden", marginTop: 4 }}>
+          <motion.div initial={{ width: 0 }} animate={{ width: `${progress}%` }} transition={{ duration: 1, delay: (delay || 0) + 0.3 }}
+            style={{ height: "100%", background: `linear-gradient(90deg, ${DARK.cyan}, ${DARK.cyan}cc)`, borderRadius: 2 }}
+          />
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
 export default function AssetsPage() {
   const [selectedAsset, setSelectedAsset] = useState<Asset>(assets[0]);
   const [filterOs, setFilterOs] = useState("ALL_SYS");
   const [filterRisk, setFilterRisk] = useState("ALL");
+  const [page, setPage] = useState(1);
   const [liveAssets, setLiveAssets] = useState<Asset[]>(assets);
 
   useEffect(() => {
@@ -226,12 +310,15 @@ export default function AssetsPage() {
     });
   }, []);
 
-  const filteredAssets = liveAssets.filter((asset) => {
+  const filteredAssets = useMemo(() => liveAssets.filter((asset) => {
     if (filterOs !== "ALL_SYS" && asset.os !== filterOs) return false;
     if (filterRisk === "CRITICAL" && asset.riskScore < 60) return false;
     if (filterRisk === "HIGH" && (asset.riskScore < 30 || asset.riskScore >= 60)) return false;
     return true;
-  });
+  }), [liveAssets, filterOs, filterRisk]);
+
+  const totalPages = Math.ceil(filteredAssets.length / ROWS_PER_PAGE);
+  const pagedAssets = filteredAssets.slice((page - 1) * ROWS_PER_PAGE, page * ROWS_PER_PAGE);
 
   const totalAssets = liveAssets.length;
   const criticalCount = liveAssets.filter((a) => a.riskScore >= 60).length;
@@ -248,42 +335,10 @@ export default function AssetsPage() {
 
             {/* ── KPI ROW ── */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}>
-              {[
-                { label: "TOTAL ASSETS", value: `${totalAssets}`, sub: "+2.4% vs last scan", subColor: DARK.cyan, progress: 78, delay: 0 },
-                { label: "CRITICAL RISK", value: `${criticalCount}`, badge: "ACTION REQ", badgeColor: DARK.red, dots: criticalCount, delay: 0.05 },
-                { label: "UNMANAGED", value: `${unmanagedCount}`, sub: "Discovery needed", subColor: DARK.orange, progress: 34, delay: 0.1 },
-                { label: "HEALTHY", value: `${healthyCount}`, badge: "COMPLIANT", badgeColor: DARK.green, sub: "All checks passed", subColor: DARK.green, delay: 0.15 },
-              ].map((kpi, i) => (
-                <motion.div
-                  key={kpi.label}
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.4, delay: kpi.delay }}
-                  style={{ background: DARK.card, border: `1px solid ${DARK.cardBorder}`, borderRadius: 10, padding: "16px 18px", display: "flex", flexDirection: "column", gap: 8, position: "relative", overflow: "hidden" }}
-                >
-                  <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg, transparent, ${DARK.cyan}40, transparent)` }} />
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <span style={{ fontSize: 10, fontWeight: 600, color: DARK.textMuted, letterSpacing: "0.08em", fontFamily: DARK.fontMono }}>{kpi.label}</span>
-                    {kpi.badge && (
-                      <span style={{ fontSize: 9, fontWeight: 600, color: kpi.badgeColor, background: `${kpi.badgeColor}20`, padding: "2px 8px", borderRadius: 4, fontFamily: DARK.fontMono }}>{kpi.badge}</span>
-                    )}
-                  </div>
-                  <div style={{ fontSize: 32, fontWeight: 700, color: DARK.textPrimary, fontFamily: DARK.fontMono, lineHeight: 1 }}>{kpi.value}</div>
-                  {kpi.sub && <div style={{ fontSize: 11, color: kpi.subColor, fontFamily: DARK.fontMono }}>{kpi.sub}</div>}
-                  {kpi.dots !== undefined && (
-                    <div style={{ display: "flex", gap: 5, marginTop: 2 }}>
-                      {Array.from({ length: 4 }).map((_, j) => (
-                        <div key={j} style={{ width: 8, height: 8, borderRadius: "50%", background: j < kpi.dots! ? DARK.red : `${DARK.textMuted}40`, boxShadow: j < kpi.dots! ? `0 0 6px ${DARK.red}80` : "none" }} />
-                      ))}
-                    </div>
-                  )}
-                  {kpi.progress !== undefined && (
-                    <div style={{ width: "100%", height: 4, background: `${DARK.textMuted}30`, borderRadius: 2, overflow: "hidden", marginTop: 4 }}>
-                      <motion.div initial={{ width: 0 }} animate={{ width: `${kpi.progress}%` }} transition={{ duration: 1, delay: kpi.delay + 0.3 }} style={{ height: "100%", background: `linear-gradient(90deg, ${DARK.cyan}, ${DARK.cyan}cc)`, borderRadius: 2 }} />
-                    </div>
-                  )}
-                </motion.div>
-              ))}
+              <KpiCard label="TOTAL ASSETS" value={`${totalAssets}`} sub="+2.4% vs last scan" subColor={DARK.cyan} progress={78} delay={0} />
+              <KpiCard label="CRITICAL RISK" value={`${criticalCount}`} badge="ACTION REQ" badgeColor={DARK.red} delay={0.05} />
+              <KpiCard label="UNMANAGED" value={`${unmanagedCount}`} sub="Discovery needed" subColor={DARK.orange} progress={34} delay={0.1} />
+              <KpiCard label="HEALTHY" value={`${healthyCount}`} badge="COMPLIANT" badgeColor={DARK.green} sub="All checks passed" subColor={DARK.green} delay={0.15} />
             </div>
 
             {/* ── FILTER BAR ── */}
@@ -293,7 +348,9 @@ export default function AssetsPage() {
               <span style={{ fontSize: 11, fontWeight: 700, color: DARK.cyan, letterSpacing: "0.1em", fontFamily: DARK.fontMono }}>INVENTORY MATRIX</span>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <span style={{ fontSize: 10, color: DARK.textMuted }}>OS:</span>
-                <select value={filterOs} onChange={(e) => setFilterOs(e.target.value)} style={{ background: "#1e293b", border: `1px solid ${DARK.cardBorder}`, color: DARK.textPrimary, fontSize: 11, padding: "4px 8px", borderRadius: 4, fontFamily: DARK.fontMono }}>
+                <select value={filterOs} onChange={(e) => { setFilterOs(e.target.value); setPage(1); }}
+                  style={{ background: "#1e293b", border: `1px solid ${DARK.cardBorder}`, color: DARK.textPrimary, fontSize: 11, padding: "4px 8px", borderRadius: 4, fontFamily: DARK.fontMono }}
+                >
                   <option value="ALL_SYS">ALL</option>
                   <option value="LINUX_DEBIAN">LINUX</option>
                   <option value="UBUNTU_22">UBUNTU</option>
@@ -304,7 +361,9 @@ export default function AssetsPage() {
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <span style={{ fontSize: 10, color: DARK.textMuted }}>RISK:</span>
-                <select value={filterRisk} onChange={(e) => setFilterRisk(e.target.value)} style={{ background: "#1e293b", border: `1px solid ${DARK.cardBorder}`, color: DARK.textPrimary, fontSize: 11, padding: "4px 8px", borderRadius: 4, fontFamily: DARK.fontMono }}>
+                <select value={filterRisk} onChange={(e) => { setFilterRisk(e.target.value); setPage(1); }}
+                  style={{ background: "#1e293b", border: `1px solid ${DARK.cardBorder}`, color: DARK.textPrimary, fontSize: 11, padding: "4px 8px", borderRadius: 4, fontFamily: DARK.fontMono }}
+                >
                   <option value="ALL">ALL</option>
                   <option value="CRITICAL">CRITICAL</option>
                   <option value="HIGH">HIGH</option>
@@ -316,75 +375,85 @@ export default function AssetsPage() {
               </div>
             </motion.div>
 
-            {/* ── ASSET GRID ── */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }}>
-              {filteredAssets.map((asset, i) => {
-                const rc = riskColor(asset.riskScore);
-                const isSelected = selectedAsset.name === asset.name;
-                return (
-                  <motion.div
-                    key={asset.name}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3, delay: 0.25 + i * 0.04 }}
-                    onClick={() => setSelectedAsset(asset)}
-                    style={{
-                      background: isSelected ? `${DARK.cyan}08` : DARK.card,
-                      border: `1px solid ${isSelected ? `${DARK.cyan}60` : DARK.cardBorder}`,
-                      borderRadius: 10,
-                      padding: 16,
-                      cursor: "pointer",
-                      transition: "all 0.2s",
-                      position: "relative",
-                    }}
+            {/* ── ASSET TABLE ── */}
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}
+              style={{ background: DARK.card, border: `1px solid ${DARK.cardBorder}`, borderRadius: 10, overflow: "hidden" }}
+            >
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: DARK.fontMono }}>
+                  <thead>
+                    <tr style={{ borderBottom: `1px solid ${DARK.cardBorder}` }}>
+                      {["ASSET", "IP", "TYPE", "RISK", "VULNS", "OWNER", "LAST SEEN"].map((h) => (
+                        <th key={h} style={{ padding: "10px 14px", fontSize: 9, fontWeight: 600, color: DARK.textMuted, letterSpacing: "0.08em", textAlign: "left", whiteSpace: "nowrap" }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pagedAssets.map((asset) => {
+                      const rc = riskColor(asset.riskScore);
+                      const isSelected = selectedAsset.name === asset.name;
+                      return (
+                        <tr key={asset.name} onClick={() => setSelectedAsset(asset)}
+                          style={{ borderBottom: `1px solid ${DARK.cardBorder}`, cursor: "pointer", background: isSelected ? `${DARK.cyan}08` : "transparent", transition: "background 0.15s" }}
+                          onMouseEnter={(e) => { if (!isSelected) (e.currentTarget as HTMLElement).style.background = `${DARK.cardBorder}`; }}
+                          onMouseLeave={(e) => { if (!isSelected) (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+                        >
+                          <td style={{ padding: "10px 14px", fontSize: 12, fontWeight: 600, color: DARK.textPrimary, whiteSpace: "nowrap" }}>
+                            <span style={{ marginRight: 8 }}>{typeIcon(asset.type)}</span>
+                            {asset.name}
+                          </td>
+                          <td style={{ padding: "10px 14px", fontSize: 11, color: DARK.textSecondary }}>{asset.ip}</td>
+                          <td style={{ padding: "10px 14px", fontSize: 10, color: DARK.textMuted }}>{asset.type}</td>
+                          <td style={{ padding: "10px 14px" }}>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: rc }}>{asset.riskScore}</span>
+                          </td>
+                          <td style={{ padding: "10px 14px", fontSize: 11, color: asset.vulns > 0 ? DARK.red : DARK.green, fontWeight: 600 }}>{asset.vulns}</td>
+                          <td style={{ padding: "10px 14px", fontSize: 10, color: DARK.textMuted }}>{asset.owner}</td>
+                          <td style={{ padding: "10px 14px", fontSize: 10, color: `${DARK.cyan}90` }}>{asset.lastSeen}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* ── PAGINATION ── */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderTop: `1px solid ${DARK.cardBorder}` }}>
+                <span style={{ fontSize: 10, color: DARK.textMuted, fontFamily: DARK.fontMono }}>
+                  PAGE {page} of {totalPages} — {filteredAssets.length} TOTAL
+                </span>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}
+                    style={{ padding: "4px 12px", fontSize: 10, fontWeight: 600, color: page === 1 ? `${DARK.textMuted}60` : DARK.textPrimary, background: "#1e293b", border: `1px solid ${DARK.cardBorder}`, borderRadius: 4, cursor: page === 1 ? "default" : "pointer", fontFamily: DARK.fontMono }}
                   >
-                    <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-                      <div style={{ width: 40, height: 40, borderRadius: 8, background: `${rc}15`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>
-                        {typeIcon(asset.type)}
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
-                          <span style={{ fontSize: 13, fontWeight: 700, color: DARK.textPrimary, fontFamily: DARK.fontMono, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{asset.name}</span>
-                          <span style={{ fontSize: 18, fontWeight: 700, color: rc, fontFamily: DARK.fontMono }}>{asset.riskScore}</span>
-                        </div>
-                        <div style={{ fontSize: 11, color: DARK.textMuted, fontFamily: DARK.fontMono, marginBottom: 8 }}>{asset.ip} · {asset.type}</div>
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 }}>
-                          {asset.tags.map((tag) => (
-                            <span key={tag.label} style={{ fontSize: 9, fontWeight: 600, color: tag.color, background: tag.bg, border: `1px solid ${tag.border}`, padding: "2px 6px", borderRadius: 3, fontFamily: DARK.fontMono }}>{tag.label}</span>
-                          ))}
-                        </div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 10, color: DARK.textMuted }}>
-                          <span>Owner: <span style={{ color: DARK.textSecondary }}>{asset.owner}</span></span>
-                          <span>OS: <span style={{ color: DARK.textSecondary }}>{asset.os}</span></span>
-                          <span style={{ marginLeft: "auto", color: `${DARK.cyan}90` }}>{asset.lastSeen}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </motion.div>
-                );
-              })}
-            </div>
+                    PREV
+                  </button>
+                  <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}
+                    style={{ padding: "4px 12px", fontSize: 10, fontWeight: 600, color: page === totalPages ? `${DARK.textMuted}60` : DARK.textPrimary, background: "#1e293b", border: `1px solid ${DARK.cardBorder}`, borderRadius: 4, cursor: page === totalPages ? "default" : "pointer", fontFamily: DARK.fontMono }}
+                  >
+                    NEXT
+                  </button>
+                </div>
+              </div>
+            </motion.div>
           </div>
 
           {/* ════════ RIGHT SIDEBAR ════════ */}
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }}
-            style={{ display: "flex", flexDirection: "column", gap: 16 }}
+            style={{ display: "flex", flexDirection: "column", gap: 14 }}
           >
-            {/* ── ASSET INTELLIGENCE UNIT ── */}
-            <div style={{ background: DARK.card, border: `1px solid ${DARK.cardBorder}`, borderRadius: 12, padding: 20 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
-                <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={DARK.cyan} strokeWidth={2}>
+            {/* ── SELECTED TARGET ── */}
+            <div style={{ background: DARK.card, border: `1px solid ${DARK.cardBorder}`, borderRadius: 12, padding: 18 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={DARK.cyan} strokeWidth={2}>
                   <circle cx="12" cy="12" r="10" /><path d="M12 16v-4M12 8h.01" />
                 </svg>
-                <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.1em", color: DARK.textMuted }}>ASSET INTELLIGENCE UNIT</span>
+                <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.1em", color: DARK.textMuted, fontFamily: DARK.fontMono }}>SELECTED TARGET</span>
               </div>
-
-              {/* Selected Target */}
-              <div style={{ background: "#0d1117", border: `1px solid ${DARK.cardBorder}`, borderRadius: 8, padding: 14, marginBottom: 16 }}>
-                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", color: DARK.textMuted, marginBottom: 6 }}>SELECTED TARGET</div>
+              <div style={{ background: "#0d1117", border: `1px solid ${DARK.cardBorder}`, borderRadius: 8, padding: 14 }}>
                 <div style={{ fontSize: 16, fontWeight: 700, color: DARK.textPrimary, fontFamily: DARK.fontMono, marginBottom: 4 }}>{selectedAsset.name}</div>
                 <div style={{ fontSize: 12, color: DARK.textMuted, fontFamily: DARK.fontMono, marginBottom: 8 }}>IP: {selectedAsset.ip}</div>
-                <div style={{ display: "flex", gap: 6 }}>
+                <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
                   <span style={{ fontSize: 9, fontWeight: 600, color: riskColor(selectedAsset.riskScore), background: `${riskColor(selectedAsset.riskScore)}20`, padding: "3px 8px", borderRadius: 4, fontFamily: DARK.fontMono }}>
                     RISK: {selectedAsset.riskScore >= 60 ? "CRITICAL" : selectedAsset.riskScore >= 30 ? "HIGH" : "LOW"}
                   </span>
@@ -392,79 +461,90 @@ export default function AssetsPage() {
                     {selectedAsset.vulns} VULNS
                   </span>
                 </div>
-              </div>
-
-              {/* Communication Topology */}
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", color: DARK.textMuted, marginBottom: 8 }}>COMMUNICATION TOPOLOGY</div>
-                <div style={{ background: "#0d1117", border: `1px solid ${DARK.cardBorder}`, borderRadius: 8, padding: 12, height: 120, position: "relative", overflow: "hidden" }}>
-                  <svg width="100%" height="100%" viewBox="0 0 420 100">
-                    {topologyEdges.map((edge, i) => {
-                      const from = topologyNodes.find((n) => n.id === edge.from)!;
-                      const to = topologyNodes.find((n) => n.id === edge.to)!;
-                      return <line key={i} x1={from.x} y1={from.y} x2={to.x} y2={to.y} stroke={`${DARK.textMuted}40`} strokeWidth={1} strokeDasharray="4 4" />;
-                    })}
-                    {topologyNodes.map((node) => (
-                      <g key={node.id}>
-                        <circle cx={node.x} cy={node.y} r={8} fill={`${node.color}20`} stroke={node.color} strokeWidth={1.5} />
-                        <circle cx={node.x} cy={node.y} r={3} fill={node.color} opacity={0.8} />
-                        <text x={node.x} y={node.y + 20} textAnchor="middle" fill={DARK.textMuted} fontSize={8} fontFamily={DARK.fontMono}>{node.label}</text>
-                      </g>
-                    ))}
-                  </svg>
-                </div>
-              </div>
-
-              {/* Telemetry Logs */}
-              <div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                  <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", color: DARK.textMuted }}>TELEMETRY_LOGS</span>
-                  <span style={{ fontSize: 9, fontWeight: 600, color: DARK.green, background: `${DARK.green}15`, padding: "2px 6px", borderRadius: 3, fontFamily: DARK.fontMono }}>LIVE</span>
-                </div>
-                <div style={{ background: "#0d1117", border: `1px solid ${DARK.cardBorder}`, borderRadius: 8, padding: 12, maxHeight: 220, overflowY: "auto" }}>
-                  {telemetryLogs.map((log, i) => (
-                    <div key={i} style={{ fontSize: 10, fontFamily: DARK.fontMono, lineHeight: 1.8, display: "flex", gap: 6 }}>
-                      <span style={{ color: DARK.textMuted, flexShrink: 0 }}>{log.time}</span>
-                      <span style={{ color: log.tagColor, fontWeight: 600, flexShrink: 0 }}>[{log.tag}]</span>
-                      <span style={{ color: DARK.textSecondary }}>{log.msg}</span>
-                    </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 }}>
+                  {selectedAsset.tags.map((tag) => (
+                    <span key={tag.label} style={{ fontSize: 9, fontWeight: 600, color: tag.color, background: tag.bg, border: `1px solid ${tag.border}`, padding: "2px 6px", borderRadius: 3, fontFamily: DARK.fontMono }}>{tag.label}</span>
                   ))}
+                </div>
+                <div style={{ fontSize: 10, color: DARK.textMuted, fontFamily: DARK.fontMono }}>
+                  Owner: <span style={{ color: DARK.textSecondary }}>{selectedAsset.owner}</span> · OS: <span style={{ color: DARK.textSecondary }}>{selectedAsset.os}</span>
                 </div>
               </div>
             </div>
 
             {/* ── QUICK ACTIONS ── */}
-            <div style={{ background: DARK.card, border: `1px solid ${DARK.cardBorder}`, borderRadius: 12, padding: 20 }}>
-              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", color: DARK.textMuted, marginBottom: 12 }}>QUICK ACTIONS</div>
+            <div style={{ background: DARK.card, border: `1px solid ${DARK.cardBorder}`, borderRadius: 12, padding: 18 }}>
+              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", color: DARK.textMuted, marginBottom: 10, fontFamily: DARK.fontMono }}>QUICK ACTIONS</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-                  style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "10px 16px", fontSize: 12, fontWeight: 600, background: `linear-gradient(135deg, ${DARK.red}, #dc2626)`, color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontFamily: DARK.fontMono }}
+                  style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "10px 16px", fontSize: 11, fontWeight: 600, background: `linear-gradient(135deg, ${DARK.red}, #dc2626)`, color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontFamily: DARK.fontMono }}
                 >
                   <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>
-                  ISOLATE_ASSET
+                  ISOLATE ASSET
                 </motion.button>
                 <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-                  style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "10px 16px", fontSize: 12, fontWeight: 600, background: "transparent", color: DARK.textPrimary, border: `1px solid ${DARK.cardBorder}`, borderRadius: 8, cursor: "pointer", fontFamily: DARK.fontMono }}
+                  style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "10px 16px", fontSize: 11, fontWeight: 600, background: "transparent", color: DARK.textPrimary, border: `1px solid ${DARK.cardBorder}`, borderRadius: 8, cursor: "pointer", fontFamily: DARK.fontMono }}
                 >
                   <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" /><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07" /></svg>
-                  ALERT_TEAM
+                  ALERT TEAM
                 </motion.button>
                 <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-                  style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "10px 16px", fontSize: 12, fontWeight: 600, background: "transparent", color: DARK.textPrimary, border: `1px solid ${DARK.cardBorder}`, borderRadius: 8, cursor: "pointer", fontFamily: DARK.fontMono }}
+                  style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "10px 16px", fontSize: 11, fontWeight: 600, background: "transparent", color: DARK.textPrimary, border: `1px solid ${DARK.cardBorder}`, borderRadius: 8, cursor: "pointer", fontFamily: DARK.fontMono }}
                 >
                   <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z" /></svg>
-                  PATCH_ASSET
+                  PATCH ASSET
                 </motion.button>
               </div>
             </div>
 
-            {/* ── AI AGENT LOG ── */}
-            <div style={{ background: DARK.card, border: `1px solid ${DARK.cardBorder}`, borderRadius: 12, padding: 20 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-                <div style={{ width: 8, height: 8, borderRadius: "50%", background: DARK.green, boxShadow: `0 0 8px ${DARK.green}` }} />
-                <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", color: DARK.textMuted }}>AI AGENT LOG</span>
+            {/* ── COMMUNICATION TOPOLOGY ── */}
+            <div style={{ background: DARK.card, border: `1px solid ${DARK.cardBorder}`, borderRadius: 12, padding: 18 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", color: DARK.textMuted, fontFamily: DARK.fontMono }}>COMMUNICATION TOPOLOGY</span>
+                <span style={{ fontSize: 9, fontWeight: 600, color: DARK.cyan, background: `${DARK.cyan}15`, padding: "2px 6px", borderRadius: 3, fontFamily: DARK.fontMono }}>7 NODES</span>
               </div>
-              <div style={{ background: "#0d1117", border: `1px solid ${DARK.cardBorder}`, borderRadius: 8, padding: 12, maxHeight: 180, overflowY: "auto" }}>
+              <div style={{ background: "#0d1117", border: `1px solid ${DARK.cardBorder}`, borderRadius: 8, padding: 12, height: 160, position: "relative", overflow: "hidden" }}>
+                <svg width="100%" height="100%" viewBox="0 0 420 140">
+                  {topologyEdges.map((edge, i) => {
+                    const from = topologyNodes.find((n) => n.id === edge.from)!;
+                    const to = topologyNodes.find((n) => n.id === edge.to)!;
+                    return <line key={i} x1={from.x} y1={from.y} x2={to.x} y2={to.y} stroke={`${DARK.textMuted}40`} strokeWidth={1} strokeDasharray="4 4" />;
+                  })}
+                  {topologyNodes.map((node) => (
+                    <g key={node.id}>
+                      <circle cx={node.x} cy={node.y} r={12} fill={`${node.color}20`} stroke={node.color} strokeWidth={1.5} />
+                      <circle cx={node.x} cy={node.y} r={4} fill={node.color} opacity={0.8} />
+                      <text x={node.x} y={node.y + 24} textAnchor="middle" fill={DARK.textMuted} fontSize={9} fontFamily={DARK.fontMono}>{node.label}</text>
+                    </g>
+                  ))}
+                </svg>
+              </div>
+            </div>
+
+            {/* ── TELEMETRY LOGS ── */}
+            <div style={{ background: DARK.card, border: `1px solid ${DARK.cardBorder}`, borderRadius: 12, padding: 18 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", color: DARK.textMuted, fontFamily: DARK.fontMono }}>TELEMETRY_LOGS</span>
+                <span style={{ fontSize: 9, fontWeight: 600, color: DARK.green, background: `${DARK.green}15`, padding: "2px 6px", borderRadius: 3, fontFamily: DARK.fontMono }}>LIVE</span>
+              </div>
+              <div style={{ background: "#0d1117", border: `1px solid ${DARK.cardBorder}`, borderRadius: 8, padding: 12, maxHeight: 200, overflowY: "auto" }}>
+                {telemetryLogs.map((log, i) => (
+                  <div key={i} style={{ fontSize: 10, fontFamily: DARK.fontMono, lineHeight: 1.8, display: "flex", gap: 6 }}>
+                    <span style={{ color: DARK.textMuted, flexShrink: 0 }}>{log.time}</span>
+                    <span style={{ color: log.tagColor, fontWeight: 600, flexShrink: 0 }}>[{log.tag}]</span>
+                    <span style={{ color: DARK.textSecondary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{log.msg}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* ── AI AGENT LOG ── */}
+            <div style={{ background: DARK.card, border: `1px solid ${DARK.cardBorder}`, borderRadius: 12, padding: 18 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                <div style={{ width: 8, height: 8, borderRadius: "50%", background: DARK.green, boxShadow: `0 0 8px ${DARK.green}` }} />
+                <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", color: DARK.textMuted, fontFamily: DARK.fontMono }}>AI AGENT LOG</span>
+              </div>
+              <div style={{ background: "#0d1117", border: `1px solid ${DARK.cardBorder}`, borderRadius: 8, padding: 12, maxHeight: 160, overflowY: "auto" }}>
                 {[
                   { time: "14:02:01", agent: "SCAN_ENGINE", msg: "Vulnerability scan completed on SRV-PROD-DB-01", color: DARK.cyan },
                   { time: "14:01:58", agent: "DETECT_AI", msg: "Anomalous SSH pattern detected from 182.1.2.91", color: DARK.orange },
@@ -474,7 +554,7 @@ export default function AssetsPage() {
                   <div key={i} style={{ fontSize: 10, fontFamily: DARK.fontMono, lineHeight: 1.8, display: "flex", gap: 6, marginBottom: 4 }}>
                     <span style={{ color: DARK.textMuted, flexShrink: 0 }}>{log.time}</span>
                     <span style={{ color: log.color, fontWeight: 600, flexShrink: 0 }}>[{log.agent}]</span>
-                    <span style={{ color: DARK.textSecondary }}>{log.msg}</span>
+                    <span style={{ color: DARK.textSecondary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{log.msg}</span>
                   </div>
                 ))}
               </div>
