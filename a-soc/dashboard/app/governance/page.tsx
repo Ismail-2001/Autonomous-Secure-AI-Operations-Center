@@ -47,9 +47,15 @@ export default function GovernancePage() {
     });
   }, []);
 
+  const complianceScore = complianceData?.score ?? 88;
+  const passCount = complianceData?.pass_count ?? 142;
+  const totalControls = complianceData?.total_controls ?? 161;
+  const failCount = complianceData?.fail_count ?? 19;
+  const activeControls = complianceData?.controls ?? controls;
+
   const filteredControls = controlFilter === "fail"
-    ? controls.filter((c) => c.status === "FAIL")
-    : controls;
+    ? activeControls.filter((c: any) => c.status === "FAIL")
+    : activeControls;
 
   const statusColor = (s: string) => s === "PASS" ? "#22c55e" : s === "FAIL" ? "#ef4444" : ORANGE;
   const statusBg = (s: string) => s === "PASS" ? "rgba(34,197,94,0.12)" : s === "FAIL" ? "rgba(239,68,68,0.12)" : "rgba(255,145,0,0.12)";
@@ -140,7 +146,7 @@ export default function GovernancePage() {
                   cx={90} cy={90} r={76} fill="none" stroke={CYAN} strokeWidth={12}
                   strokeLinecap="round"
                   initial={{ strokeDasharray: "0 477.5" }}
-                  animate={{ strokeDasharray: `${(88 / 100) * 477.5} 477.5` }}
+                  animate={{ strokeDasharray: `${(complianceScore / 100) * 477.5} 477.5` }}
                   transition={{ duration: 1.8, ease: "easeOut", delay: 0.5 }}
                   style={{ transform: "rotate(-90deg)", transformOrigin: "center" }}
                 />
@@ -148,7 +154,7 @@ export default function GovernancePage() {
                   cx={90} cy={90} r={76} fill="none" stroke="rgba(0,229,255,0.15)" strokeWidth={14}
                   strokeLinecap="round"
                   initial={{ strokeDasharray: "0 477.5" }}
-                  animate={{ strokeDasharray: `${(88 / 100) * 477.5} 477.5` }}
+                  animate={{ strokeDasharray: `${(complianceScore / 100) * 477.5} 477.5` }}
                   transition={{ duration: 1.8, ease: "easeOut", delay: 0.5 }}
                   style={{ transform: "rotate(-90deg)", transformOrigin: "center", filter: "blur(8px)" }}
                 />
@@ -158,7 +164,7 @@ export default function GovernancePage() {
                   initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.6, delay: 0.8 }}
                   style={{ fontSize: 48, fontWeight: 800, fontFamily: "'JetBrains Mono', monospace", color: CYAN }}
                 >
-                  88
+                  {complianceScore}
                 </motion.span>
                 <span style={{ fontSize: 11, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.1em" }}>%</span>
               </div>
@@ -171,11 +177,11 @@ export default function GovernancePage() {
             <div style={{ marginTop: 20, width: "100%", borderTop: `1px solid ${PANEL_BORDER}`, paddingTop: 16, display: "flex", flexDirection: "column", gap: 10 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span style={{ fontSize: 11, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>CONTROLS PASS</span>
-                <span style={{ fontSize: 14, fontWeight: 800, fontFamily: "'JetBrains Mono', monospace", color: "#22c55e" }}>142/161</span>
+                <span style={{ fontSize: 14, fontWeight: 800, fontFamily: "'JetBrains Mono', monospace", color: "#22c55e" }}>{passCount}/{totalControls}</span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span style={{ fontSize: 11, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>REMEDIATION</span>
-                <span style={{ fontSize: 14, fontWeight: 800, fontFamily: "'JetBrains Mono', monospace", color: ORANGE }}>19 ACTIVE</span>
+                <span style={{ fontSize: 14, fontWeight: 800, fontFamily: "'JetBrains Mono', monospace", color: ORANGE }}>{failCount} ACTIVE</span>
               </div>
             </div>
           </motion.div>

@@ -1,0 +1,173 @@
+name: CI — Build, Test, Smoke
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: asoc_db
+          POSTGRES_USER: asoc_user
+          POSTGRES_PASSWORD: testpass
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements-lock.txt
+
+      - name: Syntax check
+        run: python -m py_compile src/asoc/api/app.py
+
+      - name: Run migration + seed
+        env:
+          DATABASE_URL: postgresql+asyncpg://asoc_user:testpass@localhost:5432/asoc_db
+        run: python scripts/run_migration.py
+
+      - name: Health check
+        env:
+          DATABASE_URL: postgresql+asyncpg://asoc_user:testpass@localhost:5432/asoc_db
+          REDIS_URL: redis://localhost:6379/0
+        run: |
+          python -c "
+          import asyncio, asyncpg
+          async def check():
+              conn = await asyncpg.connect('postgresql://asoc_user:testpass@localhost:5432/asoc_db')
+              count = await conn.fetchval('SELECT COUNT(*) FROM incidents')
+              assert count == 10, f'Expected 10 incidents, got {count}'
+              print(f'DB check: {count} incidents OK')
+              await conn.close()
+          asyncio.run(check())
+          "
+
+  dashboard:
+    name: Dashboard Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        working-directory: dashboard
+        run: npm ci --legacy-peer-deps
+
+      - name: TypeScript check
+        working-directory: dashboard
+        run: npx tsc --noEmit
+
+      - name: Build
+        working-directory: dashboard
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:9002
+
+  smoke-tests:
+    name: E2E Smoke Tests
+    runs-on: ubuntu-latest
+    needs: [backend, dashboard]
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: asoc_db
+          POSTGRES_USER: asoc_user
+          POSTGRES_PASSWORD: changeme123
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Python deps
+        run: pip install -r requirements-lock.txt
+
+      - name: Install Node deps
+        working-directory: dashboard
+        run: npm ci --legacy-peer-deps
+
+      - name: Seed database
+        env:
+          DATABASE_URL: postgresql+asyncpg://asoc_user:changeme123@localhost:5432/asoc_db
+        run: python scripts/run_migration.py
+
+      - name: Start backend
+        env:
+          DATABASE_URL: postgresql+asyncpg://asoc_user:changeme123@localhost:5432/asoc_db
+          REDIS_URL: redis://localhost:6379/0
+          HMAC_SECRET: ci-test-secret
+        run: |
+          python -m uvicorn src.asoc.api.app:app --host 0.0.0.0 --port 9002 &
+          sleep 10
+          curl -f http://localhost:9002/health
+
+      - name: Start dashboard
+        working-directory: dashboard
+        run: |
+          npm run build
+          npm start &
+          sleep 10
+          curl -f http://localhost:3000
+
+      - name: Run smoke tests
+        run: |
+          PASS=0; FAIL=0
+          check() { if eval "$2" >/dev/null 2>&1; then echo "PASS  $1"; PASS=$((PASS+1)); else echo "FAIL  $1"; FAIL=$((FAIL+1)); fi }
+
+          # Backend
+          check "Health" "curl -sf http://localhost:9002/health"
+          TOKEN=$(curl -s -X POST http://localhost:9002/api/v1/auth/token -H 'Content-Type: application/json' -d '{"user_id":"admin","password":"admin123"}' | python -c 'import sys,json; print(json.load(sys.stdin)["access_token"])')
+          AUTH="-H Authorization:Bearer$TOKEN"
+          check "Stats" "curl -sf -H 'Authorization: Bearer $TOKEN' http://localhost:9002/api/v1/dashboard/stats"
+          check "Incidents" "curl -sf -H 'Authorization: Bearer $TOKEN' http://localhost:9002/api/v1/incidents"
+          check "Assets" "curl -sf -H 'Authorization: Bearer $TOKEN' http://localhost:9002/api/v1/assets"
+          check "Forensics" "curl -sf -H 'Authorization: Bearer $TOKEN' http://localhost:9002/api/v1/forensics/jobs"
+          check "ThreatIntel" "curl -sf -H 'Authorization: Bearer $TOKEN' http://localhost:9002/api/v1/threat-intel/indicators"
+          check "Compliance" "curl -sf -H 'Authorization: Bearer $TOKEN' http://localhost:9002/api/v1/compliance/report"
+
+          # Dashboard
+          for page in / /hunting /assets /forensics /threat-intel /governance; do
+            check "Page $page" "curl -sf http://localhost:3000$page"
+          done
+
+          echo ""
+          echo "Results: $PASS passed, $FAIL failed"
+          [ $FAIL -eq 0 ] || exit 1

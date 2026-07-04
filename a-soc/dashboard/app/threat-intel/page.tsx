@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import Shell from "@/components/Shell";
+import { api, endpoints, ThreatIndicator } from "@/lib/api";
 
 const IOC_CARDS = [
   {
@@ -160,8 +161,56 @@ function GlobeIcon() {
   );
 }
 
+const TLP_COLORS: Record<string, { tlp: string; color: string }> = {
+  RED: { tlp: "RED", color: "#ef4444" },
+  AMBER: { tlp: "AMBER", color: "#f59e0b" },
+  GREEN: { tlp: "GREEN", color: "#22c55e" },
+  WHITE: { tlp: "WHITE", color: "#94a3b8" },
+};
+
+function mapIndicatorToCard(indicator: ThreatIndicator, index: number) {
+  const tlp = TLP_COLORS[indicator.tlp?.toUpperCase()] || TLP_COLORS.GREEN;
+  const severityColor =
+    indicator.severity === "critical"
+      ? "#ef4444"
+      : indicator.severity === "high"
+        ? "#f59e0b"
+        : indicator.severity === "medium"
+          ? "#06b6d4"
+          : "#22c55e";
+  return {
+    id: `api-${indicator.id ?? index}`,
+    tlp: tlp.tlp as "RED" | "AMBER" | "GREEN",
+    tlpColor: tlp.color,
+    value: indicator.value,
+    type: indicator.type?.toUpperCase() ?? "UNKNOWN",
+    typeColor: severityColor,
+    typeBg: `${severityColor}25`,
+    time: indicator.last_seen
+      ? new Date(indicator.last_seen).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+      : "recent",
+  };
+}
+
 export default function ThreatIntelPage() {
   const [hoveredTechnique, setHoveredTechnique] = useState<string | null>(null);
+  const [apiIndicators, setApiIndicators] = useState<ReturnType<typeof mapIndicatorToCard>[]>([]);
+  const [apiError, setApiError] = useState<boolean>(false);
+
+  useEffect(() => {
+    api
+      .get<{ indicators: ThreatIndicator[]; count: number }>(endpoints.threatIntel())
+      .then((res) => {
+        if (res?.indicators?.length) {
+          setApiIndicators(res.indicators.map((ind, i) => mapIndicatorToCard(ind, i)));
+        }
+      })
+      .catch(() => {
+        setApiError(true);
+      });
+  }, []);
+
+  const displayIocs = apiIndicators.length > 0 ? apiIndicators : IOC_CARDS;
 
   return (
     <Shell>
@@ -241,10 +290,10 @@ export default function ThreatIntelPage() {
                 <DatabaseIcon />
               </div>
               <span style={{ fontSize: 14, fontWeight: 700, color: "#f1f5f9" }}>IOC Database</span>
-              <span style={{ marginLeft: "auto", fontSize: 11, color: "#64748b" }}>{IOC_CARDS.length} active</span>
+              <span style={{ marginLeft: "auto", fontSize: 11, color: "#64748b" }}>{displayIocs.length} active</span>
             </div>
             <div style={{ padding: 12, display: "flex", flexDirection: "column", gap: 10, maxHeight: 320, overflowY: "auto" }}>
-              {IOC_CARDS.map((ioc, i) => (
+              {displayIocs.map((ioc, i) => (
                 <motion.div
                   key={ioc.id}
                   initial={{ opacity: 0, x: -10 }}

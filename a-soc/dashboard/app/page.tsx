@@ -715,6 +715,9 @@ export default function LiveMonitoringPage() {
     });
   }, []);
 
+  const displayAgents = agents.length > 0 ? agents : AGENTS;
+  const displayIncidents = incidents.length > 0 ? incidents : THREATS;
+
   const handleSimulate = useCallback(() => {
     setSimulating(true);
     setTimeout(() => setSimulating(false), 5000);
@@ -821,7 +824,7 @@ export default function LiveMonitoringPage() {
                 paddingRight: 4,
               }}
             >
-              {AGENTS.map((agent, i) => (
+              {displayAgents.map((agent, i) => (
                 <AgentCard key={agent.name} agent={agent} index={i} />
               ))}
             </div>
@@ -940,7 +943,7 @@ export default function LiveMonitoringPage() {
                 paddingRight: 4,
               }}
             >
-              {THREATS.map((t, i) => (
+              {displayIncidents.map((t, i) => (
                 <ThreatCard key={i} threat={t} index={i} />
               ))}
             </div>

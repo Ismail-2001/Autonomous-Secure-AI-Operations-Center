@@ -7,6 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "test:report": "playwright show-report",
     "generate:types": "datamodel-code_generator --input ../../src/asoc --output types/generated --output-model-type pydantic_v2.BaseModel"
   },
   "dependencies": {
@@ -22,6 +25,7 @@
     "zustand": "^5"
   },
   "devDependencies": {
+    "@playwright/test": "^1.49.1",
     "@tailwindcss/postcss": "^4",
     "@types/d3": "^7.4.3",
     "@types/node": "^20",
