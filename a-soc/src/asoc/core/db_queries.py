@@ -214,22 +214,38 @@ async def get_dashboard_stats() -> Dict[str, Any]:
         neutralized = await conn.fetchval(
             "SELECT COUNT(*) FROM incidents WHERE status = 'resolved'"
         )
+        critical_alerts = await conn.fetchval(
+            "SELECT COUNT(*) FROM incidents WHERE severity = 'critical' AND status != 'resolved'"
+        )
         total_assets = await conn.fetchval("SELECT COUNT(*) FROM assets")
         critical_assets = await conn.fetchval(
             "SELECT COUNT(*) FROM assets WHERE risk_score >= 60"
         )
         total_events = await conn.fetchval("SELECT COUNT(*) FROM events")
 
+        compliance_total = await conn.fetchval(
+            "SELECT COUNT(*) FROM compliance_controls"
+        ) or 0
+        compliance_passed = await conn.fetchval(
+            "SELECT COUNT(*) FROM compliance_controls WHERE status = 'PASS'"
+        ) or 0
+        compliance_score = round((compliance_passed / compliance_total * 100), 1) if compliance_total > 0 else 0
+
+        mttr_row = await conn.fetchval(
+            "SELECT AVG(EXTRACT(EPOCH FROM (updated_at - created_at)) / 60) FROM incidents WHERE status = 'resolved'"
+        )
+        mttr_minutes = round(mttr_row, 1) if mttr_row else 0
+
         return {
             "active_threats": active_threats or 0,
             "threats_neutralized": neutralized or 0,
-            "mttr_minutes": 12,
+            "mttr_minutes": mttr_minutes,
             "ai_agents_active": 7,
             "total_assets": total_assets or 0,
             "critical_assets": critical_assets or 0,
             "events_today": total_events or 0,
-            "critical_alerts": active_threats or 0,
-            "compliance_score": 88,
+            "critical_alerts": critical_alerts or 0,
+            "compliance_score": compliance_score,
         }
     finally:
         await _release_conn(conn)

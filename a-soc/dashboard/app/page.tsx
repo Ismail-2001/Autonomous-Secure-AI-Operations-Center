@@ -711,7 +711,7 @@ function BlastRadiusGraph() {
 export default function LiveMonitoringPage() {
   const [simulating, setSimulating] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState({ active_threats: 3, threats_neutralized: 142, mttr_minutes: 12, ai_agents_active: 7, events_today: 1402, critical_alerts: 3 });
+  const [stats, setStats] = useState({ active_threats: 0, threats_neutralized: 0, mttr_minutes: 0, ai_agents_active: 7, events_today: 0, critical_alerts: 0 });
   const [agents, setAgents] = useState<{ name: string; status: string; confidence: number }[]>([]);
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
@@ -796,15 +796,15 @@ export default function LiveMonitoringPage() {
               />
               <KpiCard
                 label="ACTIVE THREATS"
-                value={String(stats.active_threats || 3).padStart(2, "0")}
+                value={String(stats.active_threats || 0).padStart(2, "0")}
                 badge="URGENT ACTION"
                 badgeColor={DARK.red}
-                dots={stats.active_threats || 3}
+                dots={stats.active_threats || 0}
                 delay={0.05}
               />
               <KpiCard
                 label="NEUTRALIZED"
-                value={String(stats.threats_neutralized || 142)}
+                value={String(stats.threats_neutralized || 0)}
                 badge="LAST 24H"
                 badgeColor={DARK.cyan}
                 sub="SYSTEM SELF-HEALING ACTIVE"
@@ -813,7 +813,7 @@ export default function LiveMonitoringPage() {
               />
               <KpiCard
                 label="MTTR"
-                value={`${stats.mttr_minutes || 12}m`}
+                value={`${stats.mttr_minutes || 0}m`}
                 sub="-4m AVG"
                 subColor="#34a853"
                 badge="OPTIMIZED RESPONSE ENGINE"
