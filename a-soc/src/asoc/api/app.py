@@ -345,6 +345,51 @@ async def list_incidents(limit: int = Query(20, ge=1, le=100)):
         }
 
 
+class CreateIncidentRequest(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200)
+    description: str = Field(..., min_length=1, max_length=2000)
+    severity: str = Field(..., pattern="^(critical|high|medium|low)$")
+    source: str = Field(default="Dashboard")
+    tags: list[str] = Field(default=[])
+
+
+@api_v1.post("/incidents", dependencies=[Depends(require_jwt)])
+async def create_incident(req: CreateIncidentRequest):
+    """Create a new incident from the dashboard."""
+    from src.asoc.core.connection import get_db_pool
+    import json as _json
+
+    risk_map = {"critical": 90.0, "high": 70.0, "medium": 50.0, "low": 25.0}
+    risk_score = risk_map.get(req.severity, 50.0)
+
+    db = await get_db_pool()
+    async with db.pool.acquire() as conn:
+        row = await conn.fetchrow("""
+            INSERT INTO incidents (id, incident_number, title, description, severity, status, source, agent, risk_score, tags, created_at, updated_at, triage_status)
+            VALUES (gen_random_uuid(), 'INC-2026-' || LPAD((EXTRACT(EPOCH FROM NOW())::int % 10000)::text, 4, '0'), $1, $2, $3, 'active', $4, $5, $6, $7::jsonb, NOW(), NOW(), 'new')
+            RETURNING id, incident_number, title, description, severity, status, source, agent, risk_score, tags, created_at, updated_at, triage_status
+        """, req.title, req.description, req.severity, req.source, "Dashboard", risk_score, _json.dumps(req.tags))
+
+    return {
+        "ok": True,
+        "incident": {
+            "id": str(row["id"]),
+            "incident_number": row["incident_number"],
+            "title": row["title"],
+            "description": row["description"],
+            "severity": row["severity"],
+            "status": row["status"],
+            "source": row["source"],
+            "agent": row["agent"],
+            "risk_score": row["risk_score"],
+            "tags": req.tags,
+            "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+            "updated_at": row["updated_at"].isoformat() if row["updated_at"] else None,
+            "triage_status": row["triage_status"],
+        },
+    }
+
+
 # ── Alert Triage ────────────────────────────────────────────────────────
 
 

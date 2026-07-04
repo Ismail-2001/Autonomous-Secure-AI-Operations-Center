@@ -715,8 +715,15 @@ export default function LiveMonitoringPage() {
   const [agents, setAgents] = useState<{ name: string; status: string; confidence: number }[]>([]);
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newIncident, setNewIncident] = useState({ title: "", description: "", severity: "medium" as string, source: "Dashboard", tags: "" });
+  const [creating, setCreating] = useState(false);
   const feed = useThreatFeed();
   const { role } = useAuth();
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sevFilter, setSevFilter] = useState<string[]>([]);
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
 
   useEffect(() => {
     import("@/lib/api").then(({ api, endpoints }) => {
@@ -757,10 +764,48 @@ export default function LiveMonitoringPage() {
       }))
     : THREATS)];
 
+  const filteredIncidents = displayIncidents.filter((t) => {
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      const match = (t.title || "").toLowerCase().includes(q) || (t.detail || "").toLowerCase().includes(q) || (t.tags || []).some((tag: string) => tag.toLowerCase().includes(q));
+      if (!match) return false;
+    }
+    if (sevFilter.length > 0 && !sevFilter.includes(t.severity)) return false;
+    if (statusFilter.length > 0) {
+      const incStatus = t._original?.status || t._original?.triage_status || "";
+      if (!statusFilter.includes(incStatus)) return false;
+    }
+    return true;
+  });
+
   const handleSimulate = useCallback(() => {
     setSimulating(true);
     setTimeout(() => setSimulating(false), 5000);
   }, []);
+
+  const handleCreateIncident = async () => {
+    if (!newIncident.title.trim() || !newIncident.description.trim()) return;
+    setCreating(true);
+    try {
+      const tags = newIncident.tags.split(",").map((t) => t.trim()).filter(Boolean);
+      await import("@/lib/api").then(async ({ api, endpoints }) => {
+        await api.post(endpoints.createIncident(), {
+          title: newIncident.title,
+          description: newIncident.description,
+          severity: newIncident.severity,
+          source: newIncident.source,
+          tags,
+        });
+        const data = await api.get<{ incidents: Incident[] }>(endpoints.incidents());
+        setIncidents(data.incidents || []);
+      });
+      setShowCreateModal(false);
+      setNewIncident({ title: "", description: "", severity: "medium", source: "Dashboard", tags: "" });
+    } catch (e) {
+      console.error("Create incident failed:", e);
+    }
+    setCreating(false);
+  };
 
   return (
     <Shell onSimulate={handleSimulate} simulating={simulating} connectionState={feed.connectionState}>
@@ -970,27 +1015,109 @@ export default function LiveMonitoringPage() {
               >
                 THREAT STREAM
               </span>
-              <button
-                style={{
-                  background: "transparent",
-                  border: `1px solid ${DARK.cardBorder}`,
-                  borderRadius: 4,
-                  padding: "4px 8px",
-                  color: DARK.textMuted,
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 4,
-                  fontSize: 10,
-                  fontFamily: DARK.fontMono,
-                }}
-              >
-                <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                  <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
-                </svg>
-                FILTER
-              </button>
+              <span style={{ fontSize: 10, color: DARK.textMuted, fontFamily: DARK.fontMono }}>
+                {filteredIncidents.length}/{displayIncidents.length}
+              </span>
             </motion.div>
+
+            {/* SEARCH + FILTERS */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 8 }}>
+              <div style={{ position: "relative" }}>
+                <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke={DARK.textMuted} strokeWidth={2} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)" }}>
+                  <circle cx={11} cy={11} r={8} /><line x1={21} y1={21} x2="16.65" y2="16.65" />
+                </svg>
+                <input
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search threats..."
+                  style={{
+                    width: "100%",
+                    padding: "7px 10px 7px 28px",
+                    background: DARK.card,
+                    border: `1px solid ${DARK.cardBorder}`,
+                    borderRadius: 6,
+                    color: DARK.textPrimary,
+                    fontSize: 11,
+                    fontFamily: DARK.fontMono,
+                    outline: "none",
+                    boxSizing: "border-box",
+                  }}
+                  onFocus={(e) => (e.target.style.borderColor = DARK.cyan)}
+                  onBlur={(e) => (e.target.style.borderColor = DARK.cardBorder)}
+                />
+              </div>
+              <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                {["CRITICAL", "HIGH", "MEDIUM", "LOW"].map((sev) => {
+                  const active = sevFilter.includes(sev);
+                  const color = sev === "CRITICAL" ? DARK.red : sev === "HIGH" ? DARK.orange : sev === "MEDIUM" ? "#eab308" : DARK.textMuted;
+                  return (
+                    <button
+                      key={sev}
+                      onClick={() => setSevFilter(active ? sevFilter.filter((s) => s !== sev) : [...sevFilter, sev])}
+                      style={{
+                        padding: "3px 8px",
+                        fontSize: 9,
+                        fontWeight: 700,
+                        fontFamily: DARK.fontMono,
+                        letterSpacing: "0.05em",
+                        borderRadius: 3,
+                        border: `1px solid ${active ? color : DARK.cardBorder}`,
+                        background: active ? `${color}25` : "transparent",
+                        color: active ? color : DARK.textMuted,
+                        cursor: "pointer",
+                        transition: "all 0.15s",
+                      }}
+                    >
+                      {sev}
+                    </button>
+                  );
+                })}
+                <span style={{ width: 1, background: DARK.cardBorder, margin: "0 2px" }} />
+                {["active", "investigating", "resolved", "contained"].map((st) => {
+                  const active = statusFilter.includes(st);
+                  return (
+                    <button
+                      key={st}
+                      onClick={() => setStatusFilter(active ? statusFilter.filter((s) => s !== st) : [...statusFilter, st])}
+                      style={{
+                        padding: "3px 8px",
+                        fontSize: 9,
+                        fontWeight: 700,
+                        fontFamily: DARK.fontMono,
+                        letterSpacing: "0.05em",
+                        borderRadius: 3,
+                        border: `1px solid ${active ? DARK.cyan : DARK.cardBorder}`,
+                        background: active ? `${DARK.cyan}25` : "transparent",
+                        color: active ? DARK.cyan : DARK.textMuted,
+                        cursor: "pointer",
+                        transition: "all 0.15s",
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      {st}
+                    </button>
+                  );
+                })}
+                {(sevFilter.length > 0 || statusFilter.length > 0 || searchQuery) && (
+                  <button
+                    onClick={() => { setSevFilter([]); setStatusFilter([]); setSearchQuery(""); }}
+                    style={{
+                      padding: "3px 8px",
+                      fontSize: 9,
+                      fontWeight: 700,
+                      fontFamily: DARK.fontMono,
+                      borderRadius: 3,
+                      border: `1px solid ${DARK.cardBorder}`,
+                      background: "transparent",
+                      color: DARK.textMuted,
+                      cursor: "pointer",
+                    }}
+                  >
+                    CLEAR
+                  </button>
+                )}
+              </div>
+            </div>
             <div
               style={{
                 display: "flex",
@@ -1001,14 +1128,20 @@ export default function LiveMonitoringPage() {
                 paddingRight: 4,
               }}
             >
-              {displayIncidents.map((t, i) => (
-                <ThreatCard
-                  key={i}
-                  threat={t}
-                  index={i}
-                  onClick={t._original ? () => setSelectedIncident(t._original) : undefined}
-                />
-              ))}
+              {filteredIncidents.length === 0 ? (
+                <div style={{ textAlign: "center", padding: 20, fontSize: 11, color: DARK.textMuted, fontFamily: DARK.fontMono }}>
+                  No threats match filters
+                </div>
+              ) : (
+                filteredIncidents.map((t, i) => (
+                  <ThreatCard
+                    key={i}
+                    threat={t}
+                    index={i}
+                    onClick={t._original ? () => setSelectedIncident(t._original) : undefined}
+                  />
+                ))
+              )}
             </div>
 
             {/* TIMELINE */}
@@ -1184,6 +1317,105 @@ export default function LiveMonitoringPage() {
         }}
         role={role}
       />
+
+      {/* CREATE INCIDENT MODAL */}
+      {showCreateModal && (
+        <>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} onClick={() => setShowCreateModal(false)}
+            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 90 }} />
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+            style={{
+              position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
+              width: 480, background: DARK.bg, border: `1px solid ${DARK.cardBorder}`, borderRadius: 12,
+              padding: 24, zIndex: 100, fontFamily: DARK.fontMono,
+            }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: DARK.textPrimary, letterSpacing: "0.08em" }}>NEW INCIDENT</span>
+              <button onClick={() => setShowCreateModal(false)} style={{ background: "none", border: `1px solid ${DARK.cardBorder}`, borderRadius: 4, padding: "4px 8px", color: DARK.textMuted, cursor: "pointer", fontSize: 11 }}>✕</button>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 9, fontWeight: 600, color: DARK.textMuted, marginBottom: 4, letterSpacing: "0.08em" }}>TITLE</div>
+                <input value={newIncident.title} onChange={(e) => setNewIncident({ ...newIncident, title: e.target.value })}
+                  placeholder="e.g. Ransomware Detection on FS-PROD-03"
+                  style={{ width: "100%", padding: "8px 10px", background: DARK.card, border: `1px solid ${DARK.cardBorder}`, borderRadius: 6, color: DARK.textPrimary, fontSize: 11, fontFamily: DARK.fontMono, outline: "none", boxSizing: "border-box" }}
+                  onFocus={(e) => (e.target.style.borderColor = DARK.cyan)} onBlur={(e) => (e.target.style.borderColor = DARK.cardBorder)} />
+              </div>
+              <div>
+                <div style={{ fontSize: 9, fontWeight: 600, color: DARK.textMuted, marginBottom: 4, letterSpacing: "0.08em" }}>DESCRIPTION</div>
+                <textarea value={newIncident.description} onChange={(e) => setNewIncident({ ...newIncident, description: e.target.value })}
+                  placeholder="Detailed description of the incident..."
+                  rows={3}
+                  style={{ width: "100%", padding: "8px 10px", background: DARK.card, border: `1px solid ${DARK.cardBorder}`, borderRadius: 6, color: DARK.textPrimary, fontSize: 11, fontFamily: DARK.fontMono, outline: "none", resize: "vertical", boxSizing: "border-box" }}
+                  onFocus={(e) => (e.target.style.borderColor = DARK.cyan)} onBlur={(e) => (e.target.style.borderColor = DARK.cardBorder)} />
+              </div>
+              <div style={{ display: "flex", gap: 12 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 9, fontWeight: 600, color: DARK.textMuted, marginBottom: 4, letterSpacing: "0.08em" }}>SEVERITY</div>
+                  <div style={{ display: "flex", gap: 4 }}>
+                    {["critical", "high", "medium", "low"].map((sev) => {
+                      const color = sev === "critical" ? DARK.red : sev === "high" ? DARK.orange : sev === "medium" ? "#eab308" : DARK.textMuted;
+                      const active = newIncident.severity === sev;
+                      return (
+                        <button key={sev} onClick={() => setNewIncident({ ...newIncident, severity: sev })}
+                          style={{
+                            flex: 1, padding: "6px 0", fontSize: 9, fontWeight: 700, fontFamily: DARK.fontMono,
+                            borderRadius: 4, border: `1px solid ${active ? color : DARK.cardBorder}`,
+                            background: active ? `${color}25` : "transparent", color: active ? color : DARK.textMuted,
+                            cursor: "pointer", textTransform: "uppercase",
+                          }}>{sev}</button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 9, fontWeight: 600, color: DARK.textMuted, marginBottom: 4, letterSpacing: "0.08em" }}>SOURCE</div>
+                  <input value={newIncident.source} onChange={(e) => setNewIncident({ ...newIncident, source: e.target.value })}
+                    style={{ width: "100%", padding: "8px 10px", background: DARK.card, border: `1px solid ${DARK.cardBorder}`, borderRadius: 6, color: DARK.textPrimary, fontSize: 11, fontFamily: DARK.fontMono, outline: "none", boxSizing: "border-box" }}
+                    onFocus={(e) => (e.target.style.borderColor = DARK.cyan)} onBlur={(e) => (e.target.style.borderColor = DARK.cardBorder)} />
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 9, fontWeight: 600, color: DARK.textMuted, marginBottom: 4, letterSpacing: "0.08em" }}>TAGS (comma-separated)</div>
+                <input value={newIncident.tags} onChange={(e) => setNewIncident({ ...newIncident, tags: e.target.value })}
+                  placeholder="e.g. ransomware, lateral-movement"
+                  style={{ width: "100%", padding: "8px 10px", background: DARK.card, border: `1px solid ${DARK.cardBorder}`, borderRadius: 6, color: DARK.textPrimary, fontSize: 11, fontFamily: DARK.fontMono, outline: "none", boxSizing: "border-box" }}
+                  onFocus={(e) => (e.target.style.borderColor = DARK.cyan)} onBlur={(e) => (e.target.style.borderColor = DARK.cardBorder)} />
+              </div>
+              <button onClick={handleCreateIncident} disabled={creating || !newIncident.title.trim() || !newIncident.description.trim()}
+                style={{
+                  width: "100%", padding: "10px", fontSize: 11, fontWeight: 700, fontFamily: DARK.fontMono,
+                  background: newIncident.title.trim() && newIncident.description.trim() ? DARK.cyan : `${DARK.cyan}30`,
+                  color: newIncident.title.trim() && newIncident.description.trim() ? DARK.bg : DARK.textMuted,
+                  border: "none", borderRadius: 6, cursor: creating || !newIncident.title.trim() ? "not-allowed" : "pointer",
+                  letterSpacing: "0.05em",
+                }}>
+                {creating ? "CREATING..." : "CREATE INCIDENT"}
+              </button>
+            </div>
+          </motion.div>
+        </>
+      )}
+
+      {/* + NEW INCIDENT BUTTON */}
+      {role !== "readonly" && (
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={() => setShowCreateModal(true)}
+          style={{
+            position: "fixed", bottom: 24, right: 24, zIndex: 50,
+            width: 48, height: 48, borderRadius: "50%",
+            background: DARK.cyan, color: DARK.bg,
+            border: "none", cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            boxShadow: `0 0 20px ${DARK.cyan}60`,
+            fontSize: 20, fontWeight: 700,
+          }}
+        >
+          +
+        </motion.button>
+      )}
     </Shell>
   );
 }

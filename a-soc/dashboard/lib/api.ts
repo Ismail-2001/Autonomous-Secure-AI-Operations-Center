@@ -179,6 +179,7 @@ export const endpoints = {
   stats: () => `${BASE_URL}/api/v1/dashboard/stats`,
   agents: () => `${BASE_URL}/api/v1/agents/status`,
   incidents: () => `${BASE_URL}/api/v1/incidents`,
+  createIncident: () => `${BASE_URL}/api/v1/incidents`,
   assets: () => `${BASE_URL}/api/v1/assets`,
   forensics: () => `${BASE_URL}/api/v1/forensics/jobs`,
   threatIntel: () => `${BASE_URL}/api/v1/threat-intel/indicators`,
