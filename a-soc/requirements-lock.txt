@@ -1,4 +1,4 @@
-# A-SOC pinned dependencies — updated 2026-06-29
+# A-SOC pinned dependencies — updated 2026-07-04
 # Install: pip install --no-cache-dir -r requirements-lock.txt
 # Upgrade: pip install -r requirements.txt && pip freeze > requirements-lock.txt
 
@@ -21,9 +21,13 @@ langchain-openai==0.2.0
 langchain-anthropic==0.2.4
 langchain-ollama==0.2.3
 alembic==1.13.2
+sqlalchemy==2.0.51
 opentelemetry-api==1.27.0
 opentelemetry-sdk==1.27.0
 opentelemetry-exporter-otlp-proto-http==1.27.0
 opentelemetry-instrumentation-fastapi==0.48b0
 opentelemetry-instrumentation-httpx==0.48b0
+setuptools==69.5.1
+cryptography==41.0.7
+psycopg2-binary==2.9.12
 PyJWT==2.9.0

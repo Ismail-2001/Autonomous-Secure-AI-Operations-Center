@@ -2,9 +2,9 @@
 set -e
 
 if [ "$SKIP_MIGRATIONS" != "true" ] && [ -n "$DATABASE_URL" ]; then
-    echo "Running database migrations..."
-    python -m alembic upgrade head 2>&1 || echo "WARNING: Migrations skipped (non-critical)"
-    echo "Migrations complete."
+    echo "Database migrations handled by connection.py at startup."
 fi
+
+mkdir -p /app/data || true
 
 exec uvicorn asoc.api.app:app --host 0.0.0.0 --port 9002 --workers 2 --limit-concurrency 100

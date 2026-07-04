@@ -4,9 +4,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements-lock.txt requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip==24.2 setuptools==75.1.0 wheel==0.44.0 && \
-    pip install --no-cache-dir --timeout 300 --retries 5 -r requirements-lock.txt
+COPY requirements-lock.txt .
+RUN pip install --no-cache-dir --timeout 300 --retries 5 -r requirements-lock.txt
 
 FROM python:3.12-slim
 
@@ -15,6 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 RUN adduser --disabled-password --no-create-home --uid 10001 appuser
+RUN mkdir -p /app/data && chown appuser:appuser /app/data
 
 COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin

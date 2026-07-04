@@ -52,12 +52,14 @@ class DatabasePool:
                     payload JSONB NOT NULL DEFAULT '{}',
                     signature TEXT NOT NULL DEFAULT '',
                     trace_id TEXT NOT NULL DEFAULT '',
-                    incident_id TEXT NOT NULL DEFAULT ''
+                    incident_id TEXT NOT NULL DEFAULT '',
+                    status TEXT NOT NULL DEFAULT 'active'
                 );
                 CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp DESC);
                 CREATE INDEX IF NOT EXISTS idx_events_agent ON events(agent);
                 CREATE INDEX IF NOT EXISTS idx_events_type ON events(event_type);
                 CREATE INDEX IF NOT EXISTS idx_events_incident ON events(incident_id);
+                CREATE INDEX IF NOT EXISTS idx_events_status ON events(status);
             """
             )
             logger.info("database_migrations_complete")

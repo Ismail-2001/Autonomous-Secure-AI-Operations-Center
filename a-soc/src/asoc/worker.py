@@ -19,11 +19,11 @@ def _handle_signal(sig: signal.Signals) -> None:
 async def _process_incidents() -> None:
     """Poll for pending incidents and run them through the workflow graph."""
     from src.asoc.core.checkpoint import get_or_create_checkpointer
-    from src.asoc.orchestration.workflow import build_graph
+    from src.asoc.orchestration.workflow import create_asoc_graph
 
     logger.info("worker_initializing")
     checkpointer = await get_or_create_checkpointer()
-    graph = build_graph()
+    graph = create_asoc_graph(checkpointer=checkpointer)
 
     logger.info("worker_ready", graph_nodes=list(graph.nodes.keys()) if hasattr(graph, "nodes") else "unknown")
 
