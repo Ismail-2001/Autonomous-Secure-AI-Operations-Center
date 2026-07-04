@@ -7,6 +7,7 @@ interface AuthContextValue {
   token: string | null;
   isAuthenticated: boolean;
   login: (token: string) => void;
+  loginWithCredentials: (userId: string, password: string) => Promise<boolean>;
   logout: () => void;
   loading: boolean;
 }
@@ -21,32 +22,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const stored = localStorage.getItem("asoc_token");
     if (stored) {
       setToken(stored);
-      setLoading(false);
-      return;
     }
-
-    api.post<{ access_token: string }>(endpoints.auth.token(), {
-      user_id: "dashboard-user",
-      role: "analyst",
-      client_id: "dashboard",
-    })
-      .then((data) => {
-        if (data?.access_token) {
-          setToken(data.access_token);
-          localStorage.setItem("asoc_token", data.access_token);
-        }
-      })
-      .catch(() => {
-        const fallback = "my-SOC-agent-2001";
-        setToken(fallback);
-        localStorage.setItem("asoc_token", fallback);
-      })
-      .finally(() => setLoading(false));
+    setLoading(false);
   }, []);
 
   const login = useCallback((t: string) => {
     setToken(t);
     localStorage.setItem("asoc_token", t);
+  }, []);
+
+  const loginWithCredentials = useCallback(async (userId: string, password: string): Promise<boolean> => {
+    try {
+      const data = await api.post<{ access_token: string }>(endpoints.auth.token(), {
+        user_id: userId,
+        password: password,
+      });
+      if (data?.access_token) {
+        setToken(data.access_token);
+        localStorage.setItem("asoc_token", data.access_token);
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
   }, []);
 
   const logout = useCallback(() => {
@@ -55,7 +54,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ token, isAuthenticated: !!token, login, logout, loading }}>
+    <AuthContext.Provider value={{ token, isAuthenticated: !!token, login, loginWithCredentials, logout, loading }}>
       {children}
     </AuthContext.Provider>
   );

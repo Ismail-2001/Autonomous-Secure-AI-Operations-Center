@@ -284,7 +284,7 @@ export default function GovernancePage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredControls.map((ctrl, i) => (
+                {filteredControls.map((ctrl: any, i: number) => (
                   <motion.tr
                     key={ctrl.id}
                     initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}

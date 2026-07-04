@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import Shell from "@/components/Shell";
+import { useThreatFeed } from "@/hooks/useThreatFeed";
 
 interface AgentNode {
   id: string;
@@ -706,6 +707,7 @@ export default function LiveMonitoringPage() {
   const [stats, setStats] = useState({ active_threats: 3, threats_neutralized: 142, mttr_minutes: 12, ai_agents_active: 7, events_today: 1402, critical_alerts: 3 });
   const [agents, setAgents] = useState<{ name: string; status: string; confidence: number }[]>([]);
   const [incidents, setIncidents] = useState<{ id: string; title: string; severity: string; status: string }[]>([]);
+  const feed = useThreatFeed();
 
   useEffect(() => {
     import("@/lib/api").then(({ api, endpoints }) => {
@@ -715,8 +717,33 @@ export default function LiveMonitoringPage() {
     });
   }, []);
 
-  const displayAgents = agents.length > 0 ? agents : AGENTS;
-  const displayIncidents = incidents.length > 0 ? incidents : THREATS;
+  const displayAgents: any[] = agents.length > 0
+    ? agents.map((a: any) => ({
+        name: a.name,
+        pct: a.confidence != null ? Math.round(a.confidence * 100) : 0,
+        status: a.status || "active",
+        color: a.role === "response" ? "#ef4444" : a.role === "supervisor" ? "#a78bfa" : a.role === "forensics" ? "#64748b" : a.role === "compliance" ? "#22c55e" : "#22d3ee",
+        icon: a.role === "response" ? "⚔️" : a.role === "supervisor" ? "🧠" : a.role === "forensics" ? "🔬" : a.role === "detection" ? "🔍" : "📡",
+      }))
+    : AGENTS;
+  const wsThreats = feed.events.map((e: any) => ({
+    severity: (e.severity || "low").toUpperCase(),
+    title: e.source || e.agent || "Unknown",
+    detail: e.description || e.type || "",
+    tags: [e.type || "EVENT"],
+    time: e.timestamp ? new Date(e.timestamp).toLocaleTimeString() : "now",
+    color: e.severity === "critical" ? DARK.red : e.severity === "high" ? DARK.orange : e.severity === "medium" ? "#eab308" : DARK.textMuted,
+  }));
+  const displayIncidents: any[] = [...wsThreats, ...(incidents.length > 0
+    ? incidents.map((inc: any) => ({
+        severity: (inc.severity || "low").toUpperCase(),
+        title: inc.title || inc.incident_number,
+        detail: inc.description || inc.source || "",
+        tags: Array.isArray(inc.tags) ? inc.tags : typeof inc.tags === "string" ? JSON.parse(inc.tags || "[]") : [],
+        time: inc.created_at ? new Date(inc.created_at).toLocaleTimeString() : "now",
+        color: inc.severity === "critical" ? DARK.red : inc.severity === "high" ? DARK.orange : inc.severity === "medium" ? "#eab308" : DARK.textMuted,
+      }))
+    : THREATS)];
 
   const handleSimulate = useCallback(() => {
     setSimulating(true);
@@ -724,7 +751,7 @@ export default function LiveMonitoringPage() {
   }, []);
 
   return (
-    <Shell onSimulate={handleSimulate} simulating={simulating}>
+    <Shell onSimulate={handleSimulate} simulating={simulating} connectionState={feed.connectionState}>
       <div
         style={{
           background: DARK.bg,

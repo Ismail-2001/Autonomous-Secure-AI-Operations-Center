@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface TopBarProps {
   onSimulate?: () => void;
@@ -11,6 +12,7 @@ interface TopBarProps {
 export default function TopBar({ onSimulate, simulating }: TopBarProps) {
   const [time, setTime] = useState(new Date());
   const [searchQuery, setSearchQuery] = useState("");
+  const { logout } = useAuth();
 
   useEffect(() => {
     const timer = setInterval(() => setTime(new Date()), 1000);
@@ -289,6 +291,7 @@ export default function TopBar({ onSimulate, simulating }: TopBarProps) {
         </motion.button>
 
         <div
+          onClick={logout}
           style={{
             width: 34,
             height: 34,
@@ -305,7 +308,7 @@ export default function TopBar({ onSimulate, simulating }: TopBarProps) {
             boxShadow: "0 0 0 2px rgba(0,229,255,0.3)",
             marginLeft: 4,
           }}
-          title="Operator: admin@asoc"
+          title="Click to logout"
         >
           <svg
             width={16}
