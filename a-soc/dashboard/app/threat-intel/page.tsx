@@ -3,7 +3,9 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import Shell from "@/components/Shell";
-import { api, endpoints, ThreatIndicator } from "@/lib/api";
+import InvestigationPanel from "@/components/InvestigationPanel";
+import { useAuth } from "@/contexts/AuthContext";
+import { api, endpoints, ThreatIndicator, Incident } from "@/lib/api";
 
 const IOC_CARDS = [
   {
@@ -196,6 +198,9 @@ export default function ThreatIntelPage() {
   const [hoveredTechnique, setHoveredTechnique] = useState<string | null>(null);
   const [apiIndicators, setApiIndicators] = useState<ReturnType<typeof mapIndicatorToCard>[]>([]);
   const [apiError, setApiError] = useState<boolean>(false);
+  const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
+  const [incidents, setIncidents] = useState<Incident[]>([]);
+  const { role } = useAuth();
 
   useEffect(() => {
     api
@@ -208,6 +213,9 @@ export default function ThreatIntelPage() {
       .catch(() => {
         setApiError(true);
       });
+    api.get<{ incidents: Incident[] }>(endpoints.incidents()).then((data: any) => {
+      setIncidents(data.incidents || []);
+    }).catch(() => {});
   }, []);
 
   const displayIocs = apiIndicators.length > 0 ? apiIndicators : IOC_CARDS;
@@ -299,6 +307,15 @@ export default function ThreatIntelPage() {
                   initial={{ opacity: 0, x: -10 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: 0.15 + i * 0.05 }}
+                  onClick={() => {
+                    const match = incidents.find((inc) => {
+                      const tags = Array.isArray(inc.tags) ? inc.tags : typeof inc.tags === "string" ? JSON.parse(inc.tags || "[]") : [];
+                      return tags.some((t: string) => ioc.type.toLowerCase().includes(t.toLowerCase())) ||
+                        inc.title?.toLowerCase().includes(ioc.type.toLowerCase()) ||
+                        inc.description?.toLowerCase().includes(ioc.value.toLowerCase());
+                    });
+                    setSelectedIncident(match || incidents[i % incidents.length] || null);
+                  }}
                   style={{
                     padding: "12px 14px",
                     background: "rgba(15, 23, 42, 0.6)",
@@ -700,6 +717,16 @@ export default function ThreatIntelPage() {
           </div>
         </motion.div>
       </div>
+      <InvestigationPanel
+        incident={selectedIncident}
+        onClose={() => setSelectedIncident(null)}
+        onUpdated={() => {
+          api.get<{ incidents: Incident[] }>(endpoints.incidents()).then((data: any) => {
+            setIncidents(data.incidents || []);
+          }).catch(() => {});
+        }}
+        role={role}
+      />
     </Shell>
   );
 }

@@ -265,20 +265,20 @@ async def list_audit_entries(
 @api_v1.get("/auth/me", dependencies=[Depends(require_jwt)])
 async def auth_me(request: Request):
     """Return current authenticated user info from JWT claims."""
-    from src.asoc.core.jwt_handler import decode_token
+    from src.asoc.core.jwt_handler import verify_access_token
 
     auth_header = request.headers.get("Authorization", "")
     token = auth_header.replace("Bearer ", "") if auth_header.startswith("Bearer ") else ""
     if not token:
         token = request.headers.get("X-Api-Key", "")
 
-    payload = decode_token(token)
+    payload = verify_access_token(token)
     if not payload:
         raise HTTPException(status_code=401, detail="Invalid token")
 
     return {
         "user_id": payload.sub,
-        "role": payload.role.value if hasattr(payload.role, "value") else str(payload.role),
+        "role": payload.role if isinstance(payload.role, str) else payload.role.value if hasattr(payload.role, "value") else str(payload.role),
         "token_type": payload.type,
     }
 

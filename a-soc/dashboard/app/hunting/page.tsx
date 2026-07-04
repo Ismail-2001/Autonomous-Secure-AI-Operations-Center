@@ -3,6 +3,9 @@
 import { useState, useMemo, useEffect } from "react";
 import { motion } from "framer-motion";
 import Shell from "@/components/Shell";
+import InvestigationPanel from "@/components/InvestigationPanel";
+import { useAuth } from "@/contexts/AuthContext";
+import { api, endpoints, type Incident } from "@/lib/api";
 
 /* ── helpers ── */
 
@@ -42,14 +45,14 @@ const events: EventRow[] = [
 
 /* ── IOC sidebar data ── */
 interface IocItem { type: string; value: string; }
-interface Incident { id: string; title: string; active: boolean; }
+interface RelatedIncident { id: string; title: string; active: boolean; }
 
 const iocs: IocItem[] = [
   { type: "SHA256", value: "0xf44...21a" },
   { type: "DOMAIN", value: "sync.bad.ru" },
 ];
 
-const incidents: Incident[] = [
+const relatedIncidents: RelatedIncident[] = [
   { id: "INC-2023-882", title: "Unauthorized Login Attempt", active: true },
   { id: "INC-2023-841", title: "Scheduled Task Created", active: false },
 ];
@@ -59,6 +62,9 @@ export default function HuntingPage() {
   const [page, setPage] = useState(1);
   const [iocList, setIocList] = useState(iocs);
   const [liveEvents, setLiveEvents] = useState<EventRow[]>(events);
+  const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
+  const [incidents, setIncidents] = useState<Incident[]>([]);
+  const { role } = useAuth();
 
   useEffect(() => {
     import("@/lib/api").then(({ api, endpoints }) => {
@@ -74,6 +80,9 @@ export default function HuntingPage() {
             icon: e.severity === "critical" ? "⚠" : e.severity === "high" ? "◼" : "ℹ",
           })));
         }
+      }).catch(() => {});
+      api.get<{ incidents: Incident[] }>(endpoints.incidents()).then((data: any) => {
+        setIncidents(data.incidents || []);
       }).catch(() => {});
     });
   }, []);
@@ -141,14 +150,19 @@ export default function HuntingPage() {
               {/* rows */}
               {liveEvents.map((ev, i) => {
                 const sev = sevBadge(ev.sev, ev.sevNum);
+                const linkedIncident = incidents[i % incidents.length] || null;
                 return (
                   <motion.div key={i} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.18 + i * 0.04 }}
+                    onClick={() => linkedIncident && setSelectedIncident(linkedIncident)}
                     style={{
                       display: "grid", gridTemplateColumns: "190px 150px 60px 170px 1fr",
                       padding: "11px 16px", borderBottom: "1px solid #21262d", fontSize: 12,
                       fontFamily: "var(--font-mono)", alignItems: "center",
                       background: i % 2 === 0 ? "#161b22" : "#0d1117",
+                      cursor: linkedIncident ? "pointer" : "default",
+                      transition: "background 0.15s",
                     }}
+                    whileHover={{ background: linkedIncident ? "#1c2333" : undefined }}
                   >
                     <span style={{ color: "#8b949e" }}>{ev.ts}</span>
                     <span style={{ color: "#c9d1d9" }}>{ev.source}</span>
@@ -238,8 +252,11 @@ export default function HuntingPage() {
               {/* related incidents */}
               <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", color: "#8b949e", marginBottom: 8 }}>RELATED INCIDENTS (6H)</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 18 }}>
-                {incidents.map((inc) => (
-                  <div key={inc.id} style={{ borderLeft: inc.active ? "3px solid #58a6ff" : "3px solid #30363d", background: "#0d1117", borderRadius: "0 6px 6px 0", padding: "10px 12px" }}>
+                {relatedIncidents.map((inc) => (
+                  <div key={inc.id} style={{ borderLeft: inc.active ? "3px solid #58a6ff" : "3px solid #30363d", background: "#0d1117", borderRadius: "0 6px 6px 0", padding: "10px 12px", cursor: "pointer" }} onClick={() => {
+                    const match = (typeof incidents !== 'undefined' ? incidents : []).find((i: any) => i.incident_number === inc.id || i.id === inc.id);
+                    if (match) setSelectedIncident(match);
+                  }}>
                     <div style={{ fontSize: 11, fontWeight: 600, color: inc.active ? "#58a6ff" : "#c9d1d9", fontFamily: "var(--font-mono)", marginBottom: 2 }}>{inc.id}</div>
                     <div style={{ fontSize: 11, color: "#8b949e" }}>{inc.title}</div>
                   </div>
@@ -300,6 +317,16 @@ export default function HuntingPage() {
           </div>
         </div>
       </div>
+      <InvestigationPanel
+        incident={selectedIncident}
+        onClose={() => setSelectedIncident(null)}
+        onUpdated={() => {
+          api.get<{ incidents: Incident[] }>(endpoints.incidents()).then((data: any) => {
+            setIncidents(data.incidents || []);
+          }).catch(() => {});
+        }}
+        role={role}
+      />
     </Shell>
   );
 }

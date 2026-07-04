@@ -6,6 +6,7 @@ import Shell from "@/components/Shell";
 import { useThreatFeed } from "@/hooks/useThreatFeed";
 import { SkeletonKPI, SkeletonAgent, SkeletonCard } from "@/components/Skeleton";
 import InvestigationPanel from "@/components/InvestigationPanel";
+import { useAuth } from "@/contexts/AuthContext";
 import { type Incident } from "@/lib/api";
 
 interface AgentNode {
@@ -715,6 +716,7 @@ export default function LiveMonitoringPage() {
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
   const feed = useThreatFeed();
+  const { role } = useAuth();
 
   useEffect(() => {
     import("@/lib/api").then(({ api, endpoints }) => {
@@ -1180,6 +1182,7 @@ export default function LiveMonitoringPage() {
             api.get(endpoints.incidents()).then((data: any) => setIncidents(data.incidents || [])).catch(() => {});
           });
         }}
+        role={role}
       />
     </Shell>
   );
