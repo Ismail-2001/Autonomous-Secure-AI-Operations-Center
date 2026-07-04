@@ -1,7 +1,7 @@
 # A-SOC Project Conventions
 
 ## Import Style
-- Use **absolute imports** everywhere (e.g., `from agents.base.message import ASOCMessage`)
+- Use **absolute imports** everywhere (e.g., `from src.asoc.agents.message import ASOCMessage`)
 - No relative imports (`from ..base.message`)
 
 ## Async Patterns

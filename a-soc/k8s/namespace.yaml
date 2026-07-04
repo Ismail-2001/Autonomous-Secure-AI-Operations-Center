@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: asoc
+  labels:
+    app.kubernetes.io/part-of: a-soc
+    environment: production
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: asoc-secrets
+  namespace: asoc
+type: Opaque
+# In production, use SealedSecrets or External Secrets Operator:
+#   kubeseal < raw-secret.yaml > sealed-secret.yaml
+# Required keys:
+#   postgres-password: <strong-password>
+#   hmac-secret: <random-32-char-string>
+#   ws-api-token: <random-32-char-string>
+#   openai-api-key: <your-openai-key>
+stringData:
+  postgres-password: "CHANGE_ME_IN_PRODUCTION"
+  hmac-secret: "CHANGE_ME_IN_PRODUCTION"
+  ws-api-token: "CHANGE_ME_IN_PRODUCTION"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: asoc-config
+  namespace: asoc
+data:
+  DATABASE_URL: "postgresql://asoc_user:$(POSTGRES_PASSWORD)@postgres:5432/asoc_db"
+  REDIS_URL: "redis://redis:6379/0"
+  OPA_URL: "http://opa:8181"
+  CORS_ORIGINS: "https://asoc.yourdomain.com"
+  LOG_LEVEL: "info"

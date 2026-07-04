@@ -2,7 +2,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from agents.telemetry.cloud_providers import AWSCloudTrailProvider, AzureCloudProvider, CloudEvent, GCPCloudProvider
+from src.asoc.agents.telemetry import AWSCloudTrailProvider, AzureCloudProvider, CloudEvent, GCPCloudProvider
 
 
 class TestCloudEvent:

@@ -82,6 +82,23 @@ class Settings(BaseSettings):
             warnings.append("HMAC_SECRET is not set — API auth will use WS_API_TOKEN")
         if not s.WS_API_TOKEN:
             warnings.append("WS_API_TOKEN is not set — WebSocket connections will be rejected")
+        elif len(s.WS_API_TOKEN.get_secret_value()) < 16:
+            warnings.append(
+                "WS_API_TOKEN is too short (< 16 chars) — use a strong random token "
+                "(generate with: python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+            )
+        if s.WS_API_TOKEN and s.WS_API_TOKEN.get_secret_value() in (
+            "my-SOC-agent-2001",
+            "changeme",
+            "change-me-in-prod",
+            "default",
+            "test",
+            "dev",
+        ):
+            warnings.append(
+                "WS_API_TOKEN uses an insecure default value — generate a strong token "
+                "(generate with: python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+            )
         if not s.DATABASE_URL or "changeme" in s.DATABASE_URL:
             warnings.append("DATABASE_URL is using default credentials — set a strong password in .env")
         return warnings

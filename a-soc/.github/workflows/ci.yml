@@ -79,6 +79,10 @@ jobs:
         working-directory: dashboard
         run: npx tsc --noEmit
 
+      - name: Unit tests (Jest)
+        working-directory: dashboard
+        run: npx jest --ci --coverage
+
       - name: Build
         working-directory: dashboard
         run: npm run build

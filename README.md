@@ -236,7 +236,7 @@ docker-compose ps
 ```
 
 ✅ Dashboard is live at **`http://localhost:3000`**
-✅ API is live at **`http://localhost:9001/docs`**
+✅ API is live at **`http://localhost:9002/docs`**
 
 ---
 
@@ -262,8 +262,8 @@ pip install -r requirements.txt
 cp .env.example .env
 # Edit .env — at minimum, set OPENAI_API_KEY
 
-# Start the API server on port 9001
-python -m uvicorn api:app --host 0.0.0.0 --port 9001 --reload
+# Start the API server on port 9002
+python -m uvicorn api:app --host 0.0.0.0 --port 9002 --reload
 ```
 
 #### Step 3 — Frontend Setup

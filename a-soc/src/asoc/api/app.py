@@ -1,3 +1,9 @@
+"""A-SOC API — FastAPI application entry point.
+
+Routes are defined in src.asoc.api.routes.* and registered via the v1 router.
+This file contains the app factory, middleware, WebSocket handler, and background tasks.
+"""
+
 import asyncio
 import os
 import random
@@ -10,72 +16,32 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Request, WebSocket, 
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from prometheus_fastapi_instrumentator import Instrumentator
-from pydantic import BaseModel, Field
 
 from src.asoc.agents.message import ASOCMessage, MessageType, Priority
 from src.asoc.agents.notifications import NotificationAgent
 from src.asoc.audit.audit_trail import get_audit_trail
-from src.asoc.core.auth import require_api_token, require_jwt, require_role, Role
 from src.asoc.core.circuit_breaker import CircuitBreaker
 from src.asoc.core.config import settings
-from src.asoc.core.connection import close_db_pool, get_db_pool
-from src.asoc.core.event_store import EventStore, PostgresEventStore
-from src.asoc.core.jwt_handler import create_token_pair, rotate_refresh_token, TokenPayload
+from src.asoc.core.connection import close_db_pool
 from src.asoc.core.logging import get_logger, get_request_id, set_incident_id, set_request_id, set_trace_id
 from src.asoc.core.message_bus import close_message_bus, get_message_bus
 from src.asoc.core.rate_limiter import check_rate_limit
-from src.asoc.core.router import v1 as api_v1
-from src.asoc.middleware.rate_limiter import check_agent_rate_limit, get_agent_rate_limiter
-from src.asoc.middleware.prompt_injection import scan_for_injection
+from src.asoc.core.auth import require_jwt
+
+# Import and register all route modules
+from src.asoc.api.routes import router as api_v1
+from src.asoc.api.routes import get_event_store
+
+# Register route modules on the v1 router
+from src.asoc.api.routes import auth, dashboard, incidents, assets  # noqa: F401
+from src.asoc.api.routes import forensics, threat_intel, compliance  # noqa: F401
+from src.asoc.api.routes import hunting, audit  # noqa: F401
 
 logger = get_logger("asoc.api")
 
 notification_agent = NotificationAgent()
-_event_store_instance = None
-
-
-def get_event_store() -> EventStore:
-    global _event_store_instance
-    if _event_store_instance is None:
-        _db_url = os.getenv("DATABASE_URL", "")
-        if _db_url and "localhost" not in _db_url:
-            _event_store_instance = PostgresEventStore()
-        else:
-            _event_store_instance = EventStore()
-    return _event_store_instance
-
 
 CORS_ALLOW_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
-
-
-class SimulationStart(BaseModel):
-    scenario: Optional[str] = Field(None, max_length=100)
-
-
-class ApprovalAction(BaseModel):
-    incident_id: str = Field(..., min_length=1, max_length=64)
-    approved: bool = True
-
-
-class HuntingQuery(BaseModel):
-    q: str = Field(default="", max_length=500)
-    source: str = Field(default="", max_length=100)
-    event_type: str = Field(default="", max_length=50)
-    start_time: str = Field(default="", max_length=30)
-    end_time: str = Field(default="", max_length=30)
-    limit: int = Field(default=50, ge=1, le=500)
-    offset: int = Field(default=0, ge=0)
-
-
-class TokenIssueRequest(BaseModel):
-    user_id: str = Field(..., min_length=1, max_length=128)
-    role: str = Field(default="analyst", pattern="^(readonly|analyst|supervisor|admin)$")
-    client_id: str = Field(default="default", max_length=128)
-
-
-class TokenRefreshRequest(BaseModel):
-    refresh_token: str = Field(..., min_length=1)
-    client_id: str = Field(default="default", max_length=128)
 
 
 class ConnectionManager:
@@ -145,8 +111,8 @@ async def lifespan(app: FastAPI):
     from src.asoc.core.tracing import setup_tracing
 
     await run_boot_checks()
-
     setup_tracing(app)
+
     bg = asyncio.create_task(background_telemetry())
     tf = asyncio.create_task(threat_feedsimulation())
     yield
@@ -199,407 +165,7 @@ async def generic_exception_handler(request: Request, exc: Exception):
     )
 
 
-# ── JWT Token Endpoints ───────────────────────────────────────────────────
-
-
-@api_v1.post("/auth/token", dependencies=[Depends(check_rate_limit)])
-async def issue_token(request: TokenIssueRequest):
-    """Issue a JWT access + refresh token pair."""
-    try:
-        role = Role(request.role)
-    except ValueError:
-        raise HTTPException(status_code=400, detail=f"Invalid role: {request.role}")
-
-    token_pair = create_token_pair(
-        user_id=request.user_id,
-        role=role,
-        client_id=request.client_id,
-    )
-
-    get_audit_trail().append(
-        agent_id="auth",
-        action="token_issued",
-        payload={"user_id": request.user_id, "role": role.value},
-    )
-
-    return token_pair.model_dump()
-
-
-@api_v1.post("/auth/refresh", dependencies=[Depends(check_rate_limit)])
-async def refresh_token(request: TokenRefreshRequest):
-    """Rotate refresh token and issue new token pair."""
-    new_pair = rotate_refresh_token(request.refresh_token, request.client_id)
-    if not new_pair:
-        raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
-
-    get_audit_trail().append(
-        agent_id="auth",
-        action="token_refreshed",
-        payload={"role": new_pair.role},
-    )
-
-    return new_pair.model_dump()
-
-
-@api_v1.get("/audit/verify", dependencies=[Depends(require_role(Role.SUPERVISOR))])
-async def verify_audit_chain():
-    """Verify the HMAC audit trail chain integrity."""
-    trail = get_audit_trail()
-    result = trail.verify_chain()
-    return result.model_dump()
-
-
-@api_v1.get("/audit/entries", dependencies=[Depends(require_role(Role.ANALYST))])
-async def list_audit_entries(
-    agent_id: Optional[str] = Query(None, max_length=64),
-    action: Optional[str] = Query(None, max_length=64),
-    limit: int = Query(100, ge=1, le=1000),
-):
-    """Query audit trail entries."""
-    trail = get_audit_trail()
-    entries = trail.get_entries(agent_id=agent_id, action=action, limit=limit)
-    return {"entries": [e.model_dump() for e in entries], "count": len(entries)}
-
-
-# ── Auth: Whoami ──────────────────────────────────────────────────────────
-
-
-@api_v1.get("/auth/me", dependencies=[Depends(require_jwt)])
-async def auth_me(request: Request):
-    """Return current authenticated user info from JWT claims."""
-    from src.asoc.core.jwt_handler import verify_access_token
-
-    auth_header = request.headers.get("Authorization", "")
-    token = auth_header.replace("Bearer ", "") if auth_header.startswith("Bearer ") else ""
-    if not token:
-        token = request.headers.get("X-Api-Key", "")
-
-    payload = verify_access_token(token)
-    if not payload:
-        raise HTTPException(status_code=401, detail="Invalid token")
-
-    return {
-        "user_id": payload.sub,
-        "role": payload.role if isinstance(payload.role, str) else payload.role.value if hasattr(payload.role, "value") else str(payload.role),
-        "token_type": payload.type,
-    }
-
-
-# ── Dashboard Stats ───────────────────────────────────────────────────────
-
-
-@api_v1.get("/dashboard/stats", dependencies=[Depends(require_jwt)])
-async def dashboard_stats():
-    """Return dashboard statistics for the monitoring page."""
-    from src.asoc.core.db_queries import get_dashboard_stats
-    try:
-        return await get_dashboard_stats()
-    except Exception as e:
-        logger.warning("db_query_fallback", error=str(e))
-        return {
-            "active_threats": 3, "threats_neutralized": 142, "mttr_minutes": 12,
-            "ai_agents_active": 7, "total_assets": 14200, "critical_assets": 3,
-            "events_today": 1402, "critical_alerts": 3, "compliance_score": 88,
-        }
-
-
-# ── Agent Status ──────────────────────────────────────────────────────────
-
-
-@api_v1.get("/agents/status", dependencies=[Depends(require_jwt)])
-async def agents_status():
-    """Return status of all AI agents."""
-    from src.asoc.core.db_queries import get_agent_status
-    try:
-        return await get_agent_status()
-    except Exception:
-        now = datetime.now(timezone.utc).isoformat()
-        return {"agents": [
-            {"name": "TelemetryAgent", "status": "active", "role": "telemetry", "confidence": 0.97, "last_active": now + "Z", "task_count": 2847, "error_count": 0},
-            {"name": "DetectionAgent", "status": "active", "role": "detection", "confidence": 0.94, "last_active": now + "Z", "task_count": 1203, "error_count": 2},
-            {"name": "SupervisorAgent", "status": "active", "role": "supervisor", "confidence": 0.99, "last_active": now + "Z", "task_count": 456, "error_count": 0},
-            {"name": "ForensicsAgent", "status": "active", "role": "forensics", "confidence": 0.92, "last_active": now + "Z", "task_count": 89, "error_count": 1},
-            {"name": "ResponseAgent", "status": "active", "role": "response", "confidence": 0.96, "last_active": now + "Z", "task_count": 234, "error_count": 0},
-            {"name": "ComplianceAgent", "status": "active", "role": "compliance", "confidence": 0.98, "last_active": now + "Z", "task_count": 678, "error_count": 0},
-            {"name": "NotificationAgent", "status": "active", "role": "notification", "confidence": 1.0, "last_active": now + "Z", "task_count": 3456, "error_count": 0},
-        ]}
-
-
-# ── Incidents ─────────────────────────────────────────────────────────────
-
-
-@api_v1.get("/incidents", dependencies=[Depends(require_jwt)])
-async def list_incidents(limit: int = Query(20, ge=1, le=100)):
-    """Return recent incidents."""
-    from src.asoc.core.db_queries import get_incidents
-    try:
-        return await get_incidents(limit=limit)
-    except Exception as e:
-        logger.warning("db_query_fallback", error=str(e))
-        return {
-            "incidents": [
-                {"id": "INC-2023-882", "title": "Unauthorized Login Attempt", "description": "Brute force NTLM relay attempt detected on ADM_SRV_WIN_01", "severity": "critical", "status": "active", "source": "EVAL-02-DC", "created_at": datetime.now(timezone.utc).isoformat() + "Z", "updated_at": datetime.now(timezone.utc).isoformat() + "Z", "agent": "DetectionAgent", "tags": ["brute-force", "ntlm"]},
-                {"id": "INC-2023-841", "title": "Suspicious DNS Tunneling", "description": "Beaconing pattern detected from USER_STATION_442", "severity": "high", "status": "investigating", "source": "CORTEX-XDR", "created_at": datetime.now(timezone.utc).isoformat() + "Z", "updated_at": datetime.now(timezone.utc).isoformat() + "Z", "agent": "TelemetryAgent", "tags": ["dns-tunnel", "beaconing"]},
-            ],
-            "count": 2,
-        }
-
-
-class CreateIncidentRequest(BaseModel):
-    title: str = Field(..., min_length=1, max_length=200)
-    description: str = Field(..., min_length=1, max_length=2000)
-    severity: str = Field(..., pattern="^(critical|high|medium|low)$")
-    source: str = Field(default="Dashboard")
-    tags: list[str] = Field(default=[])
-
-
-@api_v1.post("/incidents", dependencies=[Depends(require_jwt)])
-async def create_incident(req: CreateIncidentRequest):
-    """Create a new incident from the dashboard."""
-    from src.asoc.core.connection import get_db_pool
-    import json as _json
-
-    risk_map = {"critical": 90.0, "high": 70.0, "medium": 50.0, "low": 25.0}
-    risk_score = risk_map.get(req.severity, 50.0)
-
-    db = await get_db_pool()
-    async with db.pool.acquire() as conn:
-        row = await conn.fetchrow("""
-            INSERT INTO incidents (id, incident_number, title, description, severity, status, source, agent, risk_score, tags, created_at, updated_at, triage_status)
-            VALUES (gen_random_uuid(), 'INC-2026-' || LPAD((EXTRACT(EPOCH FROM NOW())::int % 10000)::text, 4, '0'), $1, $2, $3, 'active', $4, $5, $6, $7::jsonb, NOW(), NOW(), 'new')
-            RETURNING id, incident_number, title, description, severity, status, source, agent, risk_score, tags, created_at, updated_at, triage_status
-        """, req.title, req.description, req.severity, req.source, "Dashboard", risk_score, _json.dumps(req.tags))
-
-    return {
-        "ok": True,
-        "incident": {
-            "id": str(row["id"]),
-            "incident_number": row["incident_number"],
-            "title": row["title"],
-            "description": row["description"],
-            "severity": row["severity"],
-            "status": row["status"],
-            "source": row["source"],
-            "agent": row["agent"],
-            "risk_score": row["risk_score"],
-            "tags": req.tags,
-            "created_at": row["created_at"].isoformat() if row["created_at"] else None,
-            "updated_at": row["updated_at"].isoformat() if row["updated_at"] else None,
-            "triage_status": row["triage_status"],
-        },
-    }
-
-
-# ── Alert Triage ────────────────────────────────────────────────────────
-
-
-class TriageRequest(BaseModel):
-    triage_status: str = Field(..., pattern="^(new|acknowledged|investigating|escalated|contained|resolved|false_positive)$")
-    assigned_to: Optional[str] = None
-    notes: Optional[str] = None
-
-
-class ResponseActionRequest(BaseModel):
-    action_type: str = Field(..., min_length=1, max_length=50)
-    description: str = Field(..., min_length=1, max_length=500)
-    target: Optional[str] = None
-
-
-@api_v1.patch("/incidents/{incident_id}/triage", dependencies=[Depends(require_jwt)])
-async def triage_incident(incident_id: str, req: TriageRequest):
-    """Update triage status for an incident."""
-    from src.asoc.core.connection import get_db_pool
-    from src.asoc.audit.audit_trail import get_audit_trail
-    import json
-
-    db = await get_db_pool()
-    async with db.pool.acquire() as conn:
-        row = await conn.fetchrow("SELECT id, incident_number, title FROM incidents WHERE id = $1", incident_id)
-        if not row:
-            raise HTTPException(status_code=404, detail="Incident not found")
-
-        now = datetime.now(timezone.utc)
-        await conn.execute("""
-            UPDATE incidents
-            SET triage_status = $1, assigned_to = $2, notes = COALESCE($3, notes),
-                triaged_by = $4, triaged_at = COALESCE(triaged_at, $5), updated_at = $5
-            WHERE id = $6
-        """, req.triage_status, req.assigned_to, req.notes, "dashboard-user", now, incident_id)
-
-        audit = get_audit_trail()
-        audit.append(
-            agent_id="dashboard-user",
-            action="TRIAGE_UPDATE",
-            payload={
-                "incident_id": incident_id,
-                "incident_number": row["incident_number"],
-                "triage_status": req.triage_status,
-                "assigned_to": req.assigned_to,
-            }
-        )
-
-    return {"ok": True, "incident_id": incident_id, "triage_status": req.triage_status}
-
-
-@api_v1.post("/incidents/{incident_id}/actions", dependencies=[Depends(require_jwt)])
-async def add_response_action(incident_id: str, req: ResponseActionRequest):
-    """Add a response action to an incident."""
-    from src.asoc.core.connection import get_db_pool
-    from src.asoc.audit.audit_trail import get_audit_trail
-    import json
-
-    db = await get_db_pool()
-    async with db.pool.acquire() as conn:
-        row = await conn.fetchrow("SELECT id, incident_number FROM incidents WHERE id = $1", incident_id)
-        if not row:
-            raise HTTPException(status_code=404, detail="Incident not found")
-
-        action_entry = {
-            "id": str(uuid.uuid4()),
-            "type": req.action_type,
-            "description": req.description,
-            "target": req.target,
-            "performed_by": "dashboard-user",
-            "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
-        }
-
-        await conn.execute("""
-            UPDATE incidents
-            SET response_actions = response_actions || $1::jsonb, updated_at = $2
-            WHERE id = $3
-        """, json.dumps([action_entry]), datetime.now(timezone.utc), incident_id)
-
-        audit = get_audit_trail()
-        audit.append(
-            agent_id="dashboard-user",
-            action="RESPONSE_ACTION",
-            payload={
-                "incident_id": incident_id,
-                "incident_number": row["incident_number"],
-                "action_type": req.action_type,
-                "description": req.description,
-                "target": req.target,
-            }
-        )
-
-    return {"ok": True, "action": action_entry}
-
-
-@api_v1.get("/incidents/{incident_id}/actions", dependencies=[Depends(require_jwt)])
-async def get_response_actions(incident_id: str):
-    """Get all response actions for an incident."""
-    import json as _json
-    from src.asoc.core.connection import get_db_pool
-
-    db = await get_db_pool()
-    async with db.pool.acquire() as conn:
-        row = await conn.fetchrow(
-            "SELECT response_actions FROM incidents WHERE id = $1", incident_id
-        )
-        if not row:
-            raise HTTPException(status_code=404, detail="Incident not found")
-
-    raw = row["response_actions"] or []
-    if isinstance(raw, str):
-        try:
-            raw = _json.loads(raw)
-        except Exception:
-            raw = []
-    return {"actions": raw, "count": len(raw)}
-
-
-# ── Assets ────────────────────────────────────────────────────────────────
-
-
-@api_v1.get("/assets", dependencies=[Depends(require_jwt)])
-async def list_assets(limit: int = Query(50, ge=1, le=500)):
-    """Return asset inventory."""
-    from src.asoc.core.db_queries import get_assets
-    try:
-        return await get_assets(limit=limit)
-    except Exception as e:
-        logger.warning("db_query_fallback", error=str(e))
-        return {
-            "assets": [
-                {"id": "AST-001", "name": "SRV-PROD-DB-01", "type": "server", "ip_address": "10.0.4.122", "os": "LINUX_DEBIAN", "status": "online", "risk_score": 72, "vulnerabilities": 5, "owner": "SEC_OPS_A"},
-                {"id": "AST-002", "name": "K8S-NODE-04", "type": "container", "ip_address": "10.0.12.89", "os": "UBUNTU_22", "status": "online", "risk_score": 12, "vulnerabilities": 0, "owner": "INFRA_TEAM"},
-            ],
-            "count": 2,
-        }
-
-
-# ── Forensics Jobs ────────────────────────────────────────────────────────
-
-
-@api_v1.get("/forensics/jobs", dependencies=[Depends(require_jwt)])
-async def list_forensics_jobs():
-    """Return forensics evidence catalog."""
-    from src.asoc.core.db_queries import get_forensics_jobs
-    try:
-        return await get_forensics_jobs()
-    except Exception as e:
-        logger.warning("db_query_fallback", error=str(e))
-        return {
-            "jobs": [
-                {"id": "FOR-001", "title": "Memory Dump Analysis", "status": "completed", "type": "volatile", "findings": ["Registry modifications detected"], "artifacts": ["MEM_DUMP_001.raw"], "agent": "ForensicsAgent"},
-                {"id": "FOR-002", "title": "Network Capture Review", "status": "in_progress", "type": "network", "findings": ["C2 communication pattern identified"], "artifacts": ["NET_CAPTURE_001.pcap"], "agent": "ForensicsAgent"},
-            ],
-            "count": 2,
-        }
-
-
-# ── Threat Intelligence ───────────────────────────────────────────────────
-
-
-@api_v1.get("/threat-intel/indicators", dependencies=[Depends(require_jwt)])
-async def list_threat_indicators():
-    """Return threat intelligence indicators."""
-    from src.asoc.core.db_queries import get_threat_indicators
-    try:
-        return await get_threat_indicators()
-    except Exception as e:
-        logger.warning("db_query_fallback", error=str(e))
-        return {
-            "indicators": [
-                {"id": "IOC-001", "type": "SHA256", "value": "e3b0c44298fc1c149afbf4c8996fb924", "severity": "critical", "confidence": 0.98, "source": "VirusTotal", "tlp": "RED", "tags": ["ransomware"]},
-                {"id": "IOC-002", "type": "DOMAIN", "value": "sync.bad.ru", "severity": "high", "confidence": 0.87, "source": "OSINT", "tlp": "AMBER", "tags": ["c2"]},
-            ],
-            "count": 2,
-        }
-
-
-# ── Compliance Report ─────────────────────────────────────────────────────
-
-
-@api_v1.get("/compliance/report", dependencies=[Depends(require_jwt)])
-async def compliance_report():
-    """Return compliance report for governance page."""
-    from src.asoc.core.db_queries import get_compliance_report
-    try:
-        return await get_compliance_report()
-    except Exception as e:
-        logger.warning("db_query_fallback", error=str(e))
-        return {
-            "score": 88,
-            "controls": [
-                {"name": "CC.1.1.01", "status": "PASS", "description": "Access Control: Role-Based Authorization Policy"},
-                {"name": "CC.6.1.02", "status": "FAIL", "description": "Incident Response: 15min Notification SLA"},
-                {"name": "ISO.27001.A.9", "status": "PASS", "description": "User Provisioning: Terminated Accounts Revocation"},
-                {"name": "PCI.DSS.3.1", "status": "PENDING", "description": "Vulnerability Mgmt: Bi-weekly Internal Scans"},
-            ],
-            "last_audit": datetime.now(timezone.utc).isoformat() + "Z",
-            "trend": "improving",
-        }
-
-
-@api_v1.get("/rate-limits", dependencies=[Depends(require_role(Role.ADMIN))])
-async def rate_limit_stats():
-    """Get current rate limiter statistics."""
-    limiter = get_agent_rate_limiter()
-    return limiter.get_stats()
-
-
-# ── Health Check ──────────────────────────────────────────────────────────
+# -- Health Check ------------------------------------------------------------
 
 db_circuit_breaker = CircuitBreaker("postgres", failure_threshold=3, recovery_timeout=15.0)
 redis_circuit_breaker = CircuitBreaker("redis", failure_threshold=3, recovery_timeout=15.0)
@@ -607,6 +173,9 @@ redis_circuit_breaker = CircuitBreaker("redis", failure_threshold=3, recovery_ti
 
 @app.get("/health")
 async def health_check():
+    from src.asoc.core.event_store import PostgresEventStore
+    from src.asoc.core.connection import get_db_pool
+
     db_ok = False
     bus_ok = False
     vector_ok = False
@@ -630,7 +199,6 @@ async def health_check():
 
     try:
         from src.asoc.vector.pinecone_provider import vector_provider
-
         vector_ok = await vector_provider.health_check()
     except Exception:
         pass
@@ -644,6 +212,7 @@ async def health_check():
         overall = "healthy" if (bus_ok or vector_ok) else "degraded"
     if not bus_ok and isinstance(get_event_store(), PostgresEventStore):
         bus_status = "unavailable"
+
     return {
         "status": overall,
         "service": "asoc-backend",
@@ -659,9 +228,10 @@ async def health_check():
     }
 
 
-@api_v1.get("/hunting/events", dependencies=[Depends(require_jwt), Depends(check_rate_limit)])
+# -- Duplicate routes for /api/ prefix (backward compat) ---------------------
+
 @app.get("/api/hunting/events", dependencies=[Depends(require_jwt), Depends(check_rate_limit)])
-async def hunting_events(
+async def api_hunting_events(
     q: str = Query(default="", max_length=500),
     source: str = Query(default="", max_length=100, alias="agent"),
     event_type: str = Query(default="", max_length=50),
@@ -670,36 +240,23 @@ async def hunting_events(
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
 ):
-    result = await get_event_store().search_events(
-        query=q,
-        agent=source,
-        event_type=event_type,
-        start_time=start_time,
-        end_time=end_time,
-        limit=limit,
-        offset=offset,
-    )
-    return {"status": "ok", **result}
+    from src.asoc.api.routes.hunting import hunting_events
+    return await hunting_events(q, source, event_type, start_time, end_time, limit, offset)
 
 
-@api_v1.get("/hunting/timeline", dependencies=[Depends(require_jwt), Depends(check_rate_limit)])
 @app.get("/api/hunting/timeline", dependencies=[Depends(require_jwt), Depends(check_rate_limit)])
-async def hunting_timeline(
+async def api_hunting_timeline(
     q: str = Query(default="", max_length=500),
     source: str = Query(default="", max_length=100, alias="agent"),
     start_time: str = Query(default="", max_length=30),
     end_time: str = Query(default="", max_length=30),
     bucket: str = Query(default="hour", pattern="^(minute|hour|day)$"),
 ):
-    buckets = await get_event_store().get_timeline(
-        query=q,
-        agent=source,
-        start_time=start_time,
-        end_time=end_time,
-        bucket=bucket,
-    )
-    return {"status": "ok", "buckets": buckets, "bucket_size": bucket}
+    from src.asoc.api.routes.hunting import hunting_timeline
+    return await hunting_timeline(q, source, start_time, end_time, bucket)
 
+
+# -- WebSocket ---------------------------------------------------------------
 
 @app.websocket("/ws/threat-feed")
 @app.websocket("/api/v1/ws/threat-feed")
@@ -734,37 +291,35 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(default=""
 
             elif data == "APPROVE_ACTION":
                 permission_event.set()
-                await manager.broadcast(
-                    {
-                        "id": str(uuid.uuid4()),
-                        "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
-                        "agent": "System",
-                        "status": "approved",
-                        "message": "Human operator authorized action.",
-                        "severity": "low",
-                    }
-                )
+                await manager.broadcast({
+                    "id": str(uuid.uuid4()),
+                    "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
+                    "agent": "System",
+                    "status": "approved",
+                    "message": "Human operator authorized action.",
+                    "severity": "low",
+                })
 
             elif data == "STOP_SIMULATION":
                 if current_task:
                     current_task.cancel()
                     current_task = None
-                await manager.broadcast(
-                    {
-                        "id": str(uuid.uuid4()),
-                        "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
-                        "agent": "System",
-                        "status": "idle",
-                        "message": "Simulation stopped by operator.",
-                        "severity": "low",
-                    }
-                )
+                await manager.broadcast({
+                    "id": str(uuid.uuid4()),
+                    "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
+                    "agent": "System",
+                    "status": "idle",
+                    "message": "Simulation stopped by operator.",
+                    "severity": "low",
+                })
 
     except WebSocketDisconnect:
         await manager.disconnect(websocket)
         if current_task:
             current_task.cancel()
 
+
+# -- Background Tasks --------------------------------------------------------
 
 async def background_telemetry():
     benign_messages = [
@@ -778,17 +333,15 @@ async def background_telemetry():
         "Config: Resource 'sg-0abc123' compliant with policy 'restricted-ssh'",
     ]
     while True:
-        await manager.broadcast(
-            {
-                "id": str(uuid.uuid4()),
-                "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
-                "agent": "Telemetry",
-                "status": "scanning",
-                "message": random.choice(benign_messages),
-                "severity": "low",
-                "is_background": True,
-            }
-        )
+        await manager.broadcast({
+            "id": str(uuid.uuid4()),
+            "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
+            "agent": "Telemetry",
+            "status": "scanning",
+            "message": random.choice(benign_messages),
+            "severity": "low",
+            "is_background": True,
+        })
         await asyncio.sleep(random.uniform(2, 5))
 
 
@@ -807,60 +360,51 @@ THREAT_SCENARIOS = [
 
 
 async def threat_feedsimulation():
-    """Push realistic threat events to all connected WebSocket clients."""
     await asyncio.sleep(5)
     while True:
         scenario = random.choice(THREAT_SCENARIOS)
-        await manager.broadcast(
-            {
-                "id": str(uuid.uuid4()),
-                "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
-                "type": "THREAT_EVENT",
-                "source": scenario["source"],
-                "agent": scenario["agent"],
-                "severity": scenario["severity"],
-                "threat_type": scenario["type"],
-                "description": scenario["desc"],
-                "confidence": scenario["risk"],
-                "mitigated": random.random() > 0.7,
-            }
-        )
+        await manager.broadcast({
+            "id": str(uuid.uuid4()),
+            "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
+            "type": "THREAT_EVENT",
+            "source": scenario["source"],
+            "agent": scenario["agent"],
+            "severity": scenario["severity"],
+            "threat_type": scenario["type"],
+            "description": scenario["desc"],
+            "confidence": scenario["risk"],
+            "mitigated": random.random() > 0.7,
+        })
         if scenario["risk"] > 0.75 and random.random() > 0.4:
             await asyncio.sleep(random.uniform(2, 4))
             actions = ["ISOLATE_HOST", "BLOCK_IP", "DISABLE_ACCOUNT", "QUARANTINE_FILE", "BLOCK_DOMAIN"]
             targets = ["10.0.1.42", "45.33.2.101", "svc-deploy", "/tmp/payload.exe", "evil-domain.ru"]
-            idx = actions.index("BLOCK_IP") if "BLOCK_IP" in actions else 0
-            await manager.broadcast(
-                {
-                    "id": str(uuid.uuid4()),
-                    "type": "APPROVAL_REQUIRED",
-                    "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
-                    "action": random.choice(actions),
-                    "target": random.choice(targets),
-                    "risk_score": scenario["risk"],
-                    "agent": scenario["agent"],
-                    "reasoning": f"Auto-generated from {scenario['type']} detection (confidence: {scenario['risk']:.0%})",
-                }
-            )
+            await manager.broadcast({
+                "id": str(uuid.uuid4()),
+                "type": "APPROVAL_REQUIRED",
+                "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
+                "action": random.choice(actions),
+                "target": random.choice(targets),
+                "risk_score": scenario["risk"],
+                "agent": scenario["agent"],
+                "reasoning": f"Auto-generated from {scenario['type']} detection (confidence: {scenario['risk']:.0%})",
+            })
         await asyncio.sleep(random.uniform(6, 12))
 
 
 async def run_simulation(permission_event: asyncio.Event):
     async def stream_status(agent, status, message, severity="low"):
-        await manager.broadcast(
-            {
-                "id": str(uuid.uuid4()),
-                "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
-                "agent": agent,
-                "status": status,
-                "message": message,
-                "severity": severity,
-            }
-        )
+        await manager.broadcast({
+            "id": str(uuid.uuid4()),
+            "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
+            "agent": agent,
+            "status": status,
+            "message": message,
+            "severity": severity,
+        })
         await asyncio.sleep(1.5)
 
     audit = get_audit_trail()
-
     await stream_status("System", "active", "A-SOC Protocol Initiated", "low")
 
     scenarios = [
@@ -951,7 +495,6 @@ async def run_simulation(permission_event: asyncio.Event):
     await stream_status("Detection", "analyzing", "Correlating events with Threat Intel...", "low")
 
     from src.asoc.agents.detection import DetectionAgent
-
     da = DetectionAgent()
     detection_result = await da.analyze_threat(scenario["telemetry"])
     detected_score = detection_result.payload["risk_score"] if detection_result else scenario["risk_score"]
@@ -962,23 +505,9 @@ async def run_simulation(permission_event: asyncio.Event):
     await stream_status("Supervisor", "evaluating", "Checking policy guardrails...", "low")
 
     if detected_score > 0.6:
-        await stream_status(
-            "Supervisor",
-            "blocked",
-            f"High Risk Action Proposed: {scenario['action']}. Awaiting Authorization...",
-            "critical",
-        )
-        audit.append("SupervisorAgent", "approval_required", {
-            "action": scenario["action"], "risk_score": detected_score, "incident_id": incident_id,
-        })
-        await manager.broadcast(
-            {
-                "type": "APPROVAL_REQUIRED",
-                "action": scenario["action"],
-                "target": scenario["target"],
-                "risk_score": detected_score,
-            }
-        )
+        await stream_status("Supervisor", "blocked", f"High Risk Action Proposed: {scenario['action']}. Awaiting Authorization...", "critical")
+        audit.append("SupervisorAgent", "approval_required", {"action": scenario["action"], "risk_score": detected_score, "incident_id": incident_id})
+        await manager.broadcast({"type": "APPROVAL_REQUIRED", "action": scenario["action"], "target": scenario["target"], "risk_score": detected_score})
         await permission_event.wait()
         audit.append("SupervisorAgent", "action_approved", {"action": scenario["action"], "incident_id": incident_id})
         await stream_status("Supervisor", "authorized", "Action Authorized. Proceeding...", "low")
@@ -995,37 +524,20 @@ async def run_simulation(permission_event: asyncio.Event):
         title=f"A-SOC: {scenario['name']}",
         message=f"Action: {scenario['action']} on {scenario['target']} | Risk Score: {detected_score}",
         severity="critical" if detected_score > 0.8 else "high",
-        fields={
-            "Incident": incident_id,
-            "Action": scenario["action"],
-            "Target": scenario["target"],
-            "Risk Score": f"{detected_score:.2f}",
-        },
+        fields={"Incident": incident_id, "Action": scenario["action"], "Target": scenario["target"], "Risk Score": f"{detected_score:.2f}"},
     )
-    audit.append("NotificationAgent", "alert_sent", {"severity": "critical" if detected_score > 0.8 else "high", "incident_id": incident_id})
 
-    await stream_status("Response", "success", "Threat Neutralized. Infrastructure Secure.", "low")
+    await stream_status("Notification", "delivered", "Alert delivered to SOC team.", "low")
+    audit.append("NotificationAgent", "alert_delivered", {"incident_id": incident_id})
 
-    await stream_status("Compliance", "auditing", "Mapping to SOC2 & ISO 27001...", "low")
-    audit.append("ComplianceAgent", "compliance_mapped", {"frameworks": ["SOC2", "ISO27001"], "incident_id": incident_id})
-    await stream_status("Compliance", "logged", f"Audit record #{random.randint(1000, 9999)} sealed.", "low")
+    await stream_status("Compliance", "verifying", "Checking SOC2/ISO27001 compliance...", "low")
+    audit.append("ComplianceAgent", "compliance_check", {"incident_id": incident_id})
+    await stream_status("Compliance", "verified", "Compliance gates passed.", "low")
 
-    try:
-        await get_event_store().append_event(
-            "threat_cycle_complete",
-            {"scenario": scenario["name"], "risk_score": detected_score, "action": scenario["action"]},
-            "System",
-        )
-    except Exception as e:
-        logger.error("event_store_append_failed", error=str(e))
-
-    audit.append("System", "simulation_complete", {
-        "scenario": scenario["name"], "risk_score": detected_score, "incident_id": incident_id,
-    })
-    logger.info("simulation_complete", scenario=scenario["name"], risk_score=detected_score, incident_id=incident_id)
+    await stream_status("System", "resolved", f"Incident {incident_id[:8]}... resolved. All agents returning to monitoring.", "low")
+    audit.append("System", "simulation_complete", {"incident_id": incident_id, "final_risk_score": detected_score})
 
 
 if __name__ == "__main__":
     import uvicorn
-
     uvicorn.run(app, host="0.0.0.0", port=9002)

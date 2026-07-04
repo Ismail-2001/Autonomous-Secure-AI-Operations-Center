@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agents.notifications.notification_agent import (
+from src.asoc.agents.notifications import (
     JiraProvider,
     NotificationAgent,
     SlackWebhookProvider,
@@ -131,7 +131,7 @@ class TestNotificationAgent:
         assert result is False
 
     async def test_process_message_alert_triggers_send(self):
-        from agents.base.message import ASOCMessage, MessageType, Priority
+        from src.asoc.agents.message import ASOCMessage, MessageType, Priority
 
         mock_provider = AsyncMock(spec=SlackWebhookProvider)
         mock_provider.send.return_value = True
@@ -149,7 +149,7 @@ class TestNotificationAgent:
         mock_provider.send.assert_called_once()
 
     async def test_process_message_other_type_ignored(self):
-        from agents.base.message import ASOCMessage, MessageType
+        from src.asoc.agents.message import ASOCMessage, MessageType
 
         mock_provider = AsyncMock(spec=SlackWebhookProvider)
         agent = NotificationAgent(providers=[mock_provider])

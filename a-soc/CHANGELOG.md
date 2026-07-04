@@ -43,7 +43,7 @@ This project follows [Semantic Versioning](https://semver.org/) with honest mile
 - OPA integration falls back to local rules if OPA service is unreachable
 - Pinecone vector store falls back to in-memory mock if not configured
 - Rate limiter is per-process, not distributed across worker instances
-- Python 3.15 environment lacks pydantic-core binary wheels — syntax validation only
+- Python 3.13 environment lacks pydantic-core binary wheels — syntax validation only
 
 ---
 
