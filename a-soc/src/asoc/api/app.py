@@ -148,8 +148,10 @@ async def lifespan(app: FastAPI):
 
     setup_tracing(app)
     bg = asyncio.create_task(background_telemetry())
+    tf = asyncio.create_task(threat_feedsimulation())
     yield
     bg.cancel()
+    tf.cancel()
     await close_db_pool()
     await close_message_bus()
     logger.info("app_stopped")
@@ -743,6 +745,42 @@ async def background_telemetry():
             }
         )
         await asyncio.sleep(random.uniform(2, 5))
+
+
+THREAT_SCENARIOS = [
+    {"severity": "critical", "source": "EDR", "agent": "DetectionAgent", "type": "RANSOMWARE", "desc": "Conti-class ransomware encryption detected on file server FS-PROD-03", "risk": 0.95},
+    {"severity": "critical", "source": "SIEM", "agent": "TelemetryAgent", "type": "LATERAL_MOVEMENT", "desc": "Pass-the-hash attack detected moving from WS-042 to DC-01", "risk": 0.92},
+    {"severity": "high", "source": "IDS", "agent": "DetectionAgent", "type": "C2_BEACON", "desc": "Beaconing pattern to known Cobalt Strike server 45.33.2.101:443", "risk": 0.85},
+    {"severity": "high", "source": "CLOUD_TRAIL", "agent": "TelemetryAgent", "type": "PRIVILEGE_ESCALATION", "desc": "IAM role AdminAccess attached to service account svc-deploy", "risk": 0.82},
+    {"severity": "high", "source": "WAF", "agent": "DetectionAgent", "type": "SQL_INJECTION", "desc": "Automated SQL injection attempts on /api/v2/users endpoint", "risk": 0.78},
+    {"severity": "medium", "source": "NETWORK", "agent": "TelemetryAgent", "type": "DATA_EXFILTRATION", "desc": "Anomalous 2.3GB outbound transfer to IP 203.0.113.42", "risk": 0.65},
+    {"severity": "medium", "source": "ENDPOINT", "agent": "DetectionAgent", "type": "SUSPICIOUS_PROCESS", "desc": "Mimikatz signature detected in memory on WKST-117", "risk": 0.72},
+    {"severity": "medium", "source": "DNS", "agent": "TelemetryAgent", "type": "DNS_TUNNELING", "desc": "High-entropy DNS queries to *.data-sync.ru (possible C2 channel)", "risk": 0.60},
+    {"severity": "low", "source": "VULN", "agent": "ComplianceAgent", "type": "VULNERABILITY", "desc": "CVE-2024-38077 found on DC-02: Windows Remote Code Execution", "risk": 0.45},
+    {"severity": "low", "source": "CONFIG", "agent": "ComplianceAgent", "type": "MISCONFIGURATION", "desc": "S3 bucket 'backups-prod' has public read ACL enabled", "risk": 0.35},
+]
+
+
+async def threat_feedsimulation():
+    """Push realistic threat events to all connected WebSocket clients."""
+    await asyncio.sleep(5)
+    while True:
+        scenario = random.choice(THREAT_SCENARIOS)
+        await manager.broadcast(
+            {
+                "id": str(uuid.uuid4()),
+                "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
+                "type": "THREAT_EVENT",
+                "source": scenario["source"],
+                "agent": scenario["agent"],
+                "severity": scenario["severity"],
+                "threat_type": scenario["type"],
+                "description": scenario["desc"],
+                "confidence": scenario["risk"],
+                "mitigated": random.random() > 0.7,
+            }
+        )
+        await asyncio.sleep(random.uniform(6, 12))
 
 
 async def run_simulation(permission_event: asyncio.Event):
