@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { motion } from "framer-motion";
 import Shell from "@/components/Shell";
 import { useThreatFeed } from "@/hooks/useThreatFeed";
@@ -23,6 +23,21 @@ interface AgentNode {
 interface GraphEdge {
   source: string;
   target: string;
+}
+
+interface ThreatNode {
+  id: string;
+  x: number;
+  y: number;
+  label: string;
+  severity: string;
+  createdAt: number;
+}
+
+interface AgentProcessing {
+  startedAt: number;
+  phase: "processing" | "completed";
+  confidence: number;
 }
 
 const DARK = {
@@ -248,49 +263,75 @@ function KpiCard({
   );
 }
 
-function AgentCard({ agent, index }: { agent: (typeof AGENTS)[0]; index: number }) {
-  const barColor = agent.pct >= 100 ? DARK.red : agent.pct > 0 ? DARK.cyan : `${DARK.textMuted}40`;
+function AgentCard({ agent, index, processing }: { agent: (typeof AGENTS)[0]; index: number; processing?: AgentProcessing }) {
+  const isProcessing = processing?.phase === "processing";
+  const isCompleted = processing?.phase === "completed";
+  const pct = isCompleted ? processing.confidence : agent.pct;
+  const barColor = isProcessing ? "#eab308" : isCompleted ? "#22c55e" : pct >= 100 ? DARK.red : pct > 0 ? DARK.cyan : `${DARK.textMuted}40`;
+  const statusText = isProcessing ? "Processing threat..." : isCompleted ? `Completed (${processing.confidence}% confidence)` : agent.status;
   return (
     <motion.div
       initial={{ opacity: 0, x: -10 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.3, delay: 0.3 + index * 0.08 }}
       style={{
-        background: `${DARK.card}`,
-        border: `1px solid ${DARK.cardBorder}`,
+        background: isProcessing ? `${DARK.card}` : `${DARK.card}`,
+        border: `1px solid ${isProcessing ? "#eab30860" : isCompleted ? "#22c55e50" : DARK.cardBorder}`,
         borderRadius: 8,
         padding: "12px 14px",
         display: "flex",
         flexDirection: "column",
         gap: 6,
+        position: "relative",
+        overflow: "hidden",
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      {isProcessing && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: [0.15, 0.3, 0.15] }}
+          transition={{ duration: 1.5, repeat: Infinity }}
+          style={{ position: "absolute", inset: 0, background: `linear-gradient(90deg, transparent, #eab30820, transparent)`, borderRadius: 8 }}
+        />
+      )}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, position: "relative" }}>
         <span style={{ fontSize: 14 }}>{agent.icon}</span>
         <span
           style={{
             fontSize: 11,
             fontWeight: 700,
-            color: agent.color,
+            color: isProcessing ? "#eab308" : isCompleted ? "#22c55e" : agent.color,
             fontFamily: DARK.fontMono,
             flex: 1,
           }}
         >
           {agent.name}
         </span>
-        <span
-          style={{
-            fontSize: 11,
-            fontWeight: 600,
-            color: agent.pct >= 100 ? DARK.red : agent.pct > 0 ? DARK.cyan : DARK.textMuted,
-            fontFamily: DARK.fontMono,
-          }}
-        >
-          {agent.pct}%
-        </span>
+        {isProcessing ? (
+          <motion.span
+            animate={{ rotate: 360 }}
+            transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+            style={{ fontSize: 12, display: "inline-block", color: "#eab308" }}
+          >
+            ⟳
+          </motion.span>
+        ) : (
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              color: isCompleted ? "#22c55e" : pct >= 100 ? DARK.red : pct > 0 ? DARK.cyan : DARK.textMuted,
+              fontFamily: DARK.fontMono,
+            }}
+          >
+            {pct}%
+          </span>
+        )}
       </div>
-      <div style={{ fontSize: 10, color: DARK.textMuted }}>{agent.status}</div>
-      {agent.pct > 0 && (
+      <div style={{ fontSize: 10, color: isProcessing ? "#eab308" : isCompleted ? "#22c55e" : DARK.textMuted, position: "relative" }}>
+        {statusText}
+      </div>
+      {(pct > 0 || isProcessing) && (
         <div
           style={{
             width: "100%",
@@ -298,17 +339,18 @@ function AgentCard({ agent, index }: { agent: (typeof AGENTS)[0]; index: number 
             background: `${DARK.textMuted}30`,
             borderRadius: 2,
             overflow: "hidden",
+            position: "relative",
           }}
         >
           <motion.div
             initial={{ width: 0 }}
-            animate={{ width: `${agent.pct}%` }}
-            transition={{ duration: 1.2, delay: 0.5 + index * 0.1 }}
+            animate={{ width: isProcessing ? "100%" : `${pct}%` }}
+            transition={isProcessing ? { duration: 1.5, repeat: Infinity, ease: "easeInOut" } : { duration: 1.2, delay: 0.5 + index * 0.1 }}
             style={{
               height: "100%",
               background: barColor,
               borderRadius: 2,
-              boxShadow: agent.pct >= 100 ? `0 0 8px ${DARK.red}60` : "none",
+              boxShadow: isProcessing ? "0 0 8px #eab30860" : isCompleted ? "0 0 6px #22c55e40" : "none",
             }}
           />
         </div>
@@ -388,7 +430,7 @@ function ThreatCard({ threat, index, onClick }: { threat: (typeof THREATS)[0]; i
   );
 }
 
-function BlastRadiusGraph() {
+function BlastRadiusGraph({ threatNodes }: { threatNodes?: ThreatNode[] }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const nodesRef = useRef<AgentNode[]>([]);
   const animRef = useRef<number>(0);
@@ -625,6 +667,25 @@ function BlastRadiusGraph() {
               </g>
             );
           })()}
+          {(threatNodes || []).map((tn) => {
+            const sevColor = tn.severity === "CRITICAL" ? DARK.red : tn.severity === "HIGH" ? DARK.orange : tn.severity === "MEDIUM" ? "#eab308" : DARK.cyan;
+            return (
+              <g key={tn.id}>
+                <circle cx={tn.x} cy={tn.y} r={20} fill="none" stroke={sevColor} strokeWidth={1} opacity={0.4}>
+                  <animate attributeName="r" from="8" to="25" dur="1.5s" repeatCount="indefinite" />
+                  <animate attributeName="opacity" from="0.6" to="0" dur="1.5s" repeatCount="indefinite" />
+                </circle>
+                <circle cx={tn.x} cy={tn.y} r={8} fill={`${sevColor}30`} stroke={sevColor} strokeWidth={2} />
+                <circle cx={tn.x} cy={tn.y} r={3} fill={sevColor} />
+                <text x={tn.x} y={tn.y + 18} textAnchor="middle" fill={sevColor} fontSize={8} fontFamily={DARK.fontMono} fontWeight={600}>
+                  {tn.label}
+                </text>
+                <text x={tn.x} y={tn.y + 27} textAnchor="middle" fill={DARK.textMuted} fontSize={7} fontFamily={DARK.fontMono}>
+                  {tn.severity}
+                </text>
+              </g>
+            );
+          })}
         </g>
       </svg>
       <div
@@ -725,6 +786,14 @@ export default function LiveMonitoringPage() {
   const [sevFilter, setSevFilter] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
 
+  // Agent execution visualization state
+  const [processingAgents, setProcessingAgents] = useState<Record<string, AgentProcessing>>({});
+  const prevEventCountRef = useRef(0);
+  const processingTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  // Blast radius threat nodes (appear when threats arrive)
+  const [threatNodes, setThreatNodes] = useState<ThreatNode[]>([]);
+
   useEffect(() => {
     import("@/lib/api").then(({ api, endpoints }) => {
       Promise.all([
@@ -745,6 +814,67 @@ export default function LiveMonitoringPage() {
     }, 30000);
     return () => clearInterval(interval);
   }, [loading]);
+
+  // Agent execution visualization: when new threats arrive, activate agents
+  useEffect(() => {
+    if (feed.events.length <= prevEventCountRef.current) return;
+    prevEventCountRef.current = feed.events.length;
+
+    const agentPool = ["TELEMETRY_CORE", "DETECTION_ENGINE", "SUPERVISOR_AI", "FORENSICS_NODE", "RESPONSE_BOT_7"];
+    const count = 2 + Math.floor(Math.random() * 2);
+    const shuffled = [...agentPool].sort(() => Math.random() - 0.5);
+    const selected = shuffled.slice(0, count);
+
+    const newProcessing: Record<string, AgentProcessing> = {};
+    selected.forEach(name => {
+      newProcessing[name] = { startedAt: Date.now(), phase: "processing", confidence: 0 };
+    });
+    setProcessingAgents(prev => ({ ...prev, ...newProcessing }));
+
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    const delay = 2000 + Math.floor(Math.random() * 1000);
+    timers.push(setTimeout(() => {
+      setProcessingAgents(prev => {
+        const next = { ...prev };
+        selected.forEach(name => {
+          if (next[name]) next[name] = { ...next[name], phase: "completed", confidence: 70 + Math.floor(Math.random() * 30) };
+        });
+        return next;
+      });
+      timers.push(setTimeout(() => {
+        setProcessingAgents(prev => {
+          const next = { ...prev };
+          selected.forEach(name => { delete next[name]; });
+          return next;
+        });
+      }, 800));
+    }, delay));
+
+    processingTimersRef.current = timers;
+    return () => timers.forEach(t => clearTimeout(t));
+  }, [feed.events.length]);
+
+  // Blast radius: add pulsing threat nodes when new events arrive
+  useEffect(() => {
+    if (feed.events.length === 0) return;
+    const latest = feed.events[0];
+    if (!latest) return;
+    const W = 600, H = 380;
+    const id = `threat-${Date.now()}`;
+    const newNode: ThreatNode = {
+      id,
+      x: 100 + Math.random() * (W - 200),
+      y: 60 + Math.random() * (H - 120),
+      label: latest.source || "THREAT",
+      severity: (latest.severity || "low").toUpperCase(),
+      createdAt: Date.now(),
+    };
+    setThreatNodes(prev => [...prev.slice(-4), newNode]);
+    const timer = setTimeout(() => {
+      setThreatNodes(prev => prev.filter(n => n.id !== id));
+    }, 8000);
+    return () => clearTimeout(timer);
+  }, [feed.events.length]);
 
   const displayAgents: any[] = agents.length > 0
     ? agents.map((a: any) => ({
@@ -910,14 +1040,14 @@ export default function LiveMonitoringPage() {
                 style={{
                   fontSize: 9,
                   fontWeight: 600,
-                  color: DARK.cyan,
-                  background: `${DARK.cyan}15`,
+                  color: Object.keys(processingAgents).length > 0 ? "#eab308" : DARK.cyan,
+                  background: Object.keys(processingAgents).length > 0 ? "#eab30815" : `${DARK.cyan}15`,
                   padding: "3px 8px",
                   borderRadius: 4,
                   fontFamily: DARK.fontMono,
                 }}
               >
-                7 ONLINE
+                {Object.keys(processingAgents).length > 0 ? `${Object.keys(processingAgents).length} PROCESSING` : `${displayAgents.length} ONLINE`}
               </span>
             </motion.div>
             <div
@@ -939,7 +1069,7 @@ export default function LiveMonitoringPage() {
                   <SkeletonAgent />
                 </>
               ) : displayAgents.map((agent, i) => (
-                <AgentCard key={agent.name} agent={agent} index={i} />
+                <AgentCard key={agent.name} agent={agent} index={i} processing={processingAgents[agent.name]} />
               ))}
             </div>
           </div>
@@ -977,8 +1107,25 @@ export default function LiveMonitoringPage() {
                   REAL-TIME PROPAGATION GRAPH
                 </div>
               </div>
+              {threatNodes.length > 0 && (
+                <motion.span
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  style={{
+                    fontSize: 9,
+                    fontWeight: 600,
+                    color: DARK.red,
+                    background: `${DARK.red}15`,
+                    padding: "3px 8px",
+                    borderRadius: 4,
+                    fontFamily: DARK.fontMono,
+                  }}
+                >
+                  {threatNodes.length} ACTIVE THREAT{threatNodes.length !== 1 ? "S" : ""}
+                </motion.span>
+              )}
             </div>
-            <BlastRadiusGraph />
+            <BlastRadiusGraph threatNodes={threatNodes} />
             <div style={{ display: "flex", justifyContent: "flex-end" }}>
               <motion.button
                 whileHover={{ scale: 1.02 }}
