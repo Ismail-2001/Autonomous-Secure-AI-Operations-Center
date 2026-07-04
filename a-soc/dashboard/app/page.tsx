@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import Shell from "@/components/Shell";
 import { useThreatFeed } from "@/hooks/useThreatFeed";
+import { SkeletonKPI, SkeletonAgent, SkeletonCard } from "@/components/Skeleton";
 
 interface AgentNode {
   id: string;
@@ -704,6 +705,7 @@ function BlastRadiusGraph() {
 
 export default function LiveMonitoringPage() {
   const [simulating, setSimulating] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({ active_threats: 3, threats_neutralized: 142, mttr_minutes: 12, ai_agents_active: 7, events_today: 1402, critical_alerts: 3 });
   const [agents, setAgents] = useState<{ name: string; status: string; confidence: number }[]>([]);
   const [incidents, setIncidents] = useState<{ id: string; title: string; severity: string; status: string }[]>([]);
@@ -711,9 +713,11 @@ export default function LiveMonitoringPage() {
 
   useEffect(() => {
     import("@/lib/api").then(({ api, endpoints }) => {
-      api.get(endpoints.stats()).then((data: any) => setStats(data)).catch(() => {});
-      api.get(endpoints.agents()).then((data: any) => setAgents(data.agents || [])).catch(() => {});
-      api.get(endpoints.incidents()).then((data: any) => setIncidents(data.incidents || [])).catch(() => {});
+      Promise.all([
+        api.get(endpoints.stats()).then((data: any) => setStats(data)).catch(() => {}),
+        api.get(endpoints.agents()).then((data: any) => setAgents(data.agents || [])).catch(() => {}),
+        api.get(endpoints.incidents()).then((data: any) => setIncidents(data.incidents || [])).catch(() => {}),
+      ]).finally(() => setLoading(false));
     });
   }, []);
 
@@ -765,40 +769,51 @@ export default function LiveMonitoringPage() {
       >
         {/* KPI ROW */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 18 }}>
-          <KpiCard
-            label="SECURITY SCORE"
-            value="94%"
-            sub="+1.2% YTD"
-            subColor="#34a853"
-            progress={94}
-            delay={0}
-          />
-          <KpiCard
-            label="ACTIVE THREATS"
-            value="03"
-            badge="URGENT ACTION"
-            badgeColor={DARK.red}
-            dots={3}
-            delay={0.05}
-          />
-          <KpiCard
-            label="NEUTRALIZED"
-            value="142"
-            badge="LAST 24H"
-            badgeColor={DARK.cyan}
-            sub="SYSTEM SELF-HEALING ACTIVE"
-            subColor={DARK.cyan}
-            delay={0.1}
-          />
-          <KpiCard
-            label="MTTR"
-            value="12m"
-            sub="-4m AVG"
-            subColor="#34a853"
-            badge="OPTIMIZED RESPONSE ENGINE"
-            badgeColor="#a78bfa"
-            delay={0.15}
-          />
+          {loading ? (
+            <>
+              <SkeletonKPI />
+              <SkeletonKPI />
+              <SkeletonKPI />
+              <SkeletonKPI />
+            </>
+          ) : (
+            <>
+              <KpiCard
+                label="SECURITY SCORE"
+                value="94%"
+                sub="+1.2% YTD"
+                subColor="#34a853"
+                progress={94}
+                delay={0}
+              />
+              <KpiCard
+                label="ACTIVE THREATS"
+                value={String(stats.active_threats || 3).padStart(2, "0")}
+                badge="URGENT ACTION"
+                badgeColor={DARK.red}
+                dots={stats.active_threats || 3}
+                delay={0.05}
+              />
+              <KpiCard
+                label="NEUTRALIZED"
+                value={String(stats.threats_neutralized || 142)}
+                badge="LAST 24H"
+                badgeColor={DARK.cyan}
+                sub="SYSTEM SELF-HEALING ACTIVE"
+                subColor={DARK.cyan}
+                delay={0.1}
+              />
+              <KpiCard
+                label="MTTR"
+                value={`${stats.mttr_minutes || 12}m`}
+                sub="-4m AVG"
+                subColor="#34a853"
+                badge="OPTIMIZED RESPONSE ENGINE"
+                badgeColor="#a78bfa"
+                delay={0.15}
+              />
+            </>
+          )}
         </div>
 
         {/* 3-COLUMN LAYOUT */}
@@ -851,7 +866,15 @@ export default function LiveMonitoringPage() {
                 paddingRight: 4,
               }}
             >
-              {displayAgents.map((agent, i) => (
+              {loading ? (
+                <>
+                  <SkeletonAgent />
+                  <SkeletonAgent />
+                  <SkeletonAgent />
+                  <SkeletonAgent />
+                  <SkeletonAgent />
+                </>
+              ) : displayAgents.map((agent, i) => (
                 <AgentCard key={agent.name} agent={agent} index={i} />
               ))}
             </div>
