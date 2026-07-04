@@ -5,6 +5,8 @@ import { motion } from "framer-motion";
 import Shell from "@/components/Shell";
 import { useThreatFeed } from "@/hooks/useThreatFeed";
 import { SkeletonKPI, SkeletonAgent, SkeletonCard } from "@/components/Skeleton";
+import InvestigationPanel from "@/components/InvestigationPanel";
+import { type Incident } from "@/lib/api";
 
 interface AgentNode {
   id: string;
@@ -314,12 +316,13 @@ function AgentCard({ agent, index }: { agent: (typeof AGENTS)[0]; index: number 
   );
 }
 
-function ThreatCard({ threat, index }: { threat: (typeof THREATS)[0]; index: number }) {
+function ThreatCard({ threat, index, onClick }: { threat: (typeof THREATS)[0]; index: number; onClick?: () => void }) {
   return (
     <motion.div
       initial={{ opacity: 0, x: 10 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.3, delay: 0.4 + index * 0.1 }}
+      onClick={onClick}
       style={{
         background: DARK.card,
         border: `1px solid ${DARK.cardBorder}`,
@@ -328,6 +331,7 @@ function ThreatCard({ threat, index }: { threat: (typeof THREATS)[0]; index: num
         display: "flex",
         flexDirection: "column",
         gap: 6,
+        cursor: onClick ? "pointer" : "default",
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -708,7 +712,8 @@ export default function LiveMonitoringPage() {
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({ active_threats: 3, threats_neutralized: 142, mttr_minutes: 12, ai_agents_active: 7, events_today: 1402, critical_alerts: 3 });
   const [agents, setAgents] = useState<{ name: string; status: string; confidence: number }[]>([]);
-  const [incidents, setIncidents] = useState<{ id: string; title: string; severity: string; status: string }[]>([]);
+  const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
   const feed = useThreatFeed();
 
   useEffect(() => {
@@ -746,6 +751,7 @@ export default function LiveMonitoringPage() {
         tags: Array.isArray(inc.tags) ? inc.tags : typeof inc.tags === "string" ? JSON.parse(inc.tags || "[]") : [],
         time: inc.created_at ? new Date(inc.created_at).toLocaleTimeString() : "now",
         color: inc.severity === "critical" ? DARK.red : inc.severity === "high" ? DARK.orange : inc.severity === "medium" ? "#eab308" : DARK.textMuted,
+        _original: inc,
       }))
     : THREATS)];
 
@@ -994,7 +1000,12 @@ export default function LiveMonitoringPage() {
               }}
             >
               {displayIncidents.map((t, i) => (
-                <ThreatCard key={i} threat={t} index={i} />
+                <ThreatCard
+                  key={i}
+                  threat={t}
+                  index={i}
+                  onClick={t._original ? () => setSelectedIncident(t._original) : undefined}
+                />
               ))}
             </div>
 
@@ -1161,6 +1172,15 @@ export default function LiveMonitoringPage() {
           </div>
         </div>
       </div>
+      <InvestigationPanel
+        incident={selectedIncident}
+        onClose={() => setSelectedIncident(null)}
+        onUpdated={() => {
+          import("@/lib/api").then(({ api, endpoints }) => {
+            api.get(endpoints.incidents()).then((data: any) => setIncidents(data.incidents || [])).catch(() => {});
+          });
+        }}
+      />
     </Shell>
   );
 }

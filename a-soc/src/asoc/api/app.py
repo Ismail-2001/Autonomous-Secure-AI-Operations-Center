@@ -343,6 +343,124 @@ async def list_incidents(limit: int = Query(20, ge=1, le=100)):
         }
 
 
+# ── Alert Triage ────────────────────────────────────────────────────────
+
+
+class TriageRequest(BaseModel):
+    triage_status: str = Field(..., pattern="^(new|acknowledged|investigating|escalated|contained|resolved|false_positive)$")
+    assigned_to: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class ResponseActionRequest(BaseModel):
+    action_type: str = Field(..., min_length=1, max_length=50)
+    description: str = Field(..., min_length=1, max_length=500)
+    target: Optional[str] = None
+
+
+@api_v1.patch("/incidents/{incident_id}/triage", dependencies=[Depends(require_jwt)])
+async def triage_incident(incident_id: str, req: TriageRequest):
+    """Update triage status for an incident."""
+    from src.asoc.core.connection import get_db_pool
+    from src.asoc.audit.audit_trail import get_audit_trail
+    import json
+
+    db = await get_db_pool()
+    async with db.pool.acquire() as conn:
+        row = await conn.fetchrow("SELECT id, incident_number, title FROM incidents WHERE id = $1", incident_id)
+        if not row:
+            raise HTTPException(status_code=404, detail="Incident not found")
+
+        now = datetime.now(timezone.utc)
+        await conn.execute("""
+            UPDATE incidents
+            SET triage_status = $1, assigned_to = $2, notes = COALESCE($3, notes),
+                triaged_by = $4, triaged_at = COALESCE(triaged_at, $5), updated_at = $5
+            WHERE id = $6
+        """, req.triage_status, req.assigned_to, req.notes, "dashboard-user", now, incident_id)
+
+        audit = get_audit_trail()
+        audit.append(
+            agent_id="dashboard-user",
+            action="TRIAGE_UPDATE",
+            payload={
+                "incident_id": incident_id,
+                "incident_number": row["incident_number"],
+                "triage_status": req.triage_status,
+                "assigned_to": req.assigned_to,
+            }
+        )
+
+    return {"ok": True, "incident_id": incident_id, "triage_status": req.triage_status}
+
+
+@api_v1.post("/incidents/{incident_id}/actions", dependencies=[Depends(require_jwt)])
+async def add_response_action(incident_id: str, req: ResponseActionRequest):
+    """Add a response action to an incident."""
+    from src.asoc.core.connection import get_db_pool
+    from src.asoc.audit.audit_trail import get_audit_trail
+    import json
+
+    db = await get_db_pool()
+    async with db.pool.acquire() as conn:
+        row = await conn.fetchrow("SELECT id, incident_number FROM incidents WHERE id = $1", incident_id)
+        if not row:
+            raise HTTPException(status_code=404, detail="Incident not found")
+
+        action_entry = {
+            "id": str(uuid.uuid4()),
+            "type": req.action_type,
+            "description": req.description,
+            "target": req.target,
+            "performed_by": "dashboard-user",
+            "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
+        }
+
+        await conn.execute("""
+            UPDATE incidents
+            SET response_actions = response_actions || $1::jsonb, updated_at = $2
+            WHERE id = $3
+        """, json.dumps([action_entry]), datetime.now(timezone.utc), incident_id)
+
+        audit = get_audit_trail()
+        audit.append(
+            agent_id="dashboard-user",
+            action="RESPONSE_ACTION",
+            payload={
+                "incident_id": incident_id,
+                "incident_number": row["incident_number"],
+                "action_type": req.action_type,
+                "description": req.description,
+                "target": req.target,
+            }
+        )
+
+    return {"ok": True, "action": action_entry}
+
+
+@api_v1.get("/incidents/{incident_id}/actions", dependencies=[Depends(require_jwt)])
+async def get_response_actions(incident_id: str):
+    """Get all response actions for an incident."""
+    import json as _json
+    from src.asoc.core.connection import get_db_pool
+
+    db = await get_db_pool()
+    async with db.pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT response_actions FROM incidents WHERE id = $1", incident_id
+        )
+        if not row:
+            raise HTTPException(status_code=404, detail="Incident not found")
+
+    raw = row["response_actions"] or []
+    if isinstance(raw, str):
+        try:
+            raw = _json.loads(raw)
+        except Exception:
+            raw = []
+    return {"actions": raw, "count": len(raw)}
+
+
 # ── Assets ────────────────────────────────────────────────────────────────
 
 

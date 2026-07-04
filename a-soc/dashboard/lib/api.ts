@@ -42,6 +42,8 @@ export const api = {
     request<T>(url, { method: "POST", body: body ? JSON.stringify(body) : undefined }),
   put: <T>(url: string, body?: unknown) =>
     request<T>(url, { method: "PUT", body: body ? JSON.stringify(body) : undefined }),
+  patch: <T>(url: string, body?: unknown) =>
+    request<T>(url, { method: "PATCH", body: body ? JSON.stringify(body) : undefined }),
   delete: <T>(url: string) => request<T>(url, { method: "DELETE" }),
 };
 
@@ -75,6 +77,7 @@ export interface AgentStatus {
 
 export interface Incident {
   id: string;
+  incident_number?: string;
   title: string;
   description: string;
   severity: string;
@@ -84,6 +87,22 @@ export interface Incident {
   updated_at: string;
   agent?: string;
   tags?: string[];
+  risk_score?: number;
+  triage_status?: string;
+  assigned_to?: string;
+  notes?: string;
+  triaged_by?: string;
+  triaged_at?: string;
+  response_actions?: ResponseAction[];
+}
+
+export interface ResponseAction {
+  id: string;
+  type: string;
+  description: string;
+  target?: string;
+  performed_by: string;
+  timestamp: string;
 }
 
 export interface Asset {
@@ -170,5 +189,10 @@ export const endpoints = {
   auth: {
     token: () => `${BASE_URL}/api/v1/auth/token`,
     me: () => `${BASE_URL}/api/v1/auth/me`,
+  },
+  triage: {
+    update: (id: string) => `${BASE_URL}/api/v1/incidents/${id}/triage`,
+    addAction: (id: string) => `${BASE_URL}/api/v1/incidents/${id}/actions`,
+    getActions: (id: string) => `${BASE_URL}/api/v1/incidents/${id}/actions`,
   },
 };
