@@ -94,6 +94,7 @@ class Settings(BaseSettings):
             "default",
             "test",
             "dev",
+            "2_o5YOn3fgSO-gxB59jL9zBi1dvUCjx3",
         ):
             warnings.append(
                 "WS_API_TOKEN uses an insecure default value — generate a strong token "

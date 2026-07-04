@@ -1,7 +1,7 @@
 export const config = {
   ws: {
     url: process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:9002/ws/threat-feed",
-    token: process.env.NEXT_PUBLIC_WS_TOKEN || "my-SOC-agent-2001",
+    token: process.env.NEXT_PUBLIC_WS_TOKEN || "2_o5YOn3fgSO-gxB59jL9zBi1dvUCjx3",
     maxReconnect: 10,
     baseDelayMs: 1000,
     maxDelayMs: 30000,
