@@ -825,6 +825,23 @@ async def threat_feedsimulation():
                 "mitigated": random.random() > 0.7,
             }
         )
+        if scenario["risk"] > 0.75 and random.random() > 0.4:
+            await asyncio.sleep(random.uniform(2, 4))
+            actions = ["ISOLATE_HOST", "BLOCK_IP", "DISABLE_ACCOUNT", "QUARANTINE_FILE", "BLOCK_DOMAIN"]
+            targets = ["10.0.1.42", "45.33.2.101", "svc-deploy", "/tmp/payload.exe", "evil-domain.ru"]
+            idx = actions.index("BLOCK_IP") if "BLOCK_IP" in actions else 0
+            await manager.broadcast(
+                {
+                    "id": str(uuid.uuid4()),
+                    "type": "APPROVAL_REQUIRED",
+                    "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
+                    "action": random.choice(actions),
+                    "target": random.choice(targets),
+                    "risk_score": scenario["risk"],
+                    "agent": scenario["agent"],
+                    "reasoning": f"Auto-generated from {scenario['type']} detection (confidence: {scenario['risk']:.0%})",
+                }
+            )
         await asyncio.sleep(random.uniform(6, 12))
 
 

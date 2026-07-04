@@ -70,15 +70,21 @@ export default function HuntingPage() {
     import("@/lib/api").then(({ api, endpoints }) => {
       api.get(endpoints.huntingEvents()).then((data: any) => {
         if (data?.events?.length) {
-          setLiveEvents(data.events.slice(0, 10).map((e: any) => ({
-            ts: e.timestamp?.slice(0, 19)?.replace("T", " ") || "",
-            source: e.source || "unknown",
-            sev: e.severity?.toUpperCase()?.slice(0, 4) || "INFO",
-            sevNum: e.confidence || 1.0,
-            asset: e.agent || "UNKNOWN",
-            threat: e.description || e.type || "",
-            icon: e.severity === "critical" ? "⚠" : e.severity === "high" ? "◼" : "ℹ",
-          })));
+          setLiveEvents(data.events.map((e: any) => {
+            let payload: any = {};
+            try { payload = typeof e.payload === "string" ? JSON.parse(e.payload) : (e.payload || {}); } catch {}
+            const sev = (payload.severity || e.severity || "info").toLowerCase();
+            const sevNum = sev === "critical" ? 9.5 : sev === "high" ? 7.0 : sev === "medium" ? 4.5 : 2.0;
+            return {
+              ts: e.timestamp?.slice(0, 19)?.replace("T", " ") || "",
+              source: payload.source || e.source || "unknown",
+              sev: sev.toUpperCase().slice(0, 4),
+              sevNum,
+              asset: e.agent || "UNKNOWN",
+              threat: payload.description || e.description || e.type || "",
+              icon: sev === "critical" ? "⚠" : sev === "high" ? "◼" : "ℹ",
+            };
+          }));
         }
       }).catch(() => {});
       api.get<{ incidents: Incident[] }>(endpoints.incidents()).then((data: any) => {

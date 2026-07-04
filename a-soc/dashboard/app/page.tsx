@@ -735,6 +735,17 @@ export default function LiveMonitoringPage() {
     });
   }, []);
 
+  useEffect(() => {
+    if (loading) return;
+    const interval = setInterval(() => {
+      import("@/lib/api").then(({ api, endpoints }) => {
+        api.get(endpoints.stats()).then((data: any) => setStats(data)).catch(() => {});
+        api.get(endpoints.incidents()).then((data: any) => setIncidents(data.incidents || [])).catch(() => {});
+      });
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [loading]);
+
   const displayAgents: any[] = agents.length > 0
     ? agents.map((a: any) => ({
         name: a.name,
