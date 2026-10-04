@@ -1,5 +1,11 @@
 import { test, expect } from "@playwright/test";
 
+import { authenticate } from "./helpers";
+
+test.beforeEach(async ({ page, request }) => {
+  await authenticate(page, request);
+});
+
 test.describe("Threat Intel Page", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto("/threat-intel");
@@ -11,7 +17,7 @@ test.describe("Threat Intel Page", () => {
   });
 
   test("displays IOC Database section", async ({ page }) => {
-    const iocSection = page.locator("text=IOC Database, text=Indicators").first();
+    const iocSection = page.locator("text=IOC Database").first();
     await expect(iocSection).toBeVisible();
   });
 
@@ -25,19 +31,19 @@ test.describe("Threat Intel Page", () => {
   });
 
   test("displays MITRE ATT&CK section", async ({ page }) => {
-    const mitre = page.locator("text=MITRE, text=ATT&CK").first();
+    const mitre = page.locator("text=MITRE").first();
     await expect(mitre).toBeVisible();
   });
 
   test("displays Target Profiles section", async ({ page }) => {
-    const profiles = page.locator("text=Target Profiles, text=Profiles").first();
+    const profiles = page.locator("text=Target Profiles").first();
     if (await profiles.isVisible()) {
       await expect(profiles).toBeVisible();
     }
   });
 
   test("displays Geolocation section", async ({ page }) => {
-    const geo = page.locator("text=Geolocation, text=Geo").first();
+    const geo = page.locator("text=Attack Geolocation").first();
     if (await geo.isVisible()) {
       await expect(geo).toBeVisible();
     }

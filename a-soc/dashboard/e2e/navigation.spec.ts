@@ -1,5 +1,11 @@
 import { test, expect, type Page } from "@playwright/test";
 
+import { authenticate } from "./helpers";
+
+test.beforeEach(async ({ page, request }) => {
+  await authenticate(page, request);
+});
+
 const routes = {
   monitoring: "/",
   hunting: "/hunting",

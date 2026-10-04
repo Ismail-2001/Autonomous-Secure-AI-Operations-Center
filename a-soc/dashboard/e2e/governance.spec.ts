@@ -1,5 +1,11 @@
 import { test, expect } from "@playwright/test";
 
+import { authenticate } from "./helpers";
+
+test.beforeEach(async ({ page, request }) => {
+  await authenticate(page, request);
+});
+
 test.describe("Governance Page", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto("/governance");
@@ -11,12 +17,12 @@ test.describe("Governance Page", () => {
   });
 
   test("displays Compliance Score", async ({ page }) => {
-    const score = page.locator("text=Compliance Score, text=Compliance").first();
+    const score = page.locator("text=SOC 2 COVERAGE").first();
     await expect(score).toBeVisible();
   });
 
   test("displays Risk Matrix", async ({ page }) => {
-    const matrix = page.locator("text=Risk Matrix, text=Risk Assessment").first();
+    const matrix = page.locator("text=Risk Summary Matrix").first();
     if (await matrix.isVisible()) {
       await expect(matrix).toBeVisible();
     }

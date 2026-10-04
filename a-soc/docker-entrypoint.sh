@@ -1,6 +1,10 @@
 #!/bin/sh
 set -e
 
+if [ -n "$1" ]; then
+    exec "$@"
+fi
+
 if [ "$SKIP_MIGRATIONS" != "true" ] && [ -n "$DATABASE_URL" ]; then
     echo "Database migrations handled by connection.py at startup."
 fi

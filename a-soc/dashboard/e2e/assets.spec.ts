@@ -1,5 +1,11 @@
 import { test, expect } from "@playwright/test";
 
+import { authenticate } from "./helpers";
+
+test.beforeEach(async ({ page, request }) => {
+  await authenticate(page, request);
+});
+
 test.describe("Assets Page", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto("/assets");
@@ -28,7 +34,7 @@ test.describe("Assets Page", () => {
   });
 
   test("displays right panel with asset details", async ({ page }) => {
-    const rightPanel = page.locator("text=Selected Target, text=Asset Details, [data-testid='right-panel']").first();
+    const rightPanel = page.locator("text=Selected Target").first();
     if (await rightPanel.isVisible()) {
       await expect(rightPanel).toBeVisible();
     }

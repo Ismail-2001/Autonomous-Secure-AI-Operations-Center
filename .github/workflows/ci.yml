@@ -163,6 +163,7 @@ jobs:
         env:
           NEXT_PUBLIC_API_URL: http://localhost:9002
           NEXT_PUBLIC_WS_URL: ws://localhost:9002
+          NEXT_PUBLIC_WS_TOKEN: ci-ws-token
         run: |
           npm run build
           npm start &
@@ -198,41 +199,44 @@ jobs:
       - name: Start full stack
         working-directory: a-soc
         run: |
-          docker compose up -d
+          docker compose up -d postgres redis opa backend worker dashboard > up.log 2>&1 || {
+            rc=$?
+            echo "::error::compose up failed (rc=$rc)%0A--- up.log ---%0A$(tail -c 2500 up.log | tr '\n' ' ')%0A--- ps ---%0A$(docker compose ps -a --format '{{.Name}} {{.State}} {{.Status}}' | tr '\n' ' ')%0A--- backend ---%0A$(docker compose logs --no-color --tail=40 backend 2>&1 | tr '\n' ' ')%0A--- worker ---%0A$(docker compose logs --no-color --tail=20 worker 2>&1 | tr '\n' ' ')"
+            exit $rc
+          }
           sleep 30
 
       - name: Health check all services
         working-directory: a-soc
         run: |
-          echo "=== Backend Health ==="
-          curl -f http://localhost:9002/health
+          fail=0
+          probe() {
+            if out=$(eval "$2" 2>&1); then
+              echo "OK   $1"
+            else
+              echo "FAIL $1"
+              echo "::error::health check failed: $1 -> $(echo "$out" | tail -c 800 | tr '\n' ' ')"
+              fail=1
+            fi
+          }
 
-          echo ""
-          echo "=== Dashboard ==="
-          curl -f http://localhost:3000
+          probe backend 'curl -fsS http://localhost:9002/health'
+          probe dashboard 'curl -fsS http://localhost:3000'
+          probe postgres 'docker exec asoc-postgres pg_isready -U asoc_user -d asoc_db'
+          probe redis 'docker exec asoc-redis redis-cli ping'
+          probe opa 'curl -fsS http://localhost:8181/health'
+          probe containers 'docker compose ps -a --format "{{.Name}} {{.Status}}"'
 
-          echo ""
-          echo "=== PostgreSQL ==="
-          docker exec asoc-postgres pg_isready -U asoc_user -d asoc_db
-
-          echo ""
-          echo "=== Redis ==="
-          docker exec asoc-redis redis-cli ping
-
-          echo ""
-          echo "=== OPA ==="
-          curl -f http://localhost:8181/health
-
-          echo ""
-          echo "=== All services healthy ==="
+          [ "$fail" -eq 0 ] || { echo "::error::$(docker compose ps -a --format '{{.Name}} {{.State}} {{.Status}}' | tr '\n' ' ')"; exit 1; }
+          echo "All services healthy"
 
       - name: Run smoke tests
         working-directory: a-soc
         run: |
-          PASS=0; FAIL=0
-          check() { if eval "$2" >/dev/null 2>&1; then echo "PASS  $1"; PASS=$((PASS+1)); else echo "FAIL  $1"; FAIL=$((FAIL+1)); fi }
+          PASS=0; FAIL=0; FAILED=""
+          check() { if eval "$2" >/dev/null 2>&1; then echo "PASS  $1"; PASS=$((PASS+1)); else echo "FAIL  $1"; FAIL=$((FAIL+1)); FAILED="$FAILED $1"; fi }
 
-          TOKEN=$(curl -s -X POST http://localhost:9002/api/v1/auth/token -H 'Content-Type: application/json' -d '{"user_id":"admin","password":"admin123"}' | python3 -c 'import sys,json; print(json.load(sys.stdin)["access_token"])')
+          TOKEN=$(curl -s -X POST http://localhost:9002/api/v1/auth/token -H 'Content-Type: application/json' -d '{"user_id":"admin","password":"admin123"}' | python3 -c 'import sys,json; print(json.load(sys.stdin)["access_token"])' 2>/dev/null || echo "")
 
           check "Health" "curl -sf http://localhost:9002/health"
           check "Auth" "curl -sf -H 'Authorization: Bearer $TOKEN' http://localhost:9002/api/v1/auth/me"
@@ -244,7 +248,7 @@ jobs:
 
           echo ""
           echo "Results: $PASS passed, $FAIL failed"
-          [ $FAIL -eq 0 ] || exit 1
+          [ "$FAIL" -eq 0 ] || { echo "::error::smoke tests failed:$FAILED"; exit 1; }
 
       - name: Collect logs on failure
         if: failure()

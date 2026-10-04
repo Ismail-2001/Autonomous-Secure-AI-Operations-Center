@@ -1,5 +1,11 @@
 import { test, expect } from "@playwright/test";
 
+import { authenticate } from "./helpers";
+
+test.beforeEach(async ({ page, request }) => {
+  await authenticate(page, request);
+});
+
 test.describe("Monitoring Page", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto("/");

@@ -1,5 +1,11 @@
 import { test, expect } from "@playwright/test";
 
+import { authenticate } from "./helpers";
+
+test.beforeEach(async ({ page, request }) => {
+  await authenticate(page, request);
+});
+
 test.describe("Forensics Page", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto("/forensics");
@@ -15,7 +21,7 @@ test.describe("Forensics Page", () => {
   });
 
   test("displays INGEST NEW IMAGE button", async ({ page }) => {
-    const ingestBtn = page.locator("text=INGEST NEW IMAGE, button:has-text('INGEST')").first();
+    const ingestBtn = page.getByRole("button", { name: "INGEST NEW IMAGE" });
     await expect(ingestBtn).toBeVisible();
   });
 
@@ -34,7 +40,7 @@ test.describe("Forensics Page", () => {
   });
 
   test("displays AI Agent Fleet panel", async ({ page }) => {
-    const agentFleet = page.locator("text=AI Agent Fleet, text=Agent Fleet").first();
+    const agentFleet = page.locator("text=AI Agent Fleet").first();
     await expect(agentFleet).toBeVisible();
   });
 
@@ -44,7 +50,7 @@ test.describe("Forensics Page", () => {
   });
 
   test("displays Generate Report button", async ({ page }) => {
-    const reportBtn = page.locator("text=Generate Report, button:has-text('Report')").first();
+    const reportBtn = page.getByRole("button", { name: "Generate Report" });
     await expect(reportBtn).toBeVisible();
   });
 });

@@ -1,15 +1,23 @@
 import { test, expect } from "@playwright/test";
 
+import { authenticate } from "./helpers";
+
+const API_BASE = process.env.API_BASE_URL || "http://localhost:9002";
+
+test.beforeEach(async ({ page, request }) => {
+  await authenticate(page, request);
+});
+
 test.describe("API Integration", () => {
   test("dashboard stats endpoint is reachable", async ({ request }) => {
-    const response = await request.get("/api/v1/dashboard/stats", {
+    const response = await request.get(`${API_BASE}/api/v1/dashboard/stats`, {
       headers: { Authorization: "Bearer test-token" },
     });
     expect(response.status()).toBeLessThan(500);
   });
 
   test("health endpoint returns OK", async ({ request }) => {
-    const response = await request.get("/health");
+    const response = await request.get(`${API_BASE}/health`);
     expect(response.ok()).toBeTruthy();
   });
 });
