@@ -6,6 +6,7 @@ Security properties:
 - Role-based access: ANALYST | SUPERVISOR | ADMIN | READONLY
 - Token fingerprinting: binds tokens to client to prevent theft
 """
+
 import hashlib
 import secrets
 import time
@@ -58,16 +59,21 @@ def _ensure_dev_keys(public_only: bool = False) -> str:
             format=serialization.PrivateFormat.PKCS8,
             encryption_algorithm=serialization.NoEncryption(),
         ).decode()
-        _KEY_CACHE["dev_public"] = private_key.public_key().public_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo,
-        ).decode()
+        _KEY_CACHE["dev_public"] = (
+            private_key.public_key()
+            .public_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PublicFormat.SubjectPublicKeyInfo,
+            )
+            .decode()
+        )
         logger.warning("dev_rsa_keypair_generated — NOT for production")
 
     return _KEY_CACHE[cache_key]
 
 
 # ── Roles ─────────────────────────────────────────────────────────────────
+
 
 class Role(str, Enum):
     READONLY = "readonly"
@@ -87,23 +93,48 @@ ROLE_HIERARCHY: dict[Role, int] = {
 ROLE_PERMISSIONS: dict[Role, set[str]] = {
     Role.READONLY: {"read:dashboard", "read:events", "read:health"},
     Role.ANALYST: {
-        "read:dashboard", "read:events", "read:health",
-        "write:hunting", "write:simulation",
-        "agent:telemetry", "agent:detection", "agent:forensics",
+        "read:dashboard",
+        "read:events",
+        "read:health",
+        "write:hunting",
+        "write:simulation",
+        "agent:telemetry",
+        "agent:detection",
+        "agent:forensics",
     },
     Role.SUPERVISOR: {
-        "read:dashboard", "read:events", "read:health",
-        "write:hunting", "write:simulation",
-        "agent:telemetry", "agent:detection", "agent:forensics",
-        "agent:supervisor", "approve:action", "escalate:incident",
+        "read:dashboard",
+        "read:events",
+        "read:health",
+        "write:hunting",
+        "write:simulation",
+        "agent:telemetry",
+        "agent:detection",
+        "agent:forensics",
+        "agent:supervisor",
+        "approve:action",
+        "escalate:incident",
     },
     Role.ADMIN: {
-        "read:dashboard", "read:events", "read:health", "read:audit",
-        "write:hunting", "write:simulation", "write:config",
-        "agent:telemetry", "agent:detection", "agent:forensics",
-        "agent:supervisor", "agent:response", "agent:compliance", "agent:notification",
-        "approve:action", "escalate:incident",
-        "admin:users", "admin:keys", "admin:policy",
+        "read:dashboard",
+        "read:events",
+        "read:health",
+        "read:audit",
+        "write:hunting",
+        "write:simulation",
+        "write:config",
+        "agent:telemetry",
+        "agent:detection",
+        "agent:forensics",
+        "agent:supervisor",
+        "agent:response",
+        "agent:compliance",
+        "agent:notification",
+        "approve:action",
+        "escalate:incident",
+        "admin:users",
+        "admin:keys",
+        "admin:policy",
     },
 }
 
@@ -119,6 +150,7 @@ def role_at_least(role: Role, min_role: Role) -> bool:
 
 
 # ── Token Models ──────────────────────────────────────────────────────────
+
 
 class TokenPair(BaseModel):
     access_token: str
@@ -159,6 +191,7 @@ def _fingerprint(client_id: str) -> str:
 
 
 # ── Token Creation ────────────────────────────────────────────────────────
+
 
 def create_token_pair(
     user_id: str,
@@ -215,6 +248,7 @@ def create_token_pair(
 
 
 # ── Token Verification ───────────────────────────────────────────────────
+
 
 def verify_access_token(token: str, client_id: str = "default") -> Optional[TokenPayload]:
     """Verify access token signature, expiry, and fingerprint binding."""

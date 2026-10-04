@@ -179,15 +179,6 @@ allow if {
 # 5. ResponseAgent — Remediation (HIGHEST RESTRICTION)
 # ──────────────────────────────────────────────────────────────────────────
 
-# ALL response actions require authorization context
-allow if {
-    input.agent == "ResponseAgent"
-    input.action.type in destructive_actions
-    input.context.authorized == true
-    user_role_level >= 2  # supervisor+ to authorize
-    input.action.risk_score < 0.95
-}
-
 # BLOCK_IP: requires supervisor+ and explicit authorization
 allow if {
     input.agent == "ResponseAgent"

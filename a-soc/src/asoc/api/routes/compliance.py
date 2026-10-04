@@ -19,7 +19,11 @@ async def compliance_report():
         return {
             "score": 88,
             "controls": [
-                {"name": "CC.1.1.01", "status": "PASS", "description": "Access Control: Role-Based Authorization Policy"},
+                {
+                    "name": "CC.1.1.01",
+                    "status": "PASS",
+                    "description": "Access Control: Role-Based Authorization Policy",
+                },
                 {"name": "CC.6.1.02", "status": "FAIL", "description": "Incident Response: 15min Notification SLA"},
             ],
             "last_audit": datetime.now(timezone.utc).isoformat() + "Z",

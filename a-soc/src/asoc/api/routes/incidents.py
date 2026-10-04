@@ -23,7 +23,9 @@ class CreateIncidentRequest(BaseModel):
 
 
 class TriageRequest(BaseModel):
-    triage_status: str = Field(..., pattern="^(new|acknowledged|investigating|escalated|contained|resolved|false_positive)$")
+    triage_status: str = Field(
+        ..., pattern="^(new|acknowledged|investigating|escalated|contained|resolved|false_positive)$"
+    )
     assigned_to: str | None = None
     notes: str | None = None
 
@@ -42,9 +44,21 @@ async def list_incidents(limit: int = Query(20, ge=1, le=100)):
         return await get_incidents(limit=limit)
     except Exception:
         from datetime import datetime, timezone
+
         return {
             "incidents": [
-                {"id": "INC-2023-882", "title": "Unauthorized Login Attempt", "description": "Brute force NTLM relay attempt detected", "severity": "critical", "status": "active", "source": "EVAL-02-DC", "created_at": datetime.now(timezone.utc).isoformat() + "Z", "updated_at": datetime.now(timezone.utc).isoformat() + "Z", "agent": "DetectionAgent", "tags": ["brute-force", "ntlm"]},
+                {
+                    "id": "INC-2023-882",
+                    "title": "Unauthorized Login Attempt",
+                    "description": "Brute force NTLM relay attempt detected",
+                    "severity": "critical",
+                    "status": "active",
+                    "source": "EVAL-02-DC",
+                    "created_at": datetime.now(timezone.utc).isoformat() + "Z",
+                    "updated_at": datetime.now(timezone.utc).isoformat() + "Z",
+                    "agent": "DetectionAgent",
+                    "tags": ["brute-force", "ntlm"],
+                },
             ],
             "count": 1,
         }
@@ -57,11 +71,20 @@ async def create_incident(req: CreateIncidentRequest):
 
     db = await get_db_pool()
     async with db.pool.acquire() as conn:
-        row = await conn.fetchrow("""
+        row = await conn.fetchrow(
+            """
             INSERT INTO incidents (id, incident_number, title, description, severity, status, source, agent, risk_score, tags, created_at, updated_at, triage_status)
             VALUES (gen_random_uuid(), 'INC-2026-' || LPAD((EXTRACT(EPOCH FROM NOW())::int % 10000)::text, 4, '0'), $1, $2, $3, 'active', $4, $5, $6, $7::jsonb, NOW(), NOW(), 'new')
             RETURNING id, incident_number, title, description, severity, status, source, agent, risk_score, tags, created_at, updated_at, triage_status
-        """, req.title, req.description, req.severity, req.source, "Dashboard", risk_score, _json.dumps(req.tags))
+        """,
+            req.title,
+            req.description,
+            req.severity,
+            req.source,
+            "Dashboard",
+            risk_score,
+            _json.dumps(req.tags),
+        )
 
     return {
         "ok": True,
@@ -92,12 +115,20 @@ async def triage_incident(incident_id: str, req: TriageRequest):
             raise HTTPException(status_code=404, detail="Incident not found")
 
         now = datetime.now(timezone.utc)
-        await conn.execute("""
+        await conn.execute(
+            """
             UPDATE incidents
             SET triage_status = $1, assigned_to = $2, notes = COALESCE($3, notes),
                 triaged_by = $4, triaged_at = COALESCE(triaged_at, $5), updated_at = $5
             WHERE id = $6
-        """, req.triage_status, req.assigned_to, req.notes, "dashboard-user", now, incident_id)
+        """,
+            req.triage_status,
+            req.assigned_to,
+            req.notes,
+            "dashboard-user",
+            now,
+            incident_id,
+        )
 
         get_audit_trail().append(
             agent_id="dashboard-user",
@@ -107,7 +138,7 @@ async def triage_incident(incident_id: str, req: TriageRequest):
                 "incident_number": row["incident_number"],
                 "triage_status": req.triage_status,
                 "assigned_to": req.assigned_to,
-            }
+            },
         )
 
     return {"ok": True, "incident_id": incident_id, "triage_status": req.triage_status}
@@ -130,11 +161,16 @@ async def add_response_action(incident_id: str, req: ResponseActionRequest):
             "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
         }
 
-        await conn.execute("""
+        await conn.execute(
+            """
             UPDATE incidents
             SET response_actions = response_actions || $1::jsonb, updated_at = $2
             WHERE id = $3
-        """, _json.dumps([action_entry]), datetime.now(timezone.utc), incident_id)
+        """,
+            _json.dumps([action_entry]),
+            datetime.now(timezone.utc),
+            incident_id,
+        )
 
         get_audit_trail().append(
             agent_id="dashboard-user",
@@ -145,7 +181,7 @@ async def add_response_action(incident_id: str, req: ResponseActionRequest):
                 "action_type": req.action_type,
                 "description": req.description,
                 "target": req.target,
-            }
+            },
         )
 
     return {"ok": True, "action": action_entry}
@@ -155,9 +191,7 @@ async def add_response_action(incident_id: str, req: ResponseActionRequest):
 async def get_response_actions(incident_id: str):
     db = await get_db_pool()
     async with db.pool.acquire() as conn:
-        row = await conn.fetchrow(
-            "SELECT response_actions FROM incidents WHERE id = $1", incident_id
-        )
+        row = await conn.fetchrow("SELECT response_actions FROM incidents WHERE id = $1", incident_id)
         if not row:
             raise HTTPException(status_code=404, detail="Incident not found")
 

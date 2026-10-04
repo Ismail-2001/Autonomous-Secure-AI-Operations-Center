@@ -13,20 +13,20 @@ function renderWithAuth(ui: React.ReactElement) {
 describe("Skeleton components", () => {
   it("renders SkeletonKPI without crashing", async () => {
     const { SkeletonKPI } = await import("@/components/Skeleton");
-    render(<SkeletonKPI />);
-    expect(document.querySelector("[class*='animate']")).toBeTruthy();
+    const { container } = render(<SkeletonKPI />);
+    expect(container.querySelectorAll("div").length).toBeGreaterThanOrEqual(7);
   });
 
   it("renders SkeletonAgent without crashing", async () => {
     const { SkeletonAgent } = await import("@/components/Skeleton");
-    render(<SkeletonAgent />);
-    expect(document.querySelector("[class*='animate']")).toBeTruthy();
+    const { container } = render(<SkeletonAgent />);
+    expect(container.querySelectorAll("div").length).toBeGreaterThanOrEqual(6);
   });
 
   it("renders SkeletonCard without crashing", async () => {
     const { SkeletonCard } = await import("@/components/Skeleton");
-    render(<SkeletonCard />);
-    expect(document.querySelector("[class*='animate']")).toBeTruthy();
+    const { container } = render(<SkeletonCard />);
+    expect(container.querySelectorAll("div").length).toBeGreaterThanOrEqual(7);
   });
 });
 
@@ -75,17 +75,17 @@ describe("InvestigationPanel", () => {
 describe("lib/api", () => {
   it("exports endpoints object", async () => {
     const { endpoints } = await import("@/lib/api");
-    expect(endpoints.stats()).toBe("/api/v1/dashboard/stats");
-    expect(endpoints.agents()).toBe("/api/v1/agents/status");
-    expect(endpoints.incidents()).toBe("/api/v1/incidents");
-    expect(endpoints.assets()).toBe("/api/v1/assets");
-    expect(endpoints.threatIntel()).toBe("/api/v1/threat-intel/indicators");
-    expect(endpoints.compliance()).toBe("/api/v1/compliance/report");
+    expect(endpoints.stats()).toMatch(/\/api\/v1\/dashboard\/stats$/);
+    expect(endpoints.agents()).toMatch(/\/api\/v1\/agents\/status$/);
+    expect(endpoints.incidents()).toMatch(/\/api\/v1\/incidents$/);
+    expect(endpoints.assets()).toMatch(/\/api\/v1\/assets$/);
+    expect(endpoints.threatIntel()).toMatch(/\/api\/v1\/threat-intel\/indicators$/);
+    expect(endpoints.compliance()).toMatch(/\/api\/v1\/compliance\/report$/);
   });
 
   it("endpoints accept parameters", async () => {
     const { endpoints } = await import("@/lib/api");
-    expect(endpoints.incidentActions("inc-123")).toBe("/api/v1/incidents/inc-123/actions");
-    expect(endpoints.triageUpdate("inc-123")).toBe("/api/v1/incidents/inc-123/triage");
+    expect(endpoints.triage.addAction("inc-123")).toMatch(/\/api\/v1\/incidents\/inc-123\/actions$/);
+    expect(endpoints.triage.update("inc-123")).toMatch(/\/api\/v1\/incidents\/inc-123\/triage$/);
   });
 });

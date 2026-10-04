@@ -8,6 +8,7 @@ Every agent action produces an AuditEntry that includes:
 verify_chain() proves the entire audit trail has not been tampered with.
 This is the SOC 2 / ISO 27001 compliance story.
 """
+
 import hashlib
 import hmac
 import json
@@ -26,6 +27,7 @@ logger = get_logger("asoc.audit")
 
 
 # ── Models ────────────────────────────────────────────────────────────────
+
 
 class AuditEntry(BaseModel):
     entry_id: str = Field(default_factory=lambda: secrets.token_urlsafe(16))
@@ -49,6 +51,7 @@ class ChainVerificationResult(BaseModel):
 
 # ── HMAC Key Management ───────────────────────────────────────────────────
 
+
 def _get_hmac_key() -> bytes:
     """Get HMAC signing key from config. Falls back to WS_API_TOKEN."""
     secret = settings.HMAC_SECRET
@@ -69,6 +72,7 @@ def _rotate_key() -> bytes:
 
 
 # ── Hashing Functions ─────────────────────────────────────────────────────
+
 
 def hash_payload(payload: dict[str, Any]) -> str:
     """SHA-256 hash of JSON-serialized payload."""
@@ -101,6 +105,7 @@ def compute_entry_hash(entry: AuditEntry) -> str:
 
 
 # ── Audit Trail ───────────────────────────────────────────────────────────
+
 
 class AuditTrail:
     """Append-only, HMAC-signed, hash-chained audit log.
@@ -239,8 +244,8 @@ class AuditTrail:
                     verified_entries=i,
                     broken_at=i,
                     error=f"Chain broken at entry {i} (id={entry.entry_id}): "
-                          f"expected previous_hash={prev_hash[:16]}..., "
-                          f"got={entry.previous_hash[:16]}...",
+                    f"expected previous_hash={prev_hash[:16]}..., "
+                    f"got={entry.previous_hash[:16]}...",
                 )
             prev_hash = entry.entry_hash
 

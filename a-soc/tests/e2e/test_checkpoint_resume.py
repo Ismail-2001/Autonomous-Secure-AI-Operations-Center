@@ -1,4 +1,5 @@
 """E2E test: Checkpoint resume after simulated worker restart."""
+
 import uuid
 
 import pytest

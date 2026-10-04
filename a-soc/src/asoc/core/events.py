@@ -30,13 +30,9 @@ class EventEmitter:
             self._once_listeners.pop(event, None)
         else:
             if event in self._listeners:
-                self._listeners[event] = [
-                    cb for cb in self._listeners[event] if cb != callback
-                ]
+                self._listeners[event] = [cb for cb in self._listeners[event] if cb != callback]
             if event in self._once_listeners:
-                self._once_listeners[event] = [
-                    cb for cb in self._once_listeners[event] if cb != callback
-                ]
+                self._once_listeners[event] = [cb for cb in self._once_listeners[event] if cb != callback]
 
     async def emit(self, event: str, *args: Any, **kwargs: Any) -> None:
         """Emit an event to all listeners."""

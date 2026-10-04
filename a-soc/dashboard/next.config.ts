@@ -7,11 +7,6 @@ const nextConfig = {
   experimental: {
     optimizePackageImports: ["framer-motion", "lucide-react", "@tanstack/react-query"],
   },
-  modularizeImports: {
-    "framer-motion": {
-      transform: "framer-motion/dist/es/{{member}}",
-    },
-  },
 };
 
 export default nextConfig;

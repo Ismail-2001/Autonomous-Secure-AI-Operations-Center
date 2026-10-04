@@ -19,23 +19,30 @@ from prometheus_fastapi_instrumentator import Instrumentator
 
 from src.asoc.agents.message import ASOCMessage, MessageType, Priority
 from src.asoc.agents.notifications import NotificationAgent
+
+# Register route modules on the v1 router
+# Import and register all route modules
+from src.asoc.api.routes import (  # noqa: F401
+    assets,
+    audit,
+    auth,
+    compliance,
+    dashboard,
+    forensics,
+    get_event_store,
+    hunting,
+    incidents,
+)
+from src.asoc.api.routes import router as api_v1
+from src.asoc.api.routes import threat_intel
 from src.asoc.audit.audit_trail import get_audit_trail
+from src.asoc.core.auth import require_jwt
 from src.asoc.core.circuit_breaker import CircuitBreaker
 from src.asoc.core.config import settings
 from src.asoc.core.connection import close_db_pool
 from src.asoc.core.logging import get_logger, get_request_id, set_incident_id, set_request_id, set_trace_id
 from src.asoc.core.message_bus import close_message_bus, get_message_bus
 from src.asoc.core.rate_limiter import check_rate_limit
-from src.asoc.core.auth import require_jwt
-
-# Import and register all route modules
-from src.asoc.api.routes import router as api_v1
-from src.asoc.api.routes import get_event_store
-
-# Register route modules on the v1 router
-from src.asoc.api.routes import auth, dashboard, incidents, assets  # noqa: F401
-from src.asoc.api.routes import forensics, threat_intel, compliance  # noqa: F401
-from src.asoc.api.routes import hunting, audit  # noqa: F401
 
 logger = get_logger("asoc.api")
 
@@ -173,8 +180,8 @@ redis_circuit_breaker = CircuitBreaker("redis", failure_threshold=3, recovery_ti
 
 @app.get("/health")
 async def health_check():
-    from src.asoc.core.event_store import PostgresEventStore
     from src.asoc.core.connection import get_db_pool
+    from src.asoc.core.event_store import PostgresEventStore
 
     db_ok = False
     bus_ok = False
@@ -199,6 +206,7 @@ async def health_check():
 
     try:
         from src.asoc.vector.pinecone_provider import vector_provider
+
         vector_ok = await vector_provider.health_check()
     except Exception:
         pass
@@ -230,6 +238,7 @@ async def health_check():
 
 # -- Duplicate routes for /api/ prefix (backward compat) ---------------------
 
+
 @app.get("/api/hunting/events", dependencies=[Depends(require_jwt), Depends(check_rate_limit)])
 async def api_hunting_events(
     q: str = Query(default="", max_length=500),
@@ -241,6 +250,7 @@ async def api_hunting_events(
     offset: int = Query(default=0, ge=0),
 ):
     from src.asoc.api.routes.hunting import hunting_events
+
     return await hunting_events(q, source, event_type, start_time, end_time, limit, offset)
 
 
@@ -253,10 +263,12 @@ async def api_hunting_timeline(
     bucket: str = Query(default="hour", pattern="^(minute|hour|day)$"),
 ):
     from src.asoc.api.routes.hunting import hunting_timeline
+
     return await hunting_timeline(q, source, start_time, end_time, bucket)
 
 
 # -- WebSocket ---------------------------------------------------------------
+
 
 @app.websocket("/ws/threat-feed")
 @app.websocket("/api/v1/ws/threat-feed")
@@ -291,27 +303,31 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(default=""
 
             elif data == "APPROVE_ACTION":
                 permission_event.set()
-                await manager.broadcast({
-                    "id": str(uuid.uuid4()),
-                    "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
-                    "agent": "System",
-                    "status": "approved",
-                    "message": "Human operator authorized action.",
-                    "severity": "low",
-                })
+                await manager.broadcast(
+                    {
+                        "id": str(uuid.uuid4()),
+                        "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
+                        "agent": "System",
+                        "status": "approved",
+                        "message": "Human operator authorized action.",
+                        "severity": "low",
+                    }
+                )
 
             elif data == "STOP_SIMULATION":
                 if current_task:
                     current_task.cancel()
                     current_task = None
-                await manager.broadcast({
-                    "id": str(uuid.uuid4()),
-                    "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
-                    "agent": "System",
-                    "status": "idle",
-                    "message": "Simulation stopped by operator.",
-                    "severity": "low",
-                })
+                await manager.broadcast(
+                    {
+                        "id": str(uuid.uuid4()),
+                        "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
+                        "agent": "System",
+                        "status": "idle",
+                        "message": "Simulation stopped by operator.",
+                        "severity": "low",
+                    }
+                )
 
     except WebSocketDisconnect:
         await manager.disconnect(websocket)
@@ -320,6 +336,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(default=""
 
 
 # -- Background Tasks --------------------------------------------------------
+
 
 async def background_telemetry():
     benign_messages = [
@@ -333,29 +350,101 @@ async def background_telemetry():
         "Config: Resource 'sg-0abc123' compliant with policy 'restricted-ssh'",
     ]
     while True:
-        await manager.broadcast({
-            "id": str(uuid.uuid4()),
-            "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
-            "agent": "Telemetry",
-            "status": "scanning",
-            "message": random.choice(benign_messages),
-            "severity": "low",
-            "is_background": True,
-        })
+        await manager.broadcast(
+            {
+                "id": str(uuid.uuid4()),
+                "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
+                "agent": "Telemetry",
+                "status": "scanning",
+                "message": random.choice(benign_messages),
+                "severity": "low",
+                "is_background": True,
+            }
+        )
         await asyncio.sleep(random.uniform(2, 5))
 
 
 THREAT_SCENARIOS = [
-    {"severity": "critical", "source": "EDR", "agent": "DetectionAgent", "type": "RANSOMWARE", "desc": "Conti-class ransomware encryption detected on file server FS-PROD-03", "risk": 0.95},
-    {"severity": "critical", "source": "SIEM", "agent": "TelemetryAgent", "type": "LATERAL_MOVEMENT", "desc": "Pass-the-hash attack detected moving from WS-042 to DC-01", "risk": 0.92},
-    {"severity": "high", "source": "IDS", "agent": "DetectionAgent", "type": "C2_BEACON", "desc": "Beaconing pattern to known Cobalt Strike server 45.33.2.101:443", "risk": 0.85},
-    {"severity": "high", "source": "CLOUD_TRAIL", "agent": "TelemetryAgent", "type": "PRIVILEGE_ESCALATION", "desc": "IAM role AdminAccess attached to service account svc-deploy", "risk": 0.82},
-    {"severity": "high", "source": "WAF", "agent": "DetectionAgent", "type": "SQL_INJECTION", "desc": "Automated SQL injection attempts on /api/v2/users endpoint", "risk": 0.78},
-    {"severity": "medium", "source": "NETWORK", "agent": "TelemetryAgent", "type": "DATA_EXFILTRATION", "desc": "Anomalous 2.3GB outbound transfer to IP 203.0.113.42", "risk": 0.65},
-    {"severity": "medium", "source": "ENDPOINT", "agent": "DetectionAgent", "type": "SUSPICIOUS_PROCESS", "desc": "Mimikatz signature detected in memory on WKST-117", "risk": 0.72},
-    {"severity": "medium", "source": "DNS", "agent": "TelemetryAgent", "type": "DNS_TUNNELING", "desc": "High-entropy DNS queries to *.data-sync.ru (possible C2 channel)", "risk": 0.60},
-    {"severity": "low", "source": "VULN", "agent": "ComplianceAgent", "type": "VULNERABILITY", "desc": "CVE-2024-38077 found on DC-02: Windows Remote Code Execution", "risk": 0.45},
-    {"severity": "low", "source": "CONFIG", "agent": "ComplianceAgent", "type": "MISCONFIGURATION", "desc": "S3 bucket 'backups-prod' has public read ACL enabled", "risk": 0.35},
+    {
+        "severity": "critical",
+        "source": "EDR",
+        "agent": "DetectionAgent",
+        "type": "RANSOMWARE",
+        "desc": "Conti-class ransomware encryption detected on file server FS-PROD-03",
+        "risk": 0.95,
+    },
+    {
+        "severity": "critical",
+        "source": "SIEM",
+        "agent": "TelemetryAgent",
+        "type": "LATERAL_MOVEMENT",
+        "desc": "Pass-the-hash attack detected moving from WS-042 to DC-01",
+        "risk": 0.92,
+    },
+    {
+        "severity": "high",
+        "source": "IDS",
+        "agent": "DetectionAgent",
+        "type": "C2_BEACON",
+        "desc": "Beaconing pattern to known Cobalt Strike server 45.33.2.101:443",
+        "risk": 0.85,
+    },
+    {
+        "severity": "high",
+        "source": "CLOUD_TRAIL",
+        "agent": "TelemetryAgent",
+        "type": "PRIVILEGE_ESCALATION",
+        "desc": "IAM role AdminAccess attached to service account svc-deploy",
+        "risk": 0.82,
+    },
+    {
+        "severity": "high",
+        "source": "WAF",
+        "agent": "DetectionAgent",
+        "type": "SQL_INJECTION",
+        "desc": "Automated SQL injection attempts on /api/v2/users endpoint",
+        "risk": 0.78,
+    },
+    {
+        "severity": "medium",
+        "source": "NETWORK",
+        "agent": "TelemetryAgent",
+        "type": "DATA_EXFILTRATION",
+        "desc": "Anomalous 2.3GB outbound transfer to IP 203.0.113.42",
+        "risk": 0.65,
+    },
+    {
+        "severity": "medium",
+        "source": "ENDPOINT",
+        "agent": "DetectionAgent",
+        "type": "SUSPICIOUS_PROCESS",
+        "desc": "Mimikatz signature detected in memory on WKST-117",
+        "risk": 0.72,
+    },
+    {
+        "severity": "medium",
+        "source": "DNS",
+        "agent": "TelemetryAgent",
+        "type": "DNS_TUNNELING",
+        "desc": "High-entropy DNS queries to *.data-sync.ru (possible C2 channel)",
+        "risk": 0.60,
+    },
+    {
+        "severity": "low",
+        "source": "VULN",
+        "agent": "ComplianceAgent",
+        "type": "VULNERABILITY",
+        "desc": "CVE-2024-38077 found on DC-02: Windows Remote Code Execution",
+        "risk": 0.45,
+    },
+    {
+        "severity": "low",
+        "source": "CONFIG",
+        "agent": "ComplianceAgent",
+        "type": "MISCONFIGURATION",
+        "desc": "S3 bucket 'backups-prod' has public read ACL enabled",
+        "risk": 0.35,
+    },
 ]
 
 
@@ -363,45 +452,51 @@ async def threat_feedsimulation():
     await asyncio.sleep(5)
     while True:
         scenario = random.choice(THREAT_SCENARIOS)
-        await manager.broadcast({
-            "id": str(uuid.uuid4()),
-            "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
-            "type": "THREAT_EVENT",
-            "source": scenario["source"],
-            "agent": scenario["agent"],
-            "severity": scenario["severity"],
-            "threat_type": scenario["type"],
-            "description": scenario["desc"],
-            "confidence": scenario["risk"],
-            "mitigated": random.random() > 0.7,
-        })
+        await manager.broadcast(
+            {
+                "id": str(uuid.uuid4()),
+                "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
+                "type": "THREAT_EVENT",
+                "source": scenario["source"],
+                "agent": scenario["agent"],
+                "severity": scenario["severity"],
+                "threat_type": scenario["type"],
+                "description": scenario["desc"],
+                "confidence": scenario["risk"],
+                "mitigated": random.random() > 0.7,
+            }
+        )
         if scenario["risk"] > 0.75 and random.random() > 0.4:
             await asyncio.sleep(random.uniform(2, 4))
             actions = ["ISOLATE_HOST", "BLOCK_IP", "DISABLE_ACCOUNT", "QUARANTINE_FILE", "BLOCK_DOMAIN"]
             targets = ["10.0.1.42", "45.33.2.101", "svc-deploy", "/tmp/payload.exe", "evil-domain.ru"]
-            await manager.broadcast({
-                "id": str(uuid.uuid4()),
-                "type": "APPROVAL_REQUIRED",
-                "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
-                "action": random.choice(actions),
-                "target": random.choice(targets),
-                "risk_score": scenario["risk"],
-                "agent": scenario["agent"],
-                "reasoning": f"Auto-generated from {scenario['type']} detection (confidence: {scenario['risk']:.0%})",
-            })
+            await manager.broadcast(
+                {
+                    "id": str(uuid.uuid4()),
+                    "type": "APPROVAL_REQUIRED",
+                    "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
+                    "action": random.choice(actions),
+                    "target": random.choice(targets),
+                    "risk_score": scenario["risk"],
+                    "agent": scenario["agent"],
+                    "reasoning": f"Auto-generated from {scenario['type']} detection (confidence: {scenario['risk']:.0%})",
+                }
+            )
         await asyncio.sleep(random.uniform(6, 12))
 
 
 async def run_simulation(permission_event: asyncio.Event):
     async def stream_status(agent, status, message, severity="low"):
-        await manager.broadcast({
-            "id": str(uuid.uuid4()),
-            "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
-            "agent": agent,
-            "status": status,
-            "message": message,
-            "severity": severity,
-        })
+        await manager.broadcast(
+            {
+                "id": str(uuid.uuid4()),
+                "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
+                "agent": agent,
+                "status": status,
+                "message": message,
+                "severity": severity,
+            }
+        )
         await asyncio.sleep(1.5)
 
     audit = get_audit_trail()
@@ -495,6 +590,7 @@ async def run_simulation(permission_event: asyncio.Event):
     await stream_status("Detection", "analyzing", "Correlating events with Threat Intel...", "low")
 
     from src.asoc.agents.detection import DetectionAgent
+
     da = DetectionAgent()
     detection_result = await da.analyze_threat(scenario["telemetry"])
     detected_score = detection_result.payload["risk_score"] if detection_result else scenario["risk_score"]
@@ -505,9 +601,25 @@ async def run_simulation(permission_event: asyncio.Event):
     await stream_status("Supervisor", "evaluating", "Checking policy guardrails...", "low")
 
     if detected_score > 0.6:
-        await stream_status("Supervisor", "blocked", f"High Risk Action Proposed: {scenario['action']}. Awaiting Authorization...", "critical")
-        audit.append("SupervisorAgent", "approval_required", {"action": scenario["action"], "risk_score": detected_score, "incident_id": incident_id})
-        await manager.broadcast({"type": "APPROVAL_REQUIRED", "action": scenario["action"], "target": scenario["target"], "risk_score": detected_score})
+        await stream_status(
+            "Supervisor",
+            "blocked",
+            f"High Risk Action Proposed: {scenario['action']}. Awaiting Authorization...",
+            "critical",
+        )
+        audit.append(
+            "SupervisorAgent",
+            "approval_required",
+            {"action": scenario["action"], "risk_score": detected_score, "incident_id": incident_id},
+        )
+        await manager.broadcast(
+            {
+                "type": "APPROVAL_REQUIRED",
+                "action": scenario["action"],
+                "target": scenario["target"],
+                "risk_score": detected_score,
+            }
+        )
         await permission_event.wait()
         audit.append("SupervisorAgent", "action_approved", {"action": scenario["action"], "incident_id": incident_id})
         await stream_status("Supervisor", "authorized", "Action Authorized. Proceeding...", "low")
@@ -518,13 +630,22 @@ async def run_simulation(permission_event: asyncio.Event):
     await stream_status("Forensics", "complete", "Root cause execution trace mapped.", "high")
 
     await stream_status("Response", "actuating", f"Executing {scenario['action']}...", "critical")
-    audit.append("ResponseAgent", "action_executed", {"action": scenario["action"], "target": scenario["target"], "incident_id": incident_id})
+    audit.append(
+        "ResponseAgent",
+        "action_executed",
+        {"action": scenario["action"], "target": scenario["target"], "incident_id": incident_id},
+    )
     await stream_status("Response", "notifying", "Sending alert via configured notification channels...", "medium")
     await notification_agent.send_alert(
         title=f"A-SOC: {scenario['name']}",
         message=f"Action: {scenario['action']} on {scenario['target']} | Risk Score: {detected_score}",
         severity="critical" if detected_score > 0.8 else "high",
-        fields={"Incident": incident_id, "Action": scenario["action"], "Target": scenario["target"], "Risk Score": f"{detected_score:.2f}"},
+        fields={
+            "Incident": incident_id,
+            "Action": scenario["action"],
+            "Target": scenario["target"],
+            "Risk Score": f"{detected_score:.2f}",
+        },
     )
 
     await stream_status("Notification", "delivered", "Alert delivered to SOC team.", "low")
@@ -534,10 +655,13 @@ async def run_simulation(permission_event: asyncio.Event):
     audit.append("ComplianceAgent", "compliance_check", {"incident_id": incident_id})
     await stream_status("Compliance", "verified", "Compliance gates passed.", "low")
 
-    await stream_status("System", "resolved", f"Incident {incident_id[:8]}... resolved. All agents returning to monitoring.", "low")
+    await stream_status(
+        "System", "resolved", f"Incident {incident_id[:8]}... resolved. All agents returning to monitoring.", "low"
+    )
     audit.append("System", "simulation_complete", {"incident_id": incident_id, "final_risk_score": detected_score})
 
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=9002)

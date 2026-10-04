@@ -1,6 +1,6 @@
 from src.asoc.core.auth import require_api_token, require_ws_token
-from src.asoc.core.circuit_breaker import CircuitBreaker
 from src.asoc.core.checks import run_boot_checks
+from src.asoc.core.circuit_breaker import CircuitBreaker
 from src.asoc.core.config import settings
 from src.asoc.core.connection import DatabasePool, close_db_pool, get_db_pool
 from src.asoc.core.event_store import EventStore, PostgresEventStore

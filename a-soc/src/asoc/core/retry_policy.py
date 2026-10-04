@@ -41,7 +41,7 @@ class RetryPolicy:
         if self.strategy == RetryStrategy.FIXED:
             delay = self.base_delay
         elif self.strategy == RetryStrategy.EXPONENTIAL:
-            delay = self.base_delay * (2 ** attempt)
+            delay = self.base_delay * (2**attempt)
         else:  # LINEAR
             delay = self.base_delay * (attempt + 1)
 
@@ -77,7 +77,7 @@ class RetryPolicy:
         """Preview delay for each attempt."""
         return [
             min(
-                self.base_delay * (2 ** i if self.strategy == RetryStrategy.EXPONENTIAL else i + 1),
+                self.base_delay * (2**i if self.strategy == RetryStrategy.EXPONENTIAL else i + 1),
                 self.max_delay,
             )
             for i in range(self.max_retries)

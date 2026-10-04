@@ -1,4 +1,7 @@
-import asyncio, asyncpg
+import asyncio
+
+import asyncpg
+
 
 async def main():
     conn = await asyncpg.connect("postgresql://asoc_user:changeme123@postgres:5432/asoc_db")
@@ -24,8 +27,11 @@ async def main():
         print("OK: idx_incidents_assigned")
     except Exception as e:
         print(f"Index exists: {e}")
-    cols = await conn.fetch("SELECT column_name FROM information_schema.columns WHERE table_name = 'incidents' ORDER BY ordinal_position")
+    cols = await conn.fetch(
+        "SELECT column_name FROM information_schema.columns WHERE table_name = 'incidents' ORDER BY ordinal_position"
+    )
     print("Final columns:", [c["column_name"] for c in cols])
     await conn.close()
+
 
 asyncio.run(main())

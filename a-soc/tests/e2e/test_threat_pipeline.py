@@ -1,4 +1,5 @@
 """E2E test: Full threat detection pipeline — telemetry ingestion through remediation."""
+
 import uuid
 
 import pytest
@@ -54,12 +55,18 @@ class TestThreatDetectionPipeline:
         assert state.get("incident_id") == incident_id
 
     async def test_pipeline_handles_no_events_gracefully(self, setup_test_state):
+        from unittest.mock import AsyncMock
+
         from src.asoc.agents.telemetry import TelemetryAgent
 
         state = setup_test_state(str(uuid.uuid4()))
         state["working_memory"] = {}
 
-        telemetry = TelemetryAgent()
+        provider = AsyncMock()
+        provider.fetch_events.return_value = []
+        provider.health_check.return_value = True
+        telemetry = TelemetryAgent(provider=provider)
         state = await telemetry.run_cycle(state)
         obs = state["agent_observations"][-1]
-        assert obs.confidence_score <= 0.5 or obs.action_taken == "no_events_found"
+        assert obs.action_taken == "no_events_found"
+        assert obs.confidence_score <= 0.5

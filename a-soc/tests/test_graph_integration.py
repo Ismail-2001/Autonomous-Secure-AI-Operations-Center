@@ -1,17 +1,18 @@
-import pytest
 from unittest.mock import patch
+
+import pytest
 
 from src.asoc.agents.message import ASOCMessage, MessageType, Priority
 from src.asoc.agents.state import AgentState, create_initial_state
+from src.asoc.orchestration.routing import (
+    route_after_detection,
+    route_after_hitl,
+    route_after_supervisor,
+    route_after_telemetry,
+)
 from src.asoc.orchestration.workflow import (
     create_asoc_graph,
     get_initial_state,
-)
-from src.asoc.orchestration.routing import (
-    route_after_telemetry,
-    route_after_detection,
-    route_after_supervisor,
-    route_after_hitl,
 )
 
 
@@ -157,8 +158,11 @@ class TestStateMutations:
 
         state = _make_state()
         obs = AgentObservation(
-            agent_id="TestAgent", action_taken="test", confidence_score=0.8,
-            tools_used=[], next_state=ObservationNextState.CONTINUE,
+            agent_id="TestAgent",
+            action_taken="test",
+            confidence_score=0.8,
+            tools_used=[],
+            next_state=ObservationNextState.CONTINUE,
         )
         state["agent_observations"].append(obs)
         assert len(state["agent_observations"]) == 1

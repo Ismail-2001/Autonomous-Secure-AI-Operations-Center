@@ -5,7 +5,7 @@ from fastapi import Depends, Query
 from src.asoc.core.auth import require_jwt
 from src.asoc.core.rate_limiter import check_rate_limit
 
-from . import router, get_event_store
+from . import get_event_store, router
 
 
 @router.get("/hunting/events", dependencies=[Depends(require_jwt), Depends(check_rate_limit)])

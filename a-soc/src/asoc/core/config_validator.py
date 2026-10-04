@@ -59,13 +59,9 @@ class ConfigValidator:
         report = ValidationReport()
         for name, value in secrets.items():
             if not value:
-                report.results.append(
-                    ValidationResult(name, False, f"{name} is not set", "warning")
-                )
+                report.results.append(ValidationResult(name, False, f"{name} is not set", "warning"))
             else:
-                report.results.append(
-                    ValidationResult(name, True, f"{name} is configured")
-                )
+                report.results.append(ValidationResult(name, True, f"{name} is configured"))
         return report
 
     def validate_opa(self, url: str) -> ValidationResult:

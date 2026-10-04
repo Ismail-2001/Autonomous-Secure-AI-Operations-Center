@@ -113,12 +113,14 @@ class RunContext(BaseModel):
         return self.get_retry_count(agent_name) < self.max_retries
 
     def record_escalation(self, from_agent: str, to_agent: str, reason: str) -> None:
-        self.escalation_history.append({
-            "from": from_agent,
-            "to": to_agent,
-            "reason": reason,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        })
+        self.escalation_history.append(
+            {
+                "from": from_agent,
+                "to": to_agent,
+                "reason": reason,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+        )
         self.updated_at = datetime.now(timezone.utc)
 
     def mark_complete(self, status: str = "completed") -> None:
@@ -155,7 +157,7 @@ class MessageBus:
     async def publish(self, message: AgentMessage) -> None:
         self._history.append(message)
         if len(self._history) > self._max_history:
-            self._history = self._history[-self._max_history:]
+            self._history = self._history[-self._max_history :]
 
         handlers = self._subscribers.get(message.receiver, [])
         for handler in handlers:

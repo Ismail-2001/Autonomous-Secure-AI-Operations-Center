@@ -43,7 +43,9 @@ class BaseAgent(abc.ABC):
         ...
 
     @traceable(name="agent_observe", run_type="chain")
-    async def observe(self, state: AgentState, tool_results: List[Any], tool_calls: List[Dict[str, Any]]) -> AgentObservation:
+    async def observe(
+        self, state: AgentState, tool_results: List[Any], tool_calls: List[Dict[str, Any]]
+    ) -> AgentObservation:
         """Generate structured observation from action results."""
         ...
 
@@ -94,7 +96,9 @@ class BaseAgent(abc.ABC):
         )
 
         observation = await self.observe(state, tool_results, validated_calls)
-        self.logger.info("observation_complete", action=observation.action_taken, confidence=observation.confidence_score)
+        self.logger.info(
+            "observation_complete", action=observation.action_taken, confidence=observation.confidence_score
+        )
 
         return self._apply_observation(state, observation)
 

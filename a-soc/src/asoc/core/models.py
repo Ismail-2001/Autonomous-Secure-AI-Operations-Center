@@ -45,9 +45,7 @@ class Event(Base):
     incident_id = Column(String(36), nullable=False, default="", index=True)
     status = Column(String(20), nullable=False, default="active")
 
-    __table_args__ = (
-        Index("idx_events_timestamp", "timestamp", postgresql_using="btree"),
-    )
+    __table_args__ = (Index("idx_events_timestamp", "timestamp", postgresql_using="btree"),)
 
 
 # ── Incidents ──────────────────────────────────────────────────────────────
@@ -113,9 +111,7 @@ class ForensicsJob(Base):
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now, server_default="now()")
     completed_at = Column(DateTime(timezone=True), nullable=True)
 
-    __table_args__ = (
-        Index("idx_forensics_status", "status"),
-    )
+    __table_args__ = (Index("idx_forensics_status", "status"),)
 
 
 # ── Threat Indicators ──────────────────────────────────────────────────────
@@ -190,6 +186,4 @@ class AuditEntry(Base):
     payload = Column(JSON, nullable=False, default=dict)
     signature = Column(String(128), nullable=False, default="")
 
-    __table_args__ = (
-        Index("idx_audit_timestamp", "timestamp"),
-    )
+    __table_args__ = (Index("idx_audit_timestamp", "timestamp"),)

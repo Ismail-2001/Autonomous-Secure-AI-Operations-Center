@@ -14,7 +14,7 @@ from src.asoc.agents.response import ResponseAgent
 from src.asoc.agents.state import AgentState, create_initial_state
 from src.asoc.agents.supervisor import SupervisorAgent
 from src.asoc.agents.telemetry import TelemetryAgent
-from src.asoc.core.checkpoint_config import create_checkpointer, get_or_create_checkpointer, CheckpointConfig
+from src.asoc.core.checkpoint_config import CheckpointConfig, create_checkpointer, get_or_create_checkpointer
 from src.asoc.orchestration.routing import (
     route_after_detection,
     route_after_hitl,
@@ -146,7 +146,9 @@ async def _create_graph_async(checkpointer=None):
 
     workflow.set_entry_point("telemetry")
 
-    workflow.add_conditional_edges("telemetry", route_after_telemetry, {"detection": "detection", "supervisor": "supervisor"})
+    workflow.add_conditional_edges(
+        "telemetry", route_after_telemetry, {"detection": "detection", "supervisor": "supervisor"}
+    )
     workflow.add_conditional_edges("detection", route_after_detection, {"supervisor": "supervisor", "hitl": "hitl"})
     workflow.add_conditional_edges(
         "supervisor",
@@ -181,9 +183,15 @@ def create_asoc_graph(checkpointer=None):
         workflow.add_node("notification", _notification_node)
         workflow.add_node("hitl", _hitl_node)
         workflow.set_entry_point("telemetry")
-        workflow.add_conditional_edges("telemetry", route_after_telemetry, {"detection": "detection", "supervisor": "supervisor"})
+        workflow.add_conditional_edges(
+            "telemetry", route_after_telemetry, {"detection": "detection", "supervisor": "supervisor"}
+        )
         workflow.add_conditional_edges("detection", route_after_detection, {"supervisor": "supervisor", "hitl": "hitl"})
-        workflow.add_conditional_edges("supervisor", route_after_supervisor, {"forensics": "forensics", "response": "response", "hitl": "hitl", "end": END})
+        workflow.add_conditional_edges(
+            "supervisor",
+            route_after_supervisor,
+            {"forensics": "forensics", "response": "response", "hitl": "hitl", "end": END},
+        )
         workflow.add_conditional_edges("hitl", route_after_hitl, {"response": "response", "end": END})
         workflow.add_edge("forensics", "response")
         workflow.add_conditional_edges("response", route_after_response, {"compliance": "compliance"})

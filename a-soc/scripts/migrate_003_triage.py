@@ -1,5 +1,7 @@
 """Migration 003: Add alert triage workflow columns to incidents."""
+
 import asyncio
+
 import asyncpg
 
 DATABASE_URL = "postgresql://asoc_user:changeme123@postgres:5432/asoc_db"
@@ -18,12 +20,13 @@ CREATE INDEX IF NOT EXISTS idx_incidents_triage ON incidents(triage_status);
 CREATE INDEX IF NOT EXISTS idx_incidents_assigned ON incidents(assigned_to);
 """
 
+
 async def main():
     conn = await asyncpg.connect(DATABASE_URL)
     try:
         await conn.execute(MIGRATION_SQL)
         print("Migration 003 complete: triage columns added to incidents")
-        
+
         # Verify columns exist
         cols = await conn.fetch("""
             SELECT column_name FROM information_schema.columns 
@@ -32,5 +35,6 @@ async def main():
         print(f"Incidents columns: {[c['column_name'] for c in cols]}")
     finally:
         await conn.close()
+
 
 asyncio.run(main())

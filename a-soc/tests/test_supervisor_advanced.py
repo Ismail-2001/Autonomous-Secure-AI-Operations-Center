@@ -1,5 +1,6 @@
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from src.asoc.agents.agent_message import (
     AgentMessage,
@@ -156,7 +157,7 @@ class TestEscalationPolicy:
 
 class TestQualityGate:
     def test_pass_normal_observation(self):
-        obs = _make_obs(confidence=0.8, metadata={"risk_score": 0.5})
+        obs = _make_obs(confidence=0.8, metadata={"risk_score": 0.5, "reasoning": "ok"})
         result, reason = QualityGate.validate(obs)
         assert result == QualityGateResult.PASS
 
@@ -196,8 +197,8 @@ class TestQualityGate:
         assert result == QualityGateResult.PASS
 
     def test_different_agents_different_thresholds(self):
-        obs_low = _make_obs(agent_id="DetectionAgent", confidence=0.55)
-        obs_high = _make_obs(agent_id="ResponseAgent", confidence=0.55)
+        obs_low = _make_obs(agent_id="DetectionAgent", confidence=0.65, metadata={"risk_score": 0.5, "reasoning": "ok"})
+        obs_high = _make_obs(agent_id="ResponseAgent", confidence=0.65)
         r1, _ = QualityGate.validate(obs_low)
         r2, _ = QualityGate.validate(obs_high)
         assert r1 == QualityGateResult.PASS
@@ -211,7 +212,7 @@ class TestSupervisorAgentTools:
     @pytest.mark.asyncio
     async def test_quality_gate_tool_pass(self):
         agent = SupervisorAgent()
-        obs = _make_obs(confidence=0.8, metadata={"risk_score": 0.5})
+        obs = _make_obs(confidence=0.8, metadata={"risk_score": 0.5, "reasoning": "ok"})
         result = await agent._tool_quality_gate(obs.model_dump())
         assert result["passed"] is True
         assert result["result"] == "pass"
@@ -368,10 +369,9 @@ class TestMessageBus:
         await bus.publish(msg)
         assert len(bus._history) == 1
 
-    def test_get_history_filter_correlation(self):
+    @pytest.mark.asyncio
+    async def test_get_history_filter_correlation(self):
         bus = MessageBus()
-        import asyncio
-
         msg1 = AgentMessage(
             sender=AgentType.DETECTION,
             receiver=AgentType.SUPERVISOR,
@@ -386,8 +386,8 @@ class TestMessageBus:
             payload={},
             correlation_id="corr-2",
         )
-        asyncio.get_event_loop().run_until_complete(bus.publish(msg1))
-        asyncio.get_event_loop().run_until_complete(bus.publish(msg2))
+        await bus.publish(msg1)
+        await bus.publish(msg2)
         results = bus.get_history(correlation_id="corr-1")
         assert len(results) == 1
 
@@ -471,10 +471,18 @@ class TestSupervisorPRAO:
         state = _make_state(risk_score=0.85, incident_id="inc-001")
         tool_results = [
             {"route": "hitl"},
-            {"level": "human_pager", "should_page_human": True, "retry_count": 0, "max_retries": 3, "action": "page_on_call_analyst"},
+            {
+                "level": "human_pager",
+                "should_page_human": True,
+                "retry_count": 0,
+                "max_retries": 3,
+                "action": "page_on_call_analyst",
+            },
             {"passed": True, "result": "pass", "reason": "ok"},
         ]
-        obs = await agent.observe(state, tool_results, [{"tool": "route_by_risk"}, {"tool": "escalation_policy"}, {"tool": "quality_gate"}])
+        obs = await agent.observe(
+            state, tool_results, [{"tool": "route_by_risk"}, {"tool": "escalation_policy"}, {"tool": "quality_gate"}]
+        )
         assert obs.metadata["should_page_human"] is True
         assert obs.metadata["escalation_level"] == "human_pager"
         assert obs.next_state == ObservationNextState.ESCALATE
@@ -485,10 +493,18 @@ class TestSupervisorPRAO:
         state = _make_state(risk_score=0.5, incident_id="inc-001")
         tool_results = [
             {"route": "forensics"},
-            {"level": "auto_retry", "should_page_human": False, "retry_count": 0, "max_retries": 3, "action": "retry_automatically"},
+            {
+                "level": "auto_retry",
+                "should_page_human": False,
+                "retry_count": 0,
+                "max_retries": 3,
+                "action": "retry_automatically",
+            },
             {"passed": False, "result": "fail_confidence", "reason": "low"},
         ]
-        obs = await agent.observe(state, tool_results, [{"tool": "route_by_risk"}, {"tool": "escalation_policy"}, {"tool": "quality_gate"}])
+        obs = await agent.observe(
+            state, tool_results, [{"tool": "route_by_risk"}, {"tool": "escalation_policy"}, {"tool": "quality_gate"}]
+        )
         assert obs.action_taken == "supervised_supervisor"
         assert obs.confidence_score == 0.5
 

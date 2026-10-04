@@ -52,12 +52,8 @@ class Incident:
     description: str = ""
     severity: IncidentSeverity = IncidentSeverity.MEDIUM
     status: IncidentStatus = IncidentStatus.NEW
-    created_at: str = field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
-    )
-    updated_at: str = field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
-    )
+    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    updated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     resolved_at: Optional[str] = None
     assigned_agent: Optional[str] = None
     risk_score: float = 0.0
@@ -97,7 +93,9 @@ class IncidentManager:
     def __init__(self) -> None:
         self._incidents: Dict[str, Incident] = {}
 
-    def create(self, title: str, description: str = "", severity: IncidentSeverity = IncidentSeverity.MEDIUM) -> Incident:
+    def create(
+        self, title: str, description: str = "", severity: IncidentSeverity = IncidentSeverity.MEDIUM
+    ) -> Incident:
         incident = Incident(title=title, description=description, severity=severity)
         self._incidents[incident.incident_id] = incident
         return incident

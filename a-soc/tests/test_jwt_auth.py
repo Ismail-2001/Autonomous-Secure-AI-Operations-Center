@@ -5,7 +5,6 @@ These are the tests that were missing from test_auth.py (which only tests legacy
 """
 
 import time
-from unittest.mock import patch
 
 import jwt
 import pytest
@@ -24,8 +23,8 @@ from src.asoc.core.jwt_handler import (
     require_permission,
     require_role,
     revoke_token,
-    rotate_refresh_token,
     role_at_least,
+    rotate_refresh_token,
     verify_access_token,
 )
 
@@ -46,6 +45,7 @@ def token_pair():
 
 # ── Token Creation ────────────────────────────────────────────────────────
 
+
 class TestTokenCreation:
     def test_creates_valid_token_pair(self, token_pair):
         assert token_pair.access_token
@@ -56,6 +56,7 @@ class TestTokenCreation:
 
     def test_access_token_is_decodable(self, token_pair):
         from src.asoc.core.jwt_handler import _get_public_key
+
         payload = jwt.decode(token_pair.access_token, _get_public_key(), algorithms=["RS256"])
         assert payload["sub"] == "test-user"
         assert payload["role"] == "analyst"
@@ -65,6 +66,7 @@ class TestTokenCreation:
 
     def test_refresh_token_is_decodable(self, token_pair):
         from src.asoc.core.jwt_handler import _get_public_key
+
         payload = jwt.decode(token_pair.refresh_token, _get_public_key(), algorithms=["RS256"])
         assert payload["sub"] == "test-user"
         assert payload["role"] == "analyst"
@@ -72,6 +74,7 @@ class TestTokenCreation:
 
     def test_refresh_token_stored_internally(self, token_pair):
         from src.asoc.core.jwt_handler import _get_public_key
+
         payload = jwt.decode(token_pair.refresh_token, _get_public_key(), algorithms=["RS256"])
         assert payload["jti"] in _refresh_tokens
 
@@ -92,9 +95,10 @@ class TestTokenCreation:
 
 # ── Token Verification ───────────────────────────────────────────────────
 
+
 class TestTokenVerification:
     def test_valid_token_returns_payload(self, token_pair):
-        payload = verify_access_token(token_pair.access_token)
+        payload = verify_access_token(token_pair.access_token, client_id="test-client")
         assert payload is not None
         assert payload.sub == "test-user"
         assert payload.role == Role.ANALYST
@@ -111,6 +115,7 @@ class TestTokenVerification:
 
     def test_invalid_signature_rejected(self, token_pair):
         from src.asoc.core.jwt_handler import _get_public_key
+
         payload = jwt.decode(token_pair.access_token, _get_public_key(), algorithms=["RS256"])
         payload["role"] = "admin"
         tampered = jwt.encode(payload, "wrong-key", algorithm="HS256")
@@ -132,6 +137,7 @@ class TestTokenVerification:
 
 # ── Refresh Token Rotation ───────────────────────────────────────────────
 
+
 class TestRefreshRotation:
     def test_successful_rotation(self, token_pair):
         new_pair = rotate_refresh_token(token_pair.refresh_token, client_id="test-client")
@@ -142,6 +148,7 @@ class TestRefreshRotation:
     def test_old_refresh_token_revoked_after_rotation(self, token_pair):
         rotate_refresh_token(token_pair.refresh_token, client_id="test-client")
         from src.asoc.core.jwt_handler import _get_public_key
+
         payload = jwt.decode(token_pair.refresh_token, _get_public_key(), algorithms=["RS256"])
         record = _refresh_tokens.get(payload["jti"])
         assert record is not None
@@ -167,6 +174,7 @@ class TestRefreshRotation:
 
 # ── Role Hierarchy ───────────────────────────────────────────────────────
 
+
 class TestRoleHierarchy:
     def test_admin_is_highest(self):
         assert role_at_least(Role.ADMIN, Role.ADMIN)
@@ -190,6 +198,7 @@ class TestRoleHierarchy:
 
 
 # ── Permissions ──────────────────────────────────────────────────────────
+
 
 class TestPermissions:
     def test_readonly_has_read(self):
@@ -219,54 +228,52 @@ class TestPermissions:
 
 # ── FastAPI Dependencies ─────────────────────────────────────────────────
 
+
 class TestRequireRole:
+    @staticmethod
+    def _payload(role: Role) -> TokenPayload:
+        return TokenPayload(sub="u", role=role, fingerprint="fp", type="access", jti="jti", iat=0, exp=9999999999)
+
     @pytest.mark.asyncio
     async def test_sufficient_role_passes(self, token_pair):
-        from src.asoc.core.jwt_handler import require_jwt
-        with patch("src.asoc.core.jwt_handler.verify_access_token", return_value=TokenPayload(
-            sub="u", role=Role.ADMIN, fingerprint="fp", type="access", jti="jti", iat=0, exp=9999999999
-        )):
-            dep = require_role(Role.ANALYST)
-            result = await dep()
-            assert result.role == Role.ADMIN
+        dep = require_role(Role.ANALYST)
+        result = await dep(payload=self._payload(Role.ADMIN))
+        assert result.role == Role.ADMIN
 
     @pytest.mark.asyncio
     async def test_insufficient_role_raises_403(self):
-        with patch("src.asoc.core.jwt_handler.verify_access_token", return_value=TokenPayload(
-            sub="u", role=Role.READONLY, fingerprint="fp", type="access", jti="jti", iat=0, exp=9999999999
-        )):
-            dep = require_role(Role.ADMIN)
-            with pytest.raises(HTTPException) as exc:
-                await dep()
-            assert exc.value.status_code == 403
+        dep = require_role(Role.ADMIN)
+        with pytest.raises(HTTPException) as exc:
+            await dep(payload=self._payload(Role.READONLY))
+        assert exc.value.status_code == 403
 
 
 class TestRequirePermission:
+    @staticmethod
+    def _payload(role: Role) -> TokenPayload:
+        return TokenPayload(sub="u", role=role, fingerprint="fp", type="access", jti="jti", iat=0, exp=9999999999)
+
     @pytest.mark.asyncio
     async def test_has_permission_passes(self):
-        with patch("src.asoc.core.jwt_handler.verify_access_token", return_value=TokenPayload(
-            sub="u", role=Role.ADMIN, fingerprint="fp", type="access", jti="jti", iat=0, exp=9999999999
-        )):
-            dep = require_permission("admin:users")
-            result = await dep()
-            assert result.role == Role.ADMIN
+        dep = require_permission("admin:users")
+        result = await dep(payload=self._payload(Role.ADMIN))
+        assert result.role == Role.ADMIN
 
     @pytest.mark.asyncio
     async def test_missing_permission_raises_403(self):
-        with patch("src.asoc.core.jwt_handler.verify_access_token", return_value=TokenPayload(
-            sub="u", role=Role.READONLY, fingerprint="fp", type="access", jti="jti", iat=0, exp=9999999999
-        )):
-            dep = require_permission("admin:users")
-            with pytest.raises(HTTPException) as exc:
-                await dep()
-            assert exc.value.status_code == 403
+        dep = require_permission("admin:users")
+        with pytest.raises(HTTPException) as exc:
+            await dep(payload=self._payload(Role.READONLY))
+        assert exc.value.status_code == 403
 
 
 # ── Token Revocation ────────────────────────────────────────────────────
 
+
 class TestRevocation:
     def test_revoke_existing_token(self, token_pair):
         from src.asoc.core.jwt_handler import _get_public_key
+
         payload = jwt.decode(token_pair.refresh_token, _get_public_key(), algorithms=["RS256"])
         result = revoke_token(payload["jti"])
         assert result is True
@@ -278,6 +285,7 @@ class TestRevocation:
 
 
 # ── Fingerprint ──────────────────────────────────────────────────────────
+
 
 class TestFingerprint:
     def test_consistent_fingerprint(self):

@@ -18,9 +18,7 @@ class ServiceInfo:
     port: int = 0
     status: str = "active"
     metadata: Dict[str, str] = field(default_factory=dict)
-    registered_at: str = field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
-    )
+    registered_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     health_check: Optional[Callable[[], Coroutine]] = None
 
 
@@ -58,10 +56,7 @@ class ServiceRegistry:
 
     def find_by_type(self, service_type: str) -> List[ServiceInfo]:
         """Find all services of a given type."""
-        return [
-            s for s in self._services.values()
-            if s.service_type == service_type and s.status == "active"
-        ]
+        return [s for s in self._services.values() if s.service_type == service_type and s.status == "active"]
 
     def find_healthy(self) -> List[ServiceInfo]:
         """Find all active services."""

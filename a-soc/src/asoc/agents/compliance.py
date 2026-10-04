@@ -41,7 +41,11 @@ class ComplianceAgent(BaseAgent):
             name="generate_compliance_report",
             func=self._tool_generate_report,
             description="Generate a compliance finding report for an incident",
-            input_schema={"event_type": {"type": "string"}, "controls": {"type": "array"}, "details": {"type": "object"}},
+            input_schema={
+                "event_type": {"type": "string"},
+                "controls": {"type": "array"},
+                "details": {"type": "object"},
+            },
             output_schema={"report": {"type": "object"}},
         )
 
@@ -74,7 +78,9 @@ class ComplianceAgent(BaseAgent):
         self.logger.info("control_status_check", control_id=control_id, incident_id=incident_id)
         return "requires_remediation"
 
-    async def _tool_generate_report(self, event_type: str, controls: List[str], details: Dict[str, Any] = None) -> Dict[str, Any]:
+    async def _tool_generate_report(
+        self, event_type: str, controls: List[str], details: Dict[str, Any] = None
+    ) -> Dict[str, Any]:
         return {
             "event_type": event_type,
             "mapped_controls": controls,
@@ -104,7 +110,10 @@ class ComplianceAgent(BaseAgent):
         payload = perceived.get("payload", {})
         return [
             {"tool": "map_to_frameworks", "args": {"event_type": event_type, "details": payload}},
-            {"tool": "generate_compliance_report", "args": {"event_type": event_type, "controls": [], "details": payload}},
+            {
+                "tool": "generate_compliance_report",
+                "args": {"event_type": event_type, "controls": [], "details": payload},
+            },
         ]
 
     @traceable(name="compliance_act", run_type="chain")
@@ -123,7 +132,9 @@ class ComplianceAgent(BaseAgent):
         return results
 
     @traceable(name="compliance_observe", run_type="chain")
-    async def observe(self, state: AgentState, tool_results: List[Any], tool_calls: List[Dict[str, Any]]) -> AgentObservation:
+    async def observe(
+        self, state: AgentState, tool_results: List[Any], tool_calls: List[Dict[str, Any]]
+    ) -> AgentObservation:
         report = {}
         for r in tool_results:
             if isinstance(r, dict) and "event_type" in r:

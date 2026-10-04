@@ -404,33 +404,43 @@ class VectorStoreManager:
         vectors = []
         for r in records:
             embedding = await self._embed_text(r.to_embedding_text())
-            vectors.append(VectorRecord(
-                id=r.technique_id,
-                vector=embedding,
-                namespace=StoreNamespace.THREAT_INTEL,
-                metadata=r.to_metadata(),
-            ))
+            vectors.append(
+                VectorRecord(
+                    id=r.technique_id,
+                    vector=embedding,
+                    namespace=StoreNamespace.THREAT_INTEL,
+                    metadata=r.to_metadata(),
+                )
+            )
         return await store.upsert(vectors)
 
     async def ingest_incident(self, record: IncidentRecord) -> int:
         store = self._get_store(StoreNamespace.INCIDENT_HISTORY)
         embedding = await self._embed_text(record.to_embedding_text())
-        return await store.upsert([VectorRecord(
-            id=record.incident_id,
-            vector=embedding,
-            namespace=StoreNamespace.INCIDENT_HISTORY,
-            metadata=record.to_metadata(),
-        )])
+        return await store.upsert(
+            [
+                VectorRecord(
+                    id=record.incident_id,
+                    vector=embedding,
+                    namespace=StoreNamespace.INCIDENT_HISTORY,
+                    metadata=record.to_metadata(),
+                )
+            ]
+        )
 
     async def ingest_policy(self, record: PolicyRecord) -> int:
         store = self._get_store(StoreNamespace.POLICY_CONTEXT)
         embedding = await self._embed_text(record.to_embedding_text())
-        return await store.upsert([VectorRecord(
-            id=record.policy_id,
-            vector=embedding,
-            namespace=StoreNamespace.POLICY_CONTEXT,
-            metadata=record.to_metadata(),
-        )])
+        return await store.upsert(
+            [
+                VectorRecord(
+                    id=record.policy_id,
+                    vector=embedding,
+                    namespace=StoreNamespace.POLICY_CONTEXT,
+                    metadata=record.to_metadata(),
+                )
+            ]
+        )
 
     async def search_threats(self, query: str, top_k: int = 5) -> List[VectorRecord]:
         store = self._get_store(StoreNamespace.THREAT_INTEL)

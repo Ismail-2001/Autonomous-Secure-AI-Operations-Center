@@ -1,5 +1,3 @@
-import os
-
 import pytest
 from httpx import ASGITransport, AsyncClient
 
@@ -36,9 +34,11 @@ async def test_hunting_events_needs_auth():
 
 @pytest.mark.asyncio
 async def test_hunting_with_auth():
+    from src.asoc.core.jwt_handler import Role, create_token_pair
+
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        token = os.environ.get("WS_API_TOKEN", "test-token")
-        resp = await client.get("/api/hunting/events", headers={"Authorization": f"Bearer {token}"})
+        pair = create_token_pair(user_id="test-user", role=Role.ANALYST)
+        resp = await client.get("/api/hunting/events", headers={"Authorization": f"Bearer {pair.access_token}"})
         assert resp.status_code == 200
         data = resp.json()
         assert data["status"] == "ok"

@@ -4,7 +4,7 @@ from fastapi import Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from src.asoc.audit.audit_trail import get_audit_trail
-from src.asoc.core.auth import require_jwt, require_role, Role
+from src.asoc.core.auth import Role, require_jwt, require_role
 from src.asoc.core.jwt_handler import create_token_pair, rotate_refresh_token, verify_access_token
 from src.asoc.core.rate_limiter import check_rate_limit
 
@@ -68,6 +68,10 @@ async def auth_me(request: Request):
 
     return {
         "user_id": payload.sub,
-        "role": payload.role if isinstance(payload.role, str) else payload.role.value if hasattr(payload.role, "value") else str(payload.role),
+        "role": (
+            payload.role
+            if isinstance(payload.role, str)
+            else payload.role.value if hasattr(payload.role, "value") else str(payload.role)
+        ),
         "token_type": payload.type,
     }

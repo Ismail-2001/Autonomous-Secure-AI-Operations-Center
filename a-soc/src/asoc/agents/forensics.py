@@ -9,8 +9,8 @@ from src.asoc.agents.base import BaseAgent
 from src.asoc.agents.message import ASOCMessage, MessageType, Priority
 from src.asoc.agents.observation import AgentObservation, ObservationNextState
 from src.asoc.agents.state import AgentState
-from src.asoc.vector.pinecone_provider import VectorRecord, vector_provider
 from src.asoc.middleware.prompt_injection import validate_agent_input
+from src.asoc.vector.pinecone_provider import VectorRecord, vector_provider
 
 
 class ForensicsAgent(BaseAgent):
@@ -59,7 +59,9 @@ class ForensicsAgent(BaseAgent):
             self.logger.error("vector_query_failed", error=str(e))
             return []
 
-    async def _tool_build_blast_radius(self, incident_data: Dict[str, Any], events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    async def _tool_build_blast_radius(
+        self, incident_data: Dict[str, Any], events: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
         nodes = []
         edges = []
         node_ids = set()
@@ -99,12 +101,14 @@ class ForensicsAgent(BaseAgent):
     async def _tool_reconstruct_timeline(self, events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         timeline = []
         for event in sorted(events, key=lambda e: e.get("eventTime", e.get("event_time", ""))):
-            timeline.append({
-                "time": event.get("eventTime", event.get("event_time", "unknown")),
-                "action": event.get("eventName", event.get("event_name", "Unknown")),
-                "source_ip": event.get("sourceIPAddress", event.get("source_ip", "unknown")),
-                "user": event.get("userIdentity", {}).get("userName", "unknown"),
-            })
+            timeline.append(
+                {
+                    "time": event.get("eventTime", event.get("event_time", "unknown")),
+                    "action": event.get("eventName", event.get("event_name", "Unknown")),
+                    "source_ip": event.get("sourceIPAddress", event.get("source_ip", "unknown")),
+                    "user": event.get("userIdentity", {}).get("userName", "unknown"),
+                }
+            )
         return timeline
 
     async def _tool_store_vector(self, analysis: Dict[str, Any], incident_id: Optional[str] = None) -> bool:
@@ -149,9 +153,13 @@ class ForensicsAgent(BaseAgent):
         reconstruction = {
             "root_cause": "Credential compromise detected via anomaly analysis",
             "blast_radius": blast_radius,
-            "timeline": timeline if timeline else [
-                {"time": "pending", "action": "Investigation in progress", "status": "active"},
-            ],
+            "timeline": (
+                timeline
+                if timeline
+                else [
+                    {"time": "pending", "action": "Investigation in progress", "status": "active"},
+                ]
+            ),
             "confidence_score": 0.85 if similar else 0.7,
             "similar_past_incidents": similar,
         }
@@ -175,7 +183,10 @@ class ForensicsAgent(BaseAgent):
         query_text = json.dumps(incident_data)
         return [
             {"tool": "search_similar_incidents", "args": {"query_text": query_text, "top_k": 3}},
-            {"tool": "build_blast_radius_graph", "args": {"incident_data": incident_data, "events": incident_data.get("events", [])}},
+            {
+                "tool": "build_blast_radius_graph",
+                "args": {"incident_data": incident_data, "events": incident_data.get("events", [])},
+            },
             {"tool": "reconstruct_timeline", "args": {"events": incident_data.get("events", [])}},
         ]
 
@@ -188,7 +199,9 @@ class ForensicsAgent(BaseAgent):
         return results
 
     @traceable(name="forensics_observe", run_type="chain")
-    async def observe(self, state: AgentState, tool_results: List[Any], tool_calls: List[Dict[str, Any]]) -> AgentObservation:
+    async def observe(
+        self, state: AgentState, tool_results: List[Any], tool_calls: List[Dict[str, Any]]
+    ) -> AgentObservation:
         similar = tool_results[0] if tool_results else []
         blast_radius = tool_results[1] if len(tool_results) > 1 else {}
         timeline = tool_results[2] if len(tool_results) > 2 else []

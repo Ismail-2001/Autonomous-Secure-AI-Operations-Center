@@ -11,7 +11,6 @@ from pathlib import Path
 
 import pytest
 
-
 BASELINE_FILE = Path(__file__).parent.parent.parent / "BENCHMARKS.md"
 RESULTS_FILE = Path(__file__).parent / "perf-results.json"
 
@@ -67,6 +66,7 @@ class TestAPIPerformance:
     @pytest.mark.asyncio
     async def test_concurrent_requests(self, http_client, auth_headers):
         """20 concurrent requests should all complete in < 5s."""
+
         async def make_request():
             start = time.perf_counter()
             resp = await http_client.get("http://localhost:9002/api/v1/dashboard/stats", headers=auth_headers)

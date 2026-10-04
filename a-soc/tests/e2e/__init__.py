@@ -1,4 +1,5 @@
 """E2E test: Full threat detection pipeline — telemetry ingestion through remediation."""
+
 import uuid
 
 import pytest

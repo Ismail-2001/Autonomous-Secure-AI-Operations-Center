@@ -2,14 +2,14 @@ import pytest
 
 from src.asoc.agents.message import ASOCMessage, MessageType, Priority
 from src.asoc.agents.state import create_initial_state
+from src.asoc.orchestration.routing import (
+    route_after_detection,
+    route_after_supervisor,
+    route_after_telemetry,
+)
 from src.asoc.orchestration.workflow import (
     create_asoc_graph,
     get_initial_state,
-)
-from src.asoc.orchestration.routing import (
-    route_after_telemetry,
-    route_after_detection,
-    route_after_supervisor,
 )
 
 

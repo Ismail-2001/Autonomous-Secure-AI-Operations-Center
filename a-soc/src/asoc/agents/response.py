@@ -62,6 +62,7 @@ class AWSRemediationProvider(RemediationProvider):
         if self._ec2_client is None:
             try:
                 import boto3
+
                 self._ec2_client = boto3.client("ec2", region_name=self.region)
             except Exception as e:
                 logger.error("aws_ec2_init_failed", error=str(e))
@@ -71,6 +72,7 @@ class AWSRemediationProvider(RemediationProvider):
         if self._iam_client is None:
             try:
                 import boto3
+
                 self._iam_client = boto3.client("iam", region_name=self.region)
             except Exception as e:
                 logger.error("aws_iam_init_failed", error=str(e))
@@ -80,6 +82,7 @@ class AWSRemediationProvider(RemediationProvider):
         if self._s3_client is None:
             try:
                 import boto3
+
                 self._s3_client = boto3.client("s3", region_name=self.region)
             except Exception as e:
                 logger.error("aws_s3_init_failed", error=str(e))
@@ -91,7 +94,9 @@ class AWSRemediationProvider(RemediationProvider):
             return await MockRemediationProvider().block_ip(ip, reason)
         try:
             import asyncio
+
             loop = asyncio.get_event_loop()
+
             def _block():
                 security_groups = client.describe_security_groups()["SecurityGroups"]
                 for sg in security_groups:
@@ -102,6 +107,7 @@ class AWSRemediationProvider(RemediationProvider):
                         )
                         return True
                 return False
+
             return await loop.run_in_executor(None, _block)
         except Exception as e:
             logger.error("aws_block_ip_failed", error=str(e), ip=ip)
@@ -113,13 +119,16 @@ class AWSRemediationProvider(RemediationProvider):
             return await MockRemediationProvider().revoke_iam_access(user, reason)
         try:
             import asyncio
+
             loop = asyncio.get_event_loop()
+
             def _revoke():
                 client.update_login_profile(UserName=user, PasswordResetRequired=True)
                 access_keys = client.list_access_keys(UserName=user)["AccessKeys"]
                 for key in access_keys:
                     client.delete_access_key(UserName=user, AccessKeyId=key["AccessKeyId"])
                 return True
+
             return await loop.run_in_executor(None, _revoke)
         except Exception as e:
             logger.error("aws_revoke_iam_failed", error=str(e), user=user)
@@ -131,14 +140,20 @@ class AWSRemediationProvider(RemediationProvider):
             return await MockRemediationProvider().isolate_instance(instance_id, reason)
         try:
             import asyncio
+
             loop = asyncio.get_event_loop()
+
             def _isolate():
-                sg = client.create_security_group(GroupName=f"a-soc-quarantine-{instance_id}", Description="A-SOC quarantine")
+                sg = client.create_security_group(
+                    GroupName=f"a-soc-quarantine-{instance_id}", Description="A-SOC quarantine"
+                )
                 client.authorize_security_group_ingress(
-                    GroupId=sg["GroupId"], IpPermissions=[{"IpProtocol": "-1", "UserIdGroupPairs": [{"GroupId": sg["GroupId"]}]}]
+                    GroupId=sg["GroupId"],
+                    IpPermissions=[{"IpProtocol": "-1", "UserIdGroupPairs": [{"GroupId": sg["GroupId"]}]}],
                 )
                 client.modify_instance_attribute(InstanceId=instance_id, Groups=[sg["GroupId"]])
                 return True
+
             return await loop.run_in_executor(None, _isolate)
         except Exception as e:
             logger.error("aws_isolate_failed", error=str(e), instance_id=instance_id)
@@ -151,15 +166,25 @@ class AWSRemediationProvider(RemediationProvider):
         try:
             import asyncio
             import json
+
             loop = asyncio.get_event_loop()
+
             def _quarantine():
                 block_policy = {
                     "Version": "2012-10-17",
-                    "Statement": [{"Sid": "A-SOC-Quarantine", "Effect": "Deny", "Principal": "*",
-                                   "Action": "s3:*", "Resource": [f"arn:aws:s3:::{bucket_name}/*", f"arn:aws:s3:::{bucket_name}"]}],
+                    "Statement": [
+                        {
+                            "Sid": "A-SOC-Quarantine",
+                            "Effect": "Deny",
+                            "Principal": "*",
+                            "Action": "s3:*",
+                            "Resource": [f"arn:aws:s3:::{bucket_name}/*", f"arn:aws:s3:::{bucket_name}"],
+                        }
+                    ],
                 }
                 client.put_bucket_policy(Bucket=bucket_name, Policy=json.dumps(block_policy))
                 return True
+
             return await loop.run_in_executor(None, _quarantine)
         except Exception as e:
             logger.error("aws_quarantine_s3_failed", error=str(e), bucket=bucket_name)
@@ -237,7 +262,8 @@ class ResponseAgent(BaseAgent):
     async def execute_remediation(self, action_type: str, target: str) -> bool:
         tool_name = self._action_to_tool(action_type)
         if tool_name:
-            return await self.tool_registry.execute(tool_name, target=target, reason=f"Remediation: {action_type}")
+            args = {self._tool_target_arg(tool_name): target, "reason": f"Remediation: {action_type}"}
+            return await self.tool_registry.execute(tool_name, **args)
         self.logger.warning("unknown_remediation_action", action_type=action_type)
         return False
 
@@ -274,7 +300,9 @@ class ResponseAgent(BaseAgent):
         tool_name = self._action_to_tool(action)
         if not tool_name:
             return []
-        calls = [{"tool": tool_name, "args": {self._tool_target_arg(tool_name): target, "reason": f"Remediation: {action}"}}]
+        calls = [
+            {"tool": tool_name, "args": {self._tool_target_arg(tool_name): target, "reason": f"Remediation: {action}"}}
+        ]
         calls.append({"tool": "verify_remediation", "args": {"action_type": action, "target": target}})
         return calls
 
@@ -296,7 +324,9 @@ class ResponseAgent(BaseAgent):
         return results
 
     @traceable(name="response_observe", run_type="chain")
-    async def observe(self, state: AgentState, tool_results: List[Any], tool_calls: List[Dict[str, Any]]) -> AgentObservation:
+    async def observe(
+        self, state: AgentState, tool_results: List[Any], tool_calls: List[Dict[str, Any]]
+    ) -> AgentObservation:
         success = all(r is True for r in tool_results if isinstance(r, bool))
         return AgentObservation(
             agent_id=self.name,

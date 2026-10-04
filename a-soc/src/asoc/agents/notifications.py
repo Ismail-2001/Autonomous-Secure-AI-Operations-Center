@@ -207,32 +207,49 @@ class NotificationAgent(BaseAgent):
             name="format_alert_message",
             func=self._tool_format_message,
             description="Format raw incident data into a standardized alert message",
-            input_schema={"source_agent": {"type": "string"}, "payload": {"type": "object"}, "priority": {"type": "string"}},
-            output_schema={"title": {"type": "string"}, "message": {"type": "string"}, "severity": {"type": "string"}, "fields": {"type": "object"}},
+            input_schema={
+                "source_agent": {"type": "string"},
+                "payload": {"type": "object"},
+                "priority": {"type": "string"},
+            },
+            output_schema={
+                "title": {"type": "string"},
+                "message": {"type": "string"},
+                "severity": {"type": "string"},
+                "fields": {"type": "object"},
+            },
         )
 
-    async def _tool_send_slack(self, title: str, message: str, severity: str, fields: Optional[Dict[str, str]] = None) -> bool:
+    async def _tool_send_slack(
+        self, title: str, message: str, severity: str, fields: Optional[Dict[str, str]] = None
+    ) -> bool:
         slack_providers = [p for p in self.providers if isinstance(p, SlackWebhookProvider)]
         if not slack_providers:
             return False
         results = [await p.send(title, message, severity, fields) for p in slack_providers]
         return all(results)
 
-    async def _tool_send_teams(self, title: str, message: str, severity: str, fields: Optional[Dict[str, str]] = None) -> bool:
+    async def _tool_send_teams(
+        self, title: str, message: str, severity: str, fields: Optional[Dict[str, str]] = None
+    ) -> bool:
         teams_providers = [p for p in self.providers if isinstance(p, TeamsWebhookProvider)]
         if not teams_providers:
             return False
         results = [await p.send(title, message, severity, fields) for p in teams_providers]
         return all(results)
 
-    async def _tool_create_jira(self, title: str, message: str, severity: str, fields: Optional[Dict[str, str]] = None) -> bool:
+    async def _tool_create_jira(
+        self, title: str, message: str, severity: str, fields: Optional[Dict[str, str]] = None
+    ) -> bool:
         jira_providers = [p for p in self.providers if isinstance(p, JiraProvider)]
         if not jira_providers:
             return False
         results = [await p.send(title, message, severity, fields) for p in jira_providers]
         return all(results)
 
-    async def _tool_format_message(self, source_agent: str, payload: Dict[str, Any], priority: str = "low") -> Dict[str, Any]:
+    async def _tool_format_message(
+        self, source_agent: str, payload: Dict[str, Any], priority: str = "low"
+    ) -> Dict[str, Any]:
         severity_map = {"low": "low", "medium": "medium", "high": "high", "critical": "critical"}
         severity = severity_map.get(priority.lower(), "low")
         title = f"A-SOC Alert: {source_agent}"
@@ -271,11 +288,14 @@ class NotificationAgent(BaseAgent):
         if not msg:
             return []
         calls = [
-            {"tool": "format_alert_message", "args": {
-                "source_agent": msg.source_agent,
-                "payload": msg.payload,
-                "priority": msg.priority.name if hasattr(msg.priority, "name") else str(msg.priority),
-            }},
+            {
+                "tool": "format_alert_message",
+                "args": {
+                    "source_agent": msg.source_agent,
+                    "payload": msg.payload,
+                    "priority": msg.priority.name if hasattr(msg.priority, "name") else str(msg.priority),
+                },
+            },
         ]
         if self._has_provider_type("SlackWebhookProvider"):
             calls.append({"tool": "send_slack_alert", "args": {"title": "", "message": "", "severity": "medium"}})
@@ -307,7 +327,9 @@ class NotificationAgent(BaseAgent):
         return results
 
     @traceable(name="notification_observe", run_type="chain")
-    async def observe(self, state: AgentState, tool_results: List[Any], tool_calls: List[Dict[str, Any]]) -> AgentObservation:
+    async def observe(
+        self, state: AgentState, tool_results: List[Any], tool_calls: List[Dict[str, Any]]
+    ) -> AgentObservation:
         sent_count = sum(1 for r in tool_results if r is True)
         return AgentObservation(
             agent_id=self.name,

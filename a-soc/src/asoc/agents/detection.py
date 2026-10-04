@@ -2,13 +2,13 @@ from typing import Any, Dict, List, Optional
 
 from langsmith import traceable
 
-from src.asoc.agents.base import BaseAgent, HIGH_RISK_TOOLS
+from src.asoc.agents.base import HIGH_RISK_TOOLS, BaseAgent
 from src.asoc.agents.message import ASOCMessage, MessageType, Priority
 from src.asoc.agents.observation import AgentObservation, ObservationNextState
 from src.asoc.agents.state import AgentState
 from src.asoc.llm.providers import LLMProvider, LLMResult, MockProvider, create_llm_provider
-from src.asoc.mitre.mapper import MitreTechnique, mitre_mapper
 from src.asoc.middleware.prompt_injection import validate_agent_input
+from src.asoc.mitre.mapper import MitreTechnique, mitre_mapper
 
 
 class DetectionAgent(BaseAgent):
@@ -44,7 +44,11 @@ class DetectionAgent(BaseAgent):
             name="calculate_risk_score",
             func=self._tool_calculate_risk,
             description="Combine LLM analysis with rule-based scoring to produce final risk score",
-            input_schema={"llm_result": {"type": "object"}, "mitre": {"type": "object"}, "event_data": {"type": "object"}},
+            input_schema={
+                "llm_result": {"type": "object"},
+                "mitre": {"type": "object"},
+                "event_data": {"type": "object"},
+            },
             output_schema={"final_risk_score": {"type": "number"}, "confidence": {"type": "number"}},
         )
 
@@ -79,7 +83,12 @@ class DetectionAgent(BaseAgent):
     async def _tool_map_mitre(self, event_data: dict, llm_technique: Optional[str] = None) -> Optional[Dict[str, Any]]:
         mitre = self._enrich_mitre(event_data, llm_technique)
         if mitre:
-            return {"technique_id": mitre.id, "technique_name": mitre.name, "tactic": mitre.tactic, "description": mitre.description}
+            return {
+                "technique_id": mitre.id,
+                "technique_name": mitre.name,
+                "tactic": mitre.tactic,
+                "description": mitre.description,
+            }
         return None
 
     async def _tool_query_risk_rules(self, event_type: str) -> Dict[str, Any]:
@@ -95,7 +104,13 @@ class DetectionAgent(BaseAgent):
         base_score = llm_result.get("risk_score", 0.5)
         mitre_boost = 0.1 if mitre else 0.0
         event_name = event_data.get("eventName", event_data.get("event_name", ""))
-        high_risk_events = {"ConsoleLogin", "CreateUser", "DeleteBucket", "TerminateInstance", "AuthorizeSecurityGroupIngress"}
+        high_risk_events = {
+            "ConsoleLogin",
+            "CreateUser",
+            "DeleteBucket",
+            "TerminateInstance",
+            "AuthorizeSecurityGroupIngress",
+        }
         event_boost = 0.15 if event_name in high_risk_events else 0.0
         final_score = min(1.0, base_score + mitre_boost + event_boost)
         confidence = 0.8 if mitre else 0.6
@@ -110,8 +125,12 @@ class DetectionAgent(BaseAgent):
             {"tool": "analyze_threat_llm", "args": {"event_data": event_data}},
         ]
         llm_result = await self.tool_registry.execute("analyze_threat_llm", event_data=event_data)
-        mitre = await self.tool_registry.execute("map_mitre_technique", event_data=event_data, llm_technique=llm_result.get("attack_technique"))
-        risk = await self.tool_registry.execute("calculate_risk_score", llm_result=llm_result, mitre=mitre, event_data=event_data)
+        mitre = await self.tool_registry.execute(
+            "map_mitre_technique", event_data=event_data, llm_technique=llm_result.get("attack_technique")
+        )
+        risk = await self.tool_registry.execute(
+            "calculate_risk_score", llm_result=llm_result, mitre=mitre, event_data=event_data
+        )
 
         return ASOCMessage(
             message_type=MessageType.ALERT,
@@ -144,10 +163,12 @@ class DetectionAgent(BaseAgent):
         event_name = event_data.get("eventName", event_data.get("event_name", ""))
         if event_name:
             calls.append({"tool": "query_risk_rules", "args": {"event_type": event_name}})
-        calls.append({
-            "tool": "calculate_risk_score",
-            "args": {"llm_result": {}, "mitre": None, "event_data": event_data},
-        })
+        calls.append(
+            {
+                "tool": "calculate_risk_score",
+                "args": {"llm_result": {}, "mitre": None, "event_data": event_data},
+            }
+        )
         return calls
 
     @traceable(name="detection_act", run_type="chain")
@@ -170,7 +191,9 @@ class DetectionAgent(BaseAgent):
         return results
 
     @traceable(name="detection_observe", run_type="chain")
-    async def observe(self, state: AgentState, tool_results: List[Any], tool_calls: List[Dict[str, Any]]) -> AgentObservation:
+    async def observe(
+        self, state: AgentState, tool_results: List[Any], tool_calls: List[Dict[str, Any]]
+    ) -> AgentObservation:
         llm_result = tool_results[0] if tool_results else {}
         risk_score = 0.5
         confidence = 0.5

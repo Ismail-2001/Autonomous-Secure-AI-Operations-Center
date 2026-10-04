@@ -1,6 +1,6 @@
 """E2E test: Rate limiting degrades gracefully under load."""
-import asyncio
-import time
+
+import uuid
 
 import pytest
 
@@ -15,7 +15,7 @@ class TestRateLimitDegradation:
         bucket = TokenBucket(capacity=10, refill_rate=100)
         results = []
         for _ in range(10):
-            results.append(await bucket.acquire())
+            results.append(bucket.consume())
         assert all(results)
 
     async def test_rate_limiter_rejects_over_capacity(self):
@@ -23,8 +23,8 @@ class TestRateLimitDegradation:
 
         bucket = TokenBucket(capacity=3, refill_rate=0)
         for _ in range(3):
-            await bucket.acquire()
-        result = await bucket.acquire()
+            bucket.consume()
+        result = bucket.consume()
         assert result is False
 
     async def test_agent_continues_after_rate_limit_hit(self, setup_test_state):

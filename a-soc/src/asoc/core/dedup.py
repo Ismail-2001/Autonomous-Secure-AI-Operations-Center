@@ -45,10 +45,7 @@ class EventDeduplicator:
     def _cleanup(self) -> None:
         """Remove entries older than the time window."""
         now = time.time()
-        expired = [
-            key for key, ts in self._seen.items()
-            if now - ts > self._window
-        ]
+        expired = [key for key, ts in self._seen.items() if now - ts > self._window]
         for key in expired:
             del self._seen[key]
 

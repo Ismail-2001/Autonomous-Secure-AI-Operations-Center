@@ -1,4 +1,5 @@
 """E2E test: OPA policy enforcement blocks unauthorized high-risk actions."""
+
 import uuid
 
 import pytest

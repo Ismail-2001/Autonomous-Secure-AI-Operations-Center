@@ -1,15 +1,15 @@
-import os
-
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from api import app
+from src.asoc.core.jwt_handler import Role, create_token_pair
 
 transport = ASGITransport(app=app)
 
 
 def _auth():
-    return {"Authorization": f"Bearer {os.environ.get('WS_API_TOKEN', 'test-token')}"}
+    pair = create_token_pair(user_id="test-user", role=Role.ANALYST)
+    return {"Authorization": f"Bearer {pair.access_token}"}
 
 
 @pytest.mark.asyncio

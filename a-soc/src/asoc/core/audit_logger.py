@@ -27,16 +27,19 @@ class AuditLogEntry:
 
     def compute_hash(self) -> str:
         """Compute SHA-256 hash of entry content."""
-        data = json.dumps({
-            "entry_id": self.entry_id,
-            "timestamp": self.timestamp,
-            "event_type": self.event_type,
-            "actor": self.actor,
-            "resource": self.resource,
-            "action": self.action,
-            "outcome": self.outcome,
-            "previous_hash": self.previous_hash,
-        }, sort_keys=True)
+        data = json.dumps(
+            {
+                "entry_id": self.entry_id,
+                "timestamp": self.timestamp,
+                "event_type": self.event_type,
+                "actor": self.actor,
+                "resource": self.resource,
+                "action": self.action,
+                "outcome": self.outcome,
+                "previous_hash": self.previous_hash,
+            },
+            sort_keys=True,
+        )
         return hashlib.sha256(data.encode()).hexdigest()
 
 
@@ -78,7 +81,7 @@ class AuditLogger:
 
         # Evict oldest if at capacity
         if len(self._entries) > self._max_entries:
-            self._entries = self._entries[-self._max_entries:]
+            self._entries = self._entries[-self._max_entries :]
 
         return entry
 

@@ -16,7 +16,15 @@ async def list_forensics_jobs():
     except Exception:
         return {
             "jobs": [
-                {"id": "FOR-001", "title": "Memory Dump Analysis", "status": "completed", "type": "volatile", "findings": ["Registry modifications detected"], "artifacts": ["MEM_DUMP_001.raw"], "agent": "ForensicsAgent"},
+                {
+                    "id": "FOR-001",
+                    "title": "Memory Dump Analysis",
+                    "status": "completed",
+                    "type": "volatile",
+                    "findings": ["Registry modifications detected"],
+                    "artifacts": ["MEM_DUMP_001.raw"],
+                    "agent": "ForensicsAgent",
+                },
             ],
             "count": 1,
         }

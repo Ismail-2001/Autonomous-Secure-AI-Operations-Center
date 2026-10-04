@@ -5,7 +5,7 @@ from typing import Optional
 from fastapi import Depends, Query
 
 from src.asoc.audit.audit_trail import get_audit_trail
-from src.asoc.core.auth import require_role, Role
+from src.asoc.core.auth import Role, require_role
 
 from . import router
 
@@ -31,5 +31,6 @@ async def list_audit_entries(
 @router.get("/rate-limits", dependencies=[Depends(require_role(Role.ADMIN))])
 async def rate_limit_stats():
     from src.asoc.middleware.rate_limiter import get_agent_rate_limiter
+
     limiter = get_agent_rate_limiter()
     return limiter.get_stats()

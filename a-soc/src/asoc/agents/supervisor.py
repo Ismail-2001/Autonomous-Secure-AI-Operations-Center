@@ -19,7 +19,8 @@ from src.asoc.agents.agent_message import (
     get_message_bus,
 )
 from src.asoc.agents.base import BaseAgent
-from src.asoc.agents.message import ASOCMessage, MessageType as LegacyMessageType
+from src.asoc.agents.message import ASOCMessage
+from src.asoc.agents.message import MessageType as LegacyMessageType
 from src.asoc.agents.observation import AgentObservation, ObservationNextState
 from src.asoc.agents.state import AgentState
 from src.asoc.core.config import settings
@@ -108,13 +109,13 @@ class QualityGate:
         if observation.confidence_score < min_conf:
             return QualityGateResult.FAIL_CONFIDENCE, f"confidence {observation.confidence_score:.2f} < {min_conf}"
 
+        if observation.error:
+            return QualityGateResult.FAIL_SAFETY, f"agent reported error: {observation.error}"
+
         required = cls.REQUIRED_FIELDS_BY_AGENT.get(agent_id, [])
         for field in required:
             if field not in observation.metadata:
                 return QualityGateResult.FAIL_SCHEMA, f"missing required field '{field}'"
-
-        if observation.error:
-            return QualityGateResult.FAIL_SAFETY, f"agent reported error: {observation.error}"
 
         return QualityGateResult.PASS, "ok"
 
@@ -122,7 +123,8 @@ class QualityGate:
 class SupervisorAgent(BaseAgent):
     def __init__(self):
         super().__init__(
-            name="SupervisorAgent", description="True supervisor: quality gates, retry-with-reflection, escalation, lifecycle tracking"
+            name="SupervisorAgent",
+            description="True supervisor: quality gates, retry-with-reflection, escalation, lifecycle tracking",
         )
         self.active_incidents: Dict[str, Any] = {}
         self._run_contexts: Dict[str, RunContext] = {}
@@ -138,7 +140,11 @@ class SupervisorAgent(BaseAgent):
             name="query_opa_policy",
             func=self._tool_query_opa,
             description="Query OPA policy engine for action authorization",
-            input_schema={"agent_name": {"type": "string"}, "action": {"type": "object"}, "risk_score": {"type": "number"}},
+            input_schema={
+                "agent_name": {"type": "string"},
+                "action": {"type": "object"},
+                "risk_score": {"type": "number"},
+            },
         )
         self.tool_registry.register(
             name="quality_gate",
@@ -150,13 +156,22 @@ class SupervisorAgent(BaseAgent):
             name="retry_with_reflection",
             func=self._tool_retry_with_reflection,
             description="Re-run a failed agent with an improved prompt based on failure analysis",
-            input_schema={"agent_name": {"type": "string"}, "original_observation": {"type": "object"}, "run_context": {"type": "object"}},
+            input_schema={
+                "agent_name": {"type": "string"},
+                "original_observation": {"type": "object"},
+                "run_context": {"type": "object"},
+            },
         )
         self.tool_registry.register(
             name="escalation_policy",
             func=self._tool_escalation_policy,
             description="Determine escalation level based on risk, confidence, and retry history",
-            input_schema={"risk_score": {"type": "number"}, "confidence": {"type": "number"}, "agent_name": {"type": "string"}, "is_destructive": {"type": "boolean"}},
+            input_schema={
+                "risk_score": {"type": "number"},
+                "confidence": {"type": "number"},
+                "agent_name": {"type": "string"},
+                "is_destructive": {"type": "boolean"},
+            },
         )
         self.tool_registry.register(
             name="route_by_risk",
@@ -168,7 +183,11 @@ class SupervisorAgent(BaseAgent):
             name="track_run_context",
             func=self._tool_track_run,
             description="Record step completion or failure in the incident RunContext",
-            input_schema={"incident_id": {"type": "string"}, "step_name": {"type": "string"}, "success": {"type": "boolean"}},
+            input_schema={
+                "incident_id": {"type": "string"},
+                "step_name": {"type": "string"},
+                "success": {"type": "boolean"},
+            },
         )
         self.tool_registry.register(
             name="check_agent_health",
@@ -197,7 +216,11 @@ class SupervisorAgent(BaseAgent):
         return passed, result, reason
 
     async def _tool_quality_gate(self, observation: Dict[str, Any]) -> Dict[str, Any]:
-        obs = AgentObservation(**observation) if isinstance(observation, dict) and "agent_id" in observation else observation
+        obs = (
+            AgentObservation(**observation)
+            if isinstance(observation, dict) and "agent_id" in observation
+            else observation
+        )
         if isinstance(obs, dict):
             obs = AgentObservation(**obs)
         passed, result, reason = await self.quality_gate(obs)
@@ -208,7 +231,9 @@ class SupervisorAgent(BaseAgent):
     def _build_reflection_prompt(self, original_obs: AgentObservation, context: RunContext) -> str:
         failure_analysis = []
         if original_obs.confidence_score < 0.5:
-            failure_analysis.append(f"Low confidence ({original_obs.confidence_score:.2f}) suggests insufficient evidence or unclear input.")
+            failure_analysis.append(
+                f"Low confidence ({original_obs.confidence_score:.2f}) suggests insufficient evidence or unclear input."
+            )
         if original_obs.error:
             failure_analysis.append(f"Error occurred: {original_obs.error}")
         if not original_obs.tools_used:
@@ -349,7 +374,9 @@ class SupervisorAgent(BaseAgent):
                         f"OPA returned {response.status_code}", request=response.request, response=response
                     )
 
-            result = await async_retry(_query_opa, max_retries=2, exceptions=(httpx.HTTPError, httpx.TimeoutException))
+            result = await async_retry(
+                _query_opa, max_retries=2, base_delay=0.25, exceptions=(httpx.HTTPError, httpx.TimeoutException)
+            )
             logger.info("opa_decision", allowed=result)
             return result
         except Exception as e:
@@ -360,15 +387,19 @@ class SupervisorAgent(BaseAgent):
             return False
         return True
 
+    async def evaluate_action(self, agent_name: str, action: Dict[str, Any], risk_score: float) -> bool:
+        """Evaluate whether an action is allowed, consulting OPA with a local guardrail fallback."""
+        return await self._tool_query_opa(agent_name, action, risk_score)
+
     # ── Other Tools ────────────────────────────────────────────────────────
 
     async def _tool_route_by_risk(self, risk_score: float, is_authorized: bool) -> str:
+        if risk_score >= 0.95:
+            return "block"
         if risk_score >= 0.8 and not is_authorized:
             return "hitl"
         if risk_score < 0.5:
             return "auto_approve"
-        if risk_score >= 0.95:
-            return "block"
         return "forensics"
 
     async def _tool_track_run(self, incident_id: str, step_name: str, success: bool) -> bool:
@@ -403,24 +434,42 @@ class SupervisorAgent(BaseAgent):
         latest_obs = perceived.get("latest_observation", {})
         calls = [
             {"tool": "route_by_risk", "args": {"risk_score": risk_score, "is_authorized": is_authorized}},
-            {"tool": "escalation_policy", "args": {
-                "risk_score": risk_score,
-                "confidence": latest_obs.get("confidence_score", 0.5),
-                "agent_name": latest_obs.get("agent_id", "unknown"),
-                "is_destructive": risk_score > 0.8,
-            }},
+            {
+                "tool": "query_opa_policy",
+                "args": {
+                    "agent_name": latest_obs.get("agent_id", "SupervisorAgent"),
+                    "action": {
+                        "type": "SUPERVISOR_ROUTE",
+                        "risk_score": risk_score,
+                        "is_destructive": risk_score > 0.7,
+                        "target": perceived.get("incident_id", "unknown"),
+                    },
+                    "risk_score": risk_score,
+                },
+            },
+            {
+                "tool": "escalation_policy",
+                "args": {
+                    "risk_score": risk_score,
+                    "confidence": latest_obs.get("confidence_score", 0.5),
+                    "agent_name": latest_obs.get("agent_id", "unknown"),
+                    "is_destructive": risk_score > 0.8,
+                },
+            },
         ]
         if latest_obs:
             calls.append({"tool": "quality_gate", "args": {"observation": latest_obs}})
             if latest_obs.get("confidence_score", 1.0) < 0.7:
-                calls.append({
-                    "tool": "retry_with_reflection",
-                    "args": {
-                        "agent_name": latest_obs.get("agent_id", "unknown"),
-                        "original_observation": latest_obs,
-                        "run_context": perceived.get("run_context", {}),
-                    },
-                })
+                calls.append(
+                    {
+                        "tool": "retry_with_reflection",
+                        "args": {
+                            "agent_name": latest_obs.get("agent_id", "unknown"),
+                            "original_observation": latest_obs,
+                            "run_context": perceived.get("run_context", {}),
+                        },
+                    }
+                )
         return calls
 
     @traceable(name="supervisor_act", run_type="chain")
@@ -432,7 +481,9 @@ class SupervisorAgent(BaseAgent):
         return results
 
     @traceable(name="supervisor_observe", run_type="chain")
-    async def observe(self, state: AgentState, tool_results: List[Any], tool_calls: List[Dict[str, Any]]) -> AgentObservation:
+    async def observe(
+        self, state: AgentState, tool_results: List[Any], tool_calls: List[Dict[str, Any]]
+    ) -> AgentObservation:
         route = "forensics"
         quality_passed = True
         escalation_level = "auto_retry"

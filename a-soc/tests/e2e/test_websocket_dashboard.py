@@ -1,4 +1,5 @@
 """E2E test: WebSocket dashboard connectivity."""
+
 import uuid
 
 import pytest

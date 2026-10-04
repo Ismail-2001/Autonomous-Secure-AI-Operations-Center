@@ -9,10 +9,7 @@ from src.asoc.api.app import (  # noqa: E402, F401
     app,
     background_telemetry,
     db_circuit_breaker,
-    get_event_store,
     health_check,
-    hunting_events,
-    hunting_timeline,
     instrumentator,
     lifespan,
     manager,
@@ -21,3 +18,5 @@ from src.asoc.api.app import (  # noqa: E402, F401
     run_simulation,
     websocket_endpoint,
 )
+from src.asoc.api.routes import get_event_store  # noqa: E402, F401
+from src.asoc.api.routes.hunting import hunting_events, hunting_timeline  # noqa: E402, F401

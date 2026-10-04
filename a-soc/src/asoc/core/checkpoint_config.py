@@ -28,7 +28,10 @@ async def create_checkpointer():
         saver = AsyncPostgresSaver.from_conn_string(settings.DATABASE_URL)
         await saver.setup()
         _checkpointer_instance = saver
-        logger.info("postgresql_checkpointer_initialized", database=settings.DATABASE_URL.split("@")[-1] if "@" in settings.DATABASE_URL else "configured")
+        logger.info(
+            "postgresql_checkpointer_initialized",
+            database=settings.DATABASE_URL.split("@")[-1] if "@" in settings.DATABASE_URL else "configured",
+        )
         return saver
     except Exception as e:
         logger.warning("postgresql_checkpointer_unavailable", error=str(e), fallback="memory")
@@ -115,11 +118,13 @@ class RunTracker:
 
     def record_step(self, run_id: str, step_name: str, success: bool, details: Optional[dict] = None) -> None:
         if run_id in self._active_runs:
-            self._active_runs[run_id]["steps"].append({
-                "step": step_name,
-                "success": success,
-                "details": details or {},
-            })
+            self._active_runs[run_id]["steps"].append(
+                {
+                    "step": step_name,
+                    "success": success,
+                    "details": details or {},
+                }
+            )
 
     def complete_run(self, run_id: str, status: str = "completed") -> Optional[dict]:
         if run_id in self._active_runs:

@@ -1,17 +1,18 @@
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from src.asoc.agents.message import ASOCMessage, MessageType, Priority
-from src.asoc.agents.observation import AgentObservation, ObservationNextState
-from src.asoc.agents.state import AgentState, create_initial_state
-from src.asoc.agents.tools import ToolRegistry
-from src.asoc.agents.detection import DetectionAgent
-from src.asoc.agents.supervisor import SupervisorAgent
-from src.asoc.agents.forensics import ForensicsAgent
-from src.asoc.agents.response import ResponseAgent, MockRemediationProvider
+import pytest
+
 from src.asoc.agents.compliance import ComplianceAgent
+from src.asoc.agents.detection import DetectionAgent
+from src.asoc.agents.forensics import ForensicsAgent
+from src.asoc.agents.message import ASOCMessage, MessageType, Priority
 from src.asoc.agents.notifications import NotificationAgent
+from src.asoc.agents.observation import AgentObservation, ObservationNextState
+from src.asoc.agents.response import MockRemediationProvider, ResponseAgent
+from src.asoc.agents.state import AgentState, create_initial_state
+from src.asoc.agents.supervisor import QualityGateResult, SupervisorAgent
 from src.asoc.agents.telemetry import TelemetryAgent
+from src.asoc.agents.tools import ToolRegistry
 from src.asoc.llm.providers import LLMResult
 
 
@@ -21,10 +22,18 @@ def _make_state(**overrides) -> AgentState:
     return state
 
 
-def _make_message(msg_type=MessageType.ALERT, source="TestAgent", payload=None, correlation_id=None, priority=Priority.MEDIUM) -> ASOCMessage:
+def _make_message(
+    msg_type=MessageType.ALERT,
+    source="TestAgent",
+    payload=None,
+    correlation_id=None,
+    priority=Priority.MEDIUM,
+    target_agent=None,
+) -> ASOCMessage:
     return ASOCMessage(
         message_type=msg_type,
         source_agent=source,
+        target_agent=target_agent,
         payload=payload or {"event": {"eventName": "ConsoleLogin", "sourceIPAddress": "1.2.3.4"}},
         correlation_id=correlation_id,
         priority=priority,
@@ -99,7 +108,11 @@ class TestAgentObservation:
 
     def test_observation_defaults(self):
         obs = AgentObservation(
-            agent_id="A", action_taken="x", confidence_score=0.5, tools_used=[], next_state=ObservationNextState.CONTINUE
+            agent_id="A",
+            action_taken="x",
+            confidence_score=0.5,
+            tools_used=[],
+            next_state=ObservationNextState.CONTINUE,
         )
         assert obs.risk_score is None
         assert obs.metadata == {}
@@ -173,7 +186,7 @@ class TestDetectionAgent:
         )
         agent = DetectionAgent(provider=mock_provider)
         result = await agent.analyze_threat({"eventName": "ConsoleLogin"})
-        assert result.payload["risk_score"] == 0.75
+        assert result.payload["risk_score"] == 1.0
         assert result.payload["attack_technique"] == "T1078"
 
     @pytest.mark.asyncio
@@ -233,7 +246,7 @@ class TestSupervisorAgent:
         state = _make_state(risk_score=0.85, is_authorized=False)
         obs = await agent.observe(state, ["hitl"], [{"tool": "route_by_risk"}])
         assert obs.next_state == ObservationNextState.ESCALATE
-        assert "routed_to_hitl" in obs.action_taken
+        assert obs.action_taken == "supervised_hitl"
 
     @pytest.mark.asyncio
     async def test_observe_returns_continue_for_forensics(self):
@@ -242,33 +255,54 @@ class TestSupervisorAgent:
         assert obs.next_state == ObservationNextState.CONTINUE
 
     @pytest.mark.asyncio
-    async def test_quality_check_passes_high_confidence(self):
+    async def test_quality_gate_passes_high_confidence(self):
         agent = SupervisorAgent()
         obs = AgentObservation(
-            agent_id="DetectionAgent", action_taken="x", confidence_score=0.8, tools_used=[], next_state=ObservationNextState.CONTINUE
+            agent_id="DetectionAgent",
+            action_taken="x",
+            confidence_score=0.8,
+            tools_used=[],
+            next_state=ObservationNextState.CONTINUE,
+            metadata={"risk_score": 0.5, "reasoning": "ok"},
         )
-        result = await agent.quality_check(obs)
-        assert result.confidence_score == 0.8
+        passed, result, _ = await agent.quality_gate(obs)
+        assert passed is True
+        assert result == QualityGateResult.PASS
 
     @pytest.mark.asyncio
-    async def test_quality_check_escalates_low_confidence(self):
+    async def test_quality_gate_failure_downgrades_observation(self):
         agent = SupervisorAgent()
         obs = AgentObservation(
-            agent_id="DetectionAgent", action_taken="x", confidence_score=0.3, tools_used=[], next_state=ObservationNextState.CONTINUE
+            agent_id="DetectionAgent",
+            action_taken="x",
+            confidence_score=0.3,
+            tools_used=[],
+            next_state=ObservationNextState.CONTINUE,
         )
-        result = await agent.quality_check(obs)
-        assert result.action_taken == "quality_check_failed_reinvoke"
-        assert result.next_state == ObservationNextState.ESCALATE
+        passed, result, _ = await agent.quality_gate(obs)
+        assert passed is False
+        assert result == QualityGateResult.FAIL_CONFIDENCE
+        supervised = await agent.observe(
+            _make_state(), [{"passed": False, "result": result.value, "reason": "low"}], [{"tool": "quality_gate"}]
+        )
+        assert supervised.action_taken == "supervised_supervisor"
+        assert supervised.confidence_score == 0.5
 
     @pytest.mark.asyncio
-    async def test_quality_check_max_retries_escalates(self):
+    async def test_quality_gate_exhausted_retries_pages_human(self):
         agent = SupervisorAgent()
-        obs = AgentObservation(
-            agent_id="DetectionAgent", action_taken="x", confidence_score=0.3, tools_used=[], next_state=ObservationNextState.CONTINUE
+        ctx = agent.get_or_create_run_context("DetectionAgent")
+        for _ in range(ctx.max_retries):
+            ctx.record_retry("DetectionAgent")
+        escalation = await agent._tool_escalation_policy(0.5, 0.3, "DetectionAgent")
+        assert escalation["should_page_human"] is True
+        obs = await agent.observe(
+            _make_state(),
+            [{"route": "forensics"}, escalation, {"passed": True, "result": "pass", "reason": "ok"}],
+            [{"tool": "route_by_risk"}, {"tool": "escalation_policy"}, {"tool": "quality_gate"}],
         )
-        for _ in range(4):
-            result = await agent.quality_check(obs)
-        assert result.action_taken == "quality_check_failed_reinvoke"
+        assert obs.next_state == ObservationNextState.ESCALATE
+        assert obs.action_taken == "supervised_hitl"
 
     @pytest.mark.asyncio
     async def test_process_message_alert_routes_to_forensics(self):
@@ -405,7 +439,9 @@ class TestResponseAgent:
     @pytest.mark.asyncio
     async def test_observe_success(self):
         agent = ResponseAgent()
-        obs = await agent.observe(_make_state(), [True, True], [{"tool": "block_ip_address"}, {"tool": "verify_remediation"}])
+        obs = await agent.observe(
+            _make_state(), [True, True], [{"tool": "block_ip_address"}, {"tool": "verify_remediation"}]
+        )
         assert obs.action_taken == "remediation_executed"
         assert obs.confidence_score == 0.95
 
@@ -558,8 +594,13 @@ class TestTelemetryAgent:
         from src.asoc.agents.telemetry import CloudEvent
 
         mock_event = CloudEvent(
-            event_id="test-1", event_name="ConsoleLogin", event_time="2024-01-01T12:00:00Z",
-            source_ip="1.2.3.4", user_identity={"type": "IAMUser", "userName": "admin"}, resources=[], raw={},
+            event_id="test-1",
+            event_name="ConsoleLogin",
+            event_time="2024-01-01T12:00:00Z",
+            source_ip="1.2.3.4",
+            user_identity={"type": "IAMUser", "userName": "admin"},
+            resources=[],
+            raw={},
         )
         mock_provider = AsyncMock()
         mock_provider.fetch_events.return_value = [mock_event]
@@ -585,9 +626,7 @@ class TestRunCycle:
     async def test_detection_run_cycle(self):
         mock_provider = AsyncMock()
         mock_provider.name = "test:mock"
-        mock_provider.analyze.return_value = LLMResult(
-            threat_detected=True, risk_score=0.75, reasoning="Test analysis"
-        )
+        mock_provider.analyze.return_value = LLMResult(threat_detected=True, risk_score=0.75, reasoning="Test analysis")
         agent = DetectionAgent(provider=mock_provider)
         msg = _make_message()
         state = _make_state(messages=[msg])

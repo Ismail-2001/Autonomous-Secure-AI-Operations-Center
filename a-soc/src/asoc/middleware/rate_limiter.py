@@ -6,6 +6,7 @@ Each agent gets its own token bucket with limits tuned to its risk level:
 - ResponseAgent: low throughput (destructive actions)
 - ComplianceAgent: low throughput (audit writes)
 """
+
 import time
 from typing import Dict, Optional
 
@@ -52,12 +53,12 @@ class TokenBucket:
 
 AGENT_RATE_LIMITS: Dict[str, tuple[int, float]] = {
     # Agent name → (capacity, refill_rate_per_sec)
-    "TelemetryAgent": (200, 20.0),   # High throughput ingestion
-    "DetectionAgent": (60, 5.0),     # Moderate — LLM calls are the bottleneck
+    "TelemetryAgent": (200, 20.0),  # High throughput ingestion
+    "DetectionAgent": (60, 5.0),  # Moderate — LLM calls are the bottleneck
     "SupervisorAgent": (100, 10.0),  # Orchestration overhead
-    "ForensicsAgent": (40, 3.0),     # Vector store queries
-    "ResponseAgent": (15, 1.0),      # LOW — destructive actions, strict limit
-    "ComplianceAgent": (30, 2.0),    # Audit writes
+    "ForensicsAgent": (40, 3.0),  # Vector store queries
+    "ResponseAgent": (15, 1.0),  # LOW — destructive actions, strict limit
+    "ComplianceAgent": (30, 2.0),  # Audit writes
     "NotificationAgent": (50, 5.0),  # Webhook calls
 }
 
@@ -115,8 +116,7 @@ class AgentRateLimiter:
         if now - self._last_cleanup > self._cleanup_interval:
             # Prune stale IP buckets (older than cleanup interval)
             stale_ips = [
-                ip for ip, bucket in self._ip_buckets.items()
-                if now - bucket._last_refill > self._cleanup_interval
+                ip for ip, bucket in self._ip_buckets.items() if now - bucket._last_refill > self._cleanup_interval
             ]
             for ip in stale_ips:
                 del self._ip_buckets[ip]

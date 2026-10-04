@@ -11,12 +11,14 @@ import asyncpg
 
 async def _get_conn() -> asyncpg.Connection:
     from src.asoc.core.connection import get_db_pool
+
     pool = await get_db_pool()
     return await pool.pool.acquire()
 
 
 async def _release_conn(conn: asyncpg.Connection) -> None:
     from src.asoc.core.connection import get_db_pool
+
     pool = await get_db_pool()
     await pool.pool.release(conn)
 
@@ -54,7 +56,8 @@ async def get_incidents(limit: int = 20, severity: str = "", status: str = "") -
 
         rows = await conn.fetch(
             f"SELECT * FROM incidents{where} ORDER BY created_at DESC LIMIT ${idx}",
-            *params, limit,
+            *params,
+            limit,
         )
         count = await conn.fetchval(f"SELECT COUNT(*) FROM incidents{where}", *params)
         return {"incidents": [_row_to_dict(r) for r in rows], "count": count or 0}
@@ -70,11 +73,18 @@ async def create_incident(data: Dict[str, Any]) -> Dict[str, Any]:
         await conn.execute(
             """INSERT INTO incidents (id, incident_number, title, description, severity, status, source, agent, risk_score, tags, created_at, updated_at)
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12)""",
-            inc_id, data["incident_number"], data.get("title", ""),
-            data.get("description", ""), data.get("severity", "low"),
-            data.get("status", "open"), data.get("source", "unknown"),
-            data.get("agent", "DetectionAgent"), data.get("risk_score", 0.0),
-            json.dumps(data.get("tags", [])), now, now,
+            inc_id,
+            data["incident_number"],
+            data.get("title", ""),
+            data.get("description", ""),
+            data.get("severity", "low"),
+            data.get("status", "open"),
+            data.get("source", "unknown"),
+            data.get("agent", "DetectionAgent"),
+            data.get("risk_score", 0.0),
+            json.dumps(data.get("tags", [])),
+            now,
+            now,
         )
         return {"id": inc_id, "status": "created"}
     finally:
@@ -104,7 +114,8 @@ async def get_assets(limit: int = 50, asset_type: str = "", min_risk: float = 0)
 
         rows = await conn.fetch(
             f"SELECT * FROM assets{where} ORDER BY risk_score DESC LIMIT ${idx}",
-            *params, limit,
+            *params,
+            limit,
         )
         count = await conn.fetchval(f"SELECT COUNT(*) FROM assets{where}", *params)
         return {"assets": [_row_to_dict(r) for r in rows], "count": count or 0}
@@ -120,12 +131,19 @@ async def create_asset(data: Dict[str, Any]) -> Dict[str, Any]:
         await conn.execute(
             """INSERT INTO assets (id, asset_number, name, type, ip_address, os, status, risk_score, vulnerabilities, owner, tags, last_scan, created_at)
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12, $13)""",
-            ast_id, data["asset_number"], data.get("name", ""),
-            data.get("type", "server"), data.get("ip_address", ""),
-            data.get("os", "unknown"), data.get("status", "online"),
-            data.get("risk_score", 0.0), data.get("vulnerabilities", 0),
-            data.get("owner", "UNKNOWN"), json.dumps(data.get("tags", [])),
-            now, now,
+            ast_id,
+            data["asset_number"],
+            data.get("name", ""),
+            data.get("type", "server"),
+            data.get("ip_address", ""),
+            data.get("os", "unknown"),
+            data.get("status", "online"),
+            data.get("risk_score", 0.0),
+            data.get("vulnerabilities", 0),
+            data.get("owner", "UNKNOWN"),
+            json.dumps(data.get("tags", [])),
+            now,
+            now,
         )
         return {"id": ast_id, "status": "created"}
     finally:
@@ -138,9 +156,7 @@ async def create_asset(data: Dict[str, Any]) -> Dict[str, Any]:
 async def get_forensics_jobs(limit: int = 20) -> Dict[str, Any]:
     conn = await _get_conn()
     try:
-        rows = await conn.fetch(
-            "SELECT * FROM forensics_jobs ORDER BY created_at DESC LIMIT $1", limit
-        )
+        rows = await conn.fetch("SELECT * FROM forensics_jobs ORDER BY created_at DESC LIMIT $1", limit)
         count = await conn.fetchval("SELECT COUNT(*) FROM forensics_jobs")
         return {"jobs": [_row_to_dict(r) for r in rows], "count": count or 0}
     finally:
@@ -156,15 +172,12 @@ async def get_threat_indicators(limit: int = 50, severity: str = "") -> Dict[str
         if severity:
             rows = await conn.fetch(
                 "SELECT * FROM threat_indicators WHERE severity = $1 ORDER BY confidence DESC LIMIT $2",
-                severity, limit,
+                severity,
+                limit,
             )
-            count = await conn.fetchval(
-                "SELECT COUNT(*) FROM threat_indicators WHERE severity = $1", severity
-            )
+            count = await conn.fetchval("SELECT COUNT(*) FROM threat_indicators WHERE severity = $1", severity)
         else:
-            rows = await conn.fetch(
-                "SELECT * FROM threat_indicators ORDER BY confidence DESC LIMIT $1", limit
-            )
+            rows = await conn.fetch("SELECT * FROM threat_indicators ORDER BY confidence DESC LIMIT $1", limit)
             count = await conn.fetchval("SELECT COUNT(*) FROM threat_indicators")
         return {"indicators": [_row_to_dict(r) for r in rows], "count": count or 0}
     finally:
@@ -208,27 +221,17 @@ async def get_compliance_report(framework: str = "") -> Dict[str, Any]:
 async def get_dashboard_stats() -> Dict[str, Any]:
     conn = await _get_conn()
     try:
-        active_threats = await conn.fetchval(
-            "SELECT COUNT(*) FROM incidents WHERE status = 'active'"
-        )
-        neutralized = await conn.fetchval(
-            "SELECT COUNT(*) FROM incidents WHERE status = 'resolved'"
-        )
+        active_threats = await conn.fetchval("SELECT COUNT(*) FROM incidents WHERE status = 'active'")
+        neutralized = await conn.fetchval("SELECT COUNT(*) FROM incidents WHERE status = 'resolved'")
         critical_alerts = await conn.fetchval(
             "SELECT COUNT(*) FROM incidents WHERE severity = 'critical' AND status != 'resolved'"
         )
         total_assets = await conn.fetchval("SELECT COUNT(*) FROM assets")
-        critical_assets = await conn.fetchval(
-            "SELECT COUNT(*) FROM assets WHERE risk_score >= 60"
-        )
+        critical_assets = await conn.fetchval("SELECT COUNT(*) FROM assets WHERE risk_score >= 60")
         total_events = await conn.fetchval("SELECT COUNT(*) FROM events")
 
-        compliance_total = await conn.fetchval(
-            "SELECT COUNT(*) FROM compliance_controls"
-        ) or 0
-        compliance_passed = await conn.fetchval(
-            "SELECT COUNT(*) FROM compliance_controls WHERE status = 'PASS'"
-        ) or 0
+        compliance_total = await conn.fetchval("SELECT COUNT(*) FROM compliance_controls") or 0
+        compliance_passed = await conn.fetchval("SELECT COUNT(*) FROM compliance_controls WHERE status = 'PASS'") or 0
         compliance_score = round((compliance_passed / compliance_total * 100), 1) if compliance_total > 0 else 0
 
         mttr_row = await conn.fetchval(
@@ -257,12 +260,68 @@ async def get_dashboard_stats() -> Dict[str, Any]:
 async def get_agent_status() -> Dict[str, Any]:
     now = datetime.now(timezone.utc).isoformat()
     agents = [
-        {"name": "TelemetryAgent", "status": "active", "role": "telemetry", "confidence": 0.97, "last_active": now + "Z", "task_count": 2847, "error_count": 0},
-        {"name": "DetectionAgent", "status": "active", "role": "detection", "confidence": 0.94, "last_active": now + "Z", "task_count": 1203, "error_count": 2},
-        {"name": "SupervisorAgent", "status": "active", "role": "supervisor", "confidence": 0.99, "last_active": now + "Z", "task_count": 456, "error_count": 0},
-        {"name": "ForensicsAgent", "status": "active", "role": "forensics", "confidence": 0.92, "last_active": now + "Z", "task_count": 89, "error_count": 1},
-        {"name": "ResponseAgent", "status": "active", "role": "response", "confidence": 0.96, "last_active": now + "Z", "task_count": 234, "error_count": 0},
-        {"name": "ComplianceAgent", "status": "active", "role": "compliance", "confidence": 0.98, "last_active": now + "Z", "task_count": 678, "error_count": 0},
-        {"name": "NotificationAgent", "status": "active", "role": "notification", "confidence": 1.0, "last_active": now + "Z", "task_count": 3456, "error_count": 0},
+        {
+            "name": "TelemetryAgent",
+            "status": "active",
+            "role": "telemetry",
+            "confidence": 0.97,
+            "last_active": now + "Z",
+            "task_count": 2847,
+            "error_count": 0,
+        },
+        {
+            "name": "DetectionAgent",
+            "status": "active",
+            "role": "detection",
+            "confidence": 0.94,
+            "last_active": now + "Z",
+            "task_count": 1203,
+            "error_count": 2,
+        },
+        {
+            "name": "SupervisorAgent",
+            "status": "active",
+            "role": "supervisor",
+            "confidence": 0.99,
+            "last_active": now + "Z",
+            "task_count": 456,
+            "error_count": 0,
+        },
+        {
+            "name": "ForensicsAgent",
+            "status": "active",
+            "role": "forensics",
+            "confidence": 0.92,
+            "last_active": now + "Z",
+            "task_count": 89,
+            "error_count": 1,
+        },
+        {
+            "name": "ResponseAgent",
+            "status": "active",
+            "role": "response",
+            "confidence": 0.96,
+            "last_active": now + "Z",
+            "task_count": 234,
+            "error_count": 0,
+        },
+        {
+            "name": "ComplianceAgent",
+            "status": "active",
+            "role": "compliance",
+            "confidence": 0.98,
+            "last_active": now + "Z",
+            "task_count": 678,
+            "error_count": 0,
+        },
+        {
+            "name": "NotificationAgent",
+            "status": "active",
+            "role": "notification",
+            "confidence": 1.0,
+            "last_active": now + "Z",
+            "task_count": 3456,
+            "error_count": 0,
+        },
     ]
     return {"agents": agents}

@@ -286,11 +286,31 @@ class GCPCloudProvider(BaseCloudProvider):
 
     def _mock_events(self, count: int) -> List[CloudEvent]:
         mock_templates = [
-            {"eventName": "google.iam.admin.v1.CreateServiceAccount", "sourceIP": "10.0.0.1", "userName": "admin@gcp-project"},
-            {"eventName": "google.cloud.storage.v1.Storage.GetObject", "sourceIP": "203.0.113.5", "userName": "svc-account@gcp-project"},
-            {"eventName": "google.cloud.compute.v1.Instances.Insert", "sourceIP": "198.51.100.2", "userName": "ci-runner@gcp-project"},
-            {"eventName": "google.cloud.sql.v1.Instances.Delete", "sourceIP": "72.14.192.15", "userName": "ops-admin@gcp-project"},
-            {"eventName": "google.cloud.kms.v1.KeyManagementService.Decrypt", "sourceIP": "192.168.1.99", "userName": "app-svc@gcp-project"},
+            {
+                "eventName": "google.iam.admin.v1.CreateServiceAccount",
+                "sourceIP": "10.0.0.1",
+                "userName": "admin@gcp-project",
+            },
+            {
+                "eventName": "google.cloud.storage.v1.Storage.GetObject",
+                "sourceIP": "203.0.113.5",
+                "userName": "svc-account@gcp-project",
+            },
+            {
+                "eventName": "google.cloud.compute.v1.Instances.Insert",
+                "sourceIP": "198.51.100.2",
+                "userName": "ci-runner@gcp-project",
+            },
+            {
+                "eventName": "google.cloud.sql.v1.Instances.Delete",
+                "sourceIP": "72.14.192.15",
+                "userName": "ops-admin@gcp-project",
+            },
+            {
+                "eventName": "google.cloud.kms.v1.KeyManagementService.Decrypt",
+                "sourceIP": "192.168.1.99",
+                "userName": "app-svc@gcp-project",
+            },
         ]
         events = []
         for i in range(min(count, len(mock_templates))):
@@ -426,11 +446,31 @@ class AzureCloudProvider(BaseCloudProvider):
 
     def _mock_events(self, count: int) -> List[CloudEvent]:
         mock_templates = [
-            {"eventName": "MICROSOFT.COMPUTE/VIRTUALMACHINES/WRITE", "sourceIP": "10.0.0.1", "userName": "admin@contoso.com"},
-            {"eventName": "MICROSOFT.STORAGE/STORAGEACCOUNTS/LISTKEYS/ACTION", "sourceIP": "203.0.113.5", "userName": "svc-account@contoso.com"},
-            {"eventName": "MICROSOFT.AUTHORIZATION/ROLEASSIGNMENTS/WRITE", "sourceIP": "198.51.100.2", "userName": "sec-admin@contoso.com"},
-            {"eventName": "MICROSOFT.SECURITY/ALERTS/WRITE", "sourceIP": "72.14.192.15", "userName": "soc-analyst@contoso.com"},
-            {"eventName": "MICROSOFT.NETWORK/NETWORKSECURITYGROUPS/DELETE", "sourceIP": "192.168.1.99", "userName": "infra-bot@contoso.com"},
+            {
+                "eventName": "MICROSOFT.COMPUTE/VIRTUALMACHINES/WRITE",
+                "sourceIP": "10.0.0.1",
+                "userName": "admin@contoso.com",
+            },
+            {
+                "eventName": "MICROSOFT.STORAGE/STORAGEACCOUNTS/LISTKEYS/ACTION",
+                "sourceIP": "203.0.113.5",
+                "userName": "svc-account@contoso.com",
+            },
+            {
+                "eventName": "MICROSOFT.AUTHORIZATION/ROLEASSIGNMENTS/WRITE",
+                "sourceIP": "198.51.100.2",
+                "userName": "sec-admin@contoso.com",
+            },
+            {
+                "eventName": "MICROSOFT.SECURITY/ALERTS/WRITE",
+                "sourceIP": "72.14.192.15",
+                "userName": "soc-analyst@contoso.com",
+            },
+            {
+                "eventName": "MICROSOFT.NETWORK/NETWORKSECURITYGROUPS/DELETE",
+                "sourceIP": "192.168.1.99",
+                "userName": "infra-bot@contoso.com",
+            },
         ]
         events = []
         for i in range(min(count, len(mock_templates))):
@@ -499,10 +539,15 @@ class TelemetryAgent(BaseAgent):
         events = await self.provider.fetch_events(max_results=max_results)
         return [e.to_dict() for e in events]
 
-    async def _tool_filter_events_by_risk(self, events: List[Dict[str, Any]], min_risk: float = 0.3) -> List[Dict[str, Any]]:
+    async def _tool_filter_events_by_risk(
+        self, events: List[Dict[str, Any]], min_risk: float = 0.3
+    ) -> List[Dict[str, Any]]:
         HIGH_RISK_EVENTS = {
-            "ConsoleLogin", "CreateUser", "DeleteBucket",
-            "AuthorizeSecurityGroupIngress", "TerminateInstance",
+            "ConsoleLogin",
+            "CreateUser",
+            "DeleteBucket",
+            "AuthorizeSecurityGroupIngress",
+            "TerminateInstance",
         }
         filtered = []
         for event in events:
@@ -517,7 +562,12 @@ class TelemetryAgent(BaseAgent):
         return CloudEvent.from_cloudtrail(raw_event).to_dict()
 
     async def _tool_emit_alert(self, event: Dict[str, Any], priority: str = "medium") -> bool:
-        priority_map = {"low": Priority.LOW, "medium": Priority.MEDIUM, "high": Priority.HIGH, "critical": Priority.CRITICAL}
+        priority_map = {
+            "low": Priority.LOW,
+            "medium": Priority.MEDIUM,
+            "high": Priority.HIGH,
+            "critical": Priority.CRITICAL,
+        }
         msg = ASOCMessage(
             message_type=MessageType.ALERT,
             source_agent=self.name,
@@ -525,18 +575,28 @@ class TelemetryAgent(BaseAgent):
             priority=priority_map.get(priority, Priority.MEDIUM),
         )
         await self.send_message(msg)
-        await self.log_event("log_ingestion", {"event_id": event.get("eventID", ""), "event_name": event.get("eventName", "")})
+        await self.log_event(
+            "log_ingestion", {"event_id": event.get("eventID", ""), "event_name": event.get("eventName", "")}
+        )
         return True
 
     @traceable(name="telemetry_perceive", run_type="chain")
     async def perceive(self, state: AgentState) -> Dict[str, Any]:
-        return {"provider_healthy": await self.provider.health_check(), "has_existing_events": bool(state.get("working_memory", {}).get("events"))}
+        return {
+            "provider_healthy": await self.provider.health_check(),
+            "has_existing_events": bool(state.get("working_memory", {}).get("events")),
+        }
 
     @traceable(name="telemetry_reason", run_type="chain")
     async def reason(self, state: AgentState, perceived: Dict[str, Any]) -> List[Dict[str, Any]]:
         calls = [{"tool": "fetch_cloud_events", "args": {"max_results": 5}}]
         if perceived.get("has_existing_events"):
-            calls.append({"tool": "filter_events_by_risk", "args": {"events": state["working_memory"]["events"], "min_risk": 0.3}})
+            calls.append(
+                {
+                    "tool": "filter_events_by_risk",
+                    "args": {"events": state["working_memory"]["events"], "min_risk": 0.3},
+                }
+            )
         return calls
 
     @traceable(name="telemetry_act", run_type="chain")
@@ -548,7 +608,9 @@ class TelemetryAgent(BaseAgent):
         return results
 
     @traceable(name="telemetry_observe", run_type="chain")
-    async def observe(self, state: AgentState, tool_results: List[Any], tool_calls: List[Dict[str, Any]]) -> AgentObservation:
+    async def observe(
+        self, state: AgentState, tool_results: List[Any], tool_calls: List[Dict[str, Any]]
+    ) -> AgentObservation:
         events = []
         for r in tool_results:
             if isinstance(r, list):

@@ -5,6 +5,7 @@ Each module imports `router` from here and registers its endpoints on it.
 """
 
 import os
+
 from fastapi import APIRouter
 
 from src.asoc.core.event_store import EventStore, PostgresEventStore

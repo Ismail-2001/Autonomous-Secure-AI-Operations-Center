@@ -58,11 +58,7 @@ class FeatureFlags:
 
     def as_dict(self) -> Dict[str, bool]:
         """Export all flags as a dictionary."""
-        return {
-            f: getattr(self, f)
-            for f in self.__dataclass_fields__
-            if not f.startswith("_")
-        }
+        return {f: getattr(self, f) for f in self.__dataclass_fields__ if not f.startswith("_")}
 
 
 # Singleton

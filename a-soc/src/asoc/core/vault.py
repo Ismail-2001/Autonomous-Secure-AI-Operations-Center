@@ -20,6 +20,7 @@ class VaultProvider:
             return None
         try:
             import hvac
+
             token = os.getenv("VAULT_TOKEN", "")
             if not self._client:
                 self._client = hvac.Client(url=self._addr, token=token)
@@ -37,6 +38,7 @@ class VaultProvider:
             return False
         try:
             import hvac
+
             token = os.getenv("VAULT_TOKEN", "")
             client = hvac.Client(url=self._addr, token=token)
             return client.is_authenticated()
