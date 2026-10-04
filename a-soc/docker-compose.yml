@@ -86,6 +86,8 @@ services:
     command:
       - "run"
       - "--server"
+      - "--addr"
+      - "0.0.0.0:8181"
       - "--log-level=info"
       - "/policies"
     volumes:

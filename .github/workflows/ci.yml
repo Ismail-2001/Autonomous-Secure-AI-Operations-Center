@@ -211,13 +211,16 @@ jobs:
         run: |
           fail=0
           probe() {
-            if out=$(eval "$2" 2>&1); then
-              echo "OK   $1"
-            else
-              echo "FAIL $1"
-              echo "::error::health check failed: $1 -> $(echo "$out" | tail -c 800 | tr '\n' ' ')"
-              fail=1
-            fi
+            for i in 1 2 3; do
+              if out=$(eval "$2" 2>&1); then
+                echo "OK   $1"
+                return 0
+              fi
+              sleep 2
+            done
+            echo "FAIL $1"
+            echo "::error::health check failed: $1 -> $(echo "$out" | tail -c 800 | tr '\n' ' ')"
+            fail=1
           }
 
           probe backend 'curl -fsS http://localhost:9002/health'
