@@ -201,7 +201,7 @@ jobs:
         run: |
           docker compose up -d postgres redis opa backend worker dashboard > up.log 2>&1 || {
             rc=$?
-            echo "::error::compose up failed (rc=$rc)%0A--- up.log ---%0A$(tail -c 2500 up.log | tr '\n' ' ')%0A--- ps ---%0A$(docker compose ps -a --format '{{.Name}} {{.State}} {{.Status}}' | tr '\n' ' ')%0A--- backend ---%0A$(docker compose logs --no-color --tail=40 backend 2>&1 | tr '\n' ' ')%0A--- worker ---%0A$(docker compose logs --no-color --tail=20 worker 2>&1 | tr '\n' ' ')"
+            echo "::error::compose up rc=$rc%0A--- backend logs ---%0A$(docker logs asoc-backend --tail 30 2>&1 | tr '\n' ' ' | tail -c 3500)%0A--- worker logs ---%0A$(docker logs asoc-worker --tail 20 2>&1 | tr '\n' ' ' | tail -c 2500)%0A--- ps ---%0A$(docker compose ps -a --format '{{.Name}} {{.State}} {{.Status}}' | tr '\n' ' ')%0A--- up.log tail ---%0A$(tail -3 up.log | tr '\n' ' ')"
             exit $rc
           }
           sleep 30
