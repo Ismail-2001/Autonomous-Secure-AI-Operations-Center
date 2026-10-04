@@ -1,12 +1,15 @@
 """Run migration + seed directly via asyncpg (no Alembic needed)."""
 
 import asyncio
+import os
 import uuid
 from datetime import datetime, timezone
 
 import asyncpg
 
-DATABASE_URL = "postgresql://asoc_user:changeme123@postgres:5432/asoc_db"
+DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://asoc_user:changeme123@postgres:5432/asoc_db").replace(
+    "postgresql+asyncpg://", "postgresql://"
+)
 
 MIGRATION_SQL = """
 CREATE TABLE IF NOT EXISTS incidents (
