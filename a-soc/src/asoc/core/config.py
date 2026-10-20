@@ -17,18 +17,23 @@ class Settings(BaseSettings):
     Use validate_production() to check for missing critical config.
     """
 
+    ENVIRONMENT: str = "development"
+    ADMIN_USERNAME: str = "admin"
+    ADMIN_PASSWORD: Optional[SecretStr] = None
+
     LLM_PROVIDER: str = "openai"
     LLM_MODEL: str = "gpt-4"
     OPENAI_API_KEY: Optional[SecretStr] = None
     ANTHROPIC_API_KEY: Optional[SecretStr] = None
     DEEPSEEK_API_KEY: Optional[SecretStr] = None
+    GROQ_API_KEY: Optional[SecretStr] = None
     LOCAL_LLM_MODEL: str = "llama3"
     LOCAL_LLM_BASE_URL: str = "http://localhost:11434"
 
     @field_validator("LLM_PROVIDER")
     @classmethod
     def validate_llm_provider(cls, v: str) -> str:
-        allowed = {"openai", "anthropic", "ollama", "deepseek", "local"}
+        allowed = {"openai", "anthropic", "ollama", "deepseek", "local", "groq"}
         if v.lower() not in allowed:
             raise ValueError(f"LLM_PROVIDER must be one of {allowed}, got '{v}'")
         return v.lower()

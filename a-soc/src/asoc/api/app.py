@@ -120,6 +120,13 @@ async def lifespan(app: FastAPI):
     await run_boot_checks()
     setup_tracing(app)
 
+    try:
+        from src.asoc.core.user_service import seed_admin_user_if_needed
+
+        await seed_admin_user_if_needed()
+    except Exception as e:
+        logger.warning("initial_admin_seed_notice", message=str(e))
+
     bg = asyncio.create_task(background_telemetry())
     tf = asyncio.create_task(threat_feedsimulation())
     yield
@@ -272,15 +279,18 @@ async def api_hunting_timeline(
 
 @app.websocket("/ws/threat-feed")
 @app.websocket("/api/v1/ws/threat-feed")
-async def websocket_endpoint(websocket: WebSocket, token: str = Query(default="")):
-    import hmac
+async def websocket_endpoint(
+    websocket: WebSocket,
+    token: str = Query(default=""),
+    ticket: str = Query(default=""),
+):
+    from fastapi import WebSocketException
+    from src.asoc.core.auth import require_ws_token
 
-    ws_token = settings.WS_API_TOKEN.get_secret_value() if settings.WS_API_TOKEN else ""
-    if not ws_token:
-        logger.error("ws_token_not_configured")
-        await websocket.close(code=4001, reason="Server configuration error")
-        return
-    if not token or not hmac.compare_digest(token, ws_token):
+    try:
+        auth_data = await require_ws_token(token=token, ticket=ticket)
+        logger.info("websocket_connection_authorized", client=auth_data.get("user_id"))
+    except WebSocketException:
         await websocket.close(code=4001, reason="Unauthorized")
         return
 

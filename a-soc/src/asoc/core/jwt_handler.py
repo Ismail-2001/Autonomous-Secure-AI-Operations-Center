@@ -228,14 +228,24 @@ def create_token_pair(
     }
     refresh_token = jwt.encode(refresh_payload, _get_private_key(), algorithm="RS256")
 
-    # Store refresh token record
-    _refresh_tokens[refresh_jti] = RefreshTokenRecord(
+    # Store refresh token record locally
+    record = RefreshTokenRecord(
         jti=refresh_jti,
         user_id=user_id,
         fingerprint=fp,
         created_at=now,
         expires_at=now + refresh_ttl_seconds,
     )
+    _refresh_tokens[refresh_jti] = record
+
+    try:
+        import asyncio
+        loop = asyncio.get_running_loop()
+        if loop and loop.is_running():
+            from src.asoc.core.redis_client import save_refresh_token
+            loop.create_task(save_refresh_token(record.model_dump(), refresh_ttl_seconds))
+    except (RuntimeError, ImportError):
+        pass
 
     logger.info("token_pair_created", user_id=user_id, role=role.value)
 
@@ -275,6 +285,69 @@ def verify_access_token(token: str, client_id: str = "default") -> Optional[Toke
         return None
     except Exception as e:
         logger.warning("token_verification_failed", error=str(e))
+        return None
+
+
+async def async_rotate_refresh_token(
+    old_refresh_token: str,
+    client_id: str = "default",
+) -> Optional[TokenPair]:
+    """Asynchronously rotate refresh token using Redis store with reuse detection."""
+    try:
+        payload = jwt.decode(old_refresh_token, _get_public_key(), algorithms=["RS256"])
+        tp = TokenPayload(**payload)
+
+        if tp.type != "refresh":
+            logger.warning("not_a_refresh_token")
+            return None
+
+        from src.asoc.core.redis_client import (
+            get_refresh_token,
+            mark_refresh_token_revoked,
+            revoke_all_tokens_for_user,
+        )
+
+        record = await get_refresh_token(tp.jti)
+        if not record:
+            record_obj = _refresh_tokens.get(tp.jti)
+            record = record_obj.model_dump() if record_obj else None
+
+        if not record:
+            logger.warning("refresh_token_not_found", jti=tp.jti)
+            return None
+
+        if record.get("revoked", False):
+            logger.warning("refresh_token_reuse_detected", jti=tp.jti, user_id=tp.sub)
+            await revoke_all_tokens_for_user(tp.sub)
+            _revoke_all_user_tokens(tp.sub)
+            return None
+
+        expected_fp = _fingerprint(client_id)
+        if record.get("fingerprint") != expected_fp:
+            logger.warning("refresh_fingerprint_mismatch")
+            return None
+
+        # Issue new pair
+        new_pair = create_token_pair(
+            user_id=tp.sub,
+            role=Role(tp.role),
+            client_id=client_id,
+        )
+
+        # Revoke old refresh token in Redis and memory
+        await mark_refresh_token_revoked(tp.jti, replaced_by=new_pair.access_token[:16])
+        if tp.jti in _refresh_tokens:
+            _refresh_tokens[tp.jti].revoked = True
+            _refresh_tokens[tp.jti].replaced_by_jti = new_pair.access_token[:16]
+
+        logger.info("refresh_token_rotated_async", user_id=tp.sub, old_jti=tp.jti)
+        return new_pair
+
+    except jwt.ExpiredSignatureError:
+        logger.info("refresh_token_expired")
+        return None
+    except Exception as e:
+        logger.warning("async_refresh_rotation_failed", error=str(e))
         return None
 
 
@@ -319,6 +392,16 @@ def rotate_refresh_token(
         # Link old → new for audit trail
         record.replaced_by_jti = new_pair.access_token[:16]
 
+        # Trigger async sync to Redis if loop is running
+        try:
+            import asyncio
+            loop = asyncio.get_running_loop()
+            if loop and loop.is_running():
+                from src.asoc.core.redis_client import mark_refresh_token_revoked
+                loop.create_task(mark_refresh_token_revoked(tp.jti, replaced_by=new_pair.access_token[:16]))
+        except (RuntimeError, ImportError):
+            pass
+
         logger.info("refresh_token_rotated", user_id=tp.sub, old_jti=tp.jti)
         return new_pair
 
@@ -335,6 +418,14 @@ def _revoke_all_user_tokens(user_id: str) -> None:
     for record in _refresh_tokens.values():
         if record.user_id == user_id:
             record.revoked = True
+    try:
+        import asyncio
+        loop = asyncio.get_running_loop()
+        if loop and loop.is_running():
+            from src.asoc.core.redis_client import revoke_all_tokens_for_user
+            loop.create_task(revoke_all_tokens_for_user(user_id))
+    except (RuntimeError, ImportError):
+        pass
     logger.warning("all_tokens_revoked", user_id=user_id)
 
 
@@ -343,8 +434,15 @@ def revoke_token(jti: str) -> bool:
     record = _refresh_tokens.get(jti)
     if record:
         record.revoked = True
-        return True
-    return False
+    try:
+        import asyncio
+        loop = asyncio.get_running_loop()
+        if loop and loop.is_running():
+            from src.asoc.core.redis_client import mark_refresh_token_revoked
+            loop.create_task(mark_refresh_token_revoked(jti))
+    except (RuntimeError, ImportError):
+        pass
+    return bool(record)
 
 
 # ── FastAPI Dependencies ──────────────────────────────────────────────────

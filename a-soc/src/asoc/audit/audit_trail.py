@@ -32,6 +32,7 @@ logger = get_logger("asoc.audit")
 class AuditEntry(BaseModel):
     entry_id: str = Field(default_factory=lambda: secrets.token_urlsafe(16))
     timestamp: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    key_date: str = Field(default_factory=lambda: datetime.now(timezone.utc).strftime("%Y-%m-%d"))
     agent_id: str
     action: str
     payload: dict[str, Any] = Field(default_factory=dict)
@@ -64,10 +65,10 @@ def _get_hmac_key() -> bytes:
     return b"dev-hmac-key-not-for-production"
 
 
-def _rotate_key() -> bytes:
-    """In production, keys rotate via Vault/KMS. This simulates rotation."""
+def _rotate_key(key_date: Optional[str] = None) -> bytes:
+    """In production, keys rotate via Vault/KMS. Key is pinned to the entry's rotation day."""
     base = _get_hmac_key()
-    day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    day = key_date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
     return f"{base.decode()}:{day}".encode()
 
 
@@ -80,19 +81,21 @@ def hash_payload(payload: dict[str, Any]) -> str:
     return hashlib.sha256(canonical.encode()).hexdigest()
 
 
-def sign_entry(payload_hash: str, previous_hash: str) -> str:
+def sign_entry(payload_hash: str, previous_hash: str, key_date: Optional[str] = None) -> str:
     """HMAC-SHA256 signature of the entry's critical fields."""
-    key = _rotate_key()
+    key = _rotate_key(key_date)
     message = f"{payload_hash}:{previous_hash}".encode()
     return hmac.new(key, message, hashlib.sha256).hexdigest()
 
 
 def compute_entry_hash(entry: AuditEntry) -> str:
     """SHA-256 of the full entry (used as previous_hash for next entry)."""
+    k_date = getattr(entry, "key_date", None) or (entry.timestamp[:10] if entry.timestamp else "")
     canonical = json.dumps(
         {
             "entry_id": entry.entry_id,
             "timestamp": entry.timestamp,
+            "key_date": k_date,
             "agent_id": entry.agent_id,
             "action": entry.action,
             "payload_hash": entry.payload_hash,
@@ -148,8 +151,10 @@ class AuditTrail:
     ) -> AuditEntry:
         """Append a signed, chained audit entry."""
         payload = payload or {}
+        now_utc = datetime.now(timezone.utc)
+        k_date = now_utc.strftime("%Y-%m-%d")
         p_hash = hash_payload(payload)
-        sig = sign_entry(p_hash, self._last_hash)
+        sig = sign_entry(p_hash, self._last_hash, key_date=k_date)
 
         entry = AuditEntry(
             agent_id=agent_id,
@@ -158,6 +163,8 @@ class AuditTrail:
             payload_hash=p_hash,
             previous_hash=self._last_hash,
             hmac_signature=sig,
+            key_date=k_date,
+            timestamp=now_utc.isoformat(),
         )
         entry.entry_hash = compute_entry_hash(entry)
 
@@ -177,9 +184,10 @@ class AuditTrail:
         return entry
 
     def verify_entry(self, entry: AuditEntry, expected_previous_hash: str) -> bool:
-        """Verify a single entry's HMAC signature and chain link."""
-        # Verify HMAC signature
-        expected_sig = sign_entry(entry.payload_hash, entry.previous_hash)
+        """Verify a single entry's HMAC signature and chain link across rotation days."""
+        # Verify HMAC signature using the entry's rotation day
+        k_date = getattr(entry, "key_date", None) or (entry.timestamp[:10] if entry.timestamp else None)
+        expected_sig = sign_entry(entry.payload_hash, entry.previous_hash, key_date=k_date)
         if not hmac.compare_digest(entry.hmac_signature, expected_sig):
             return False
 

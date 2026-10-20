@@ -23,12 +23,27 @@ CREATE TABLE IF NOT EXISTS incidents (
     agent VARCHAR(100) NOT NULL DEFAULT 'DetectionAgent',
     risk_score FLOAT NOT NULL DEFAULT 0.0,
     tags JSONB NOT NULL DEFAULT '[]',
+    triage_status VARCHAR(50) NOT NULL DEFAULT 'unassigned',
+    assigned_to VARCHAR(128),
+    sla_deadline TIMESTAMPTZ,
+    mitre_attack JSONB NOT NULL DEFAULT '[]',
+    triage_notes TEXT NOT NULL DEFAULT '',
+    resolution_summary TEXT NOT NULL DEFAULT '',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_incidents_number ON incidents(incident_number);
 CREATE INDEX IF NOT EXISTS idx_incidents_severity ON incidents(severity);
 CREATE INDEX IF NOT EXISTS idx_incidents_status ON incidents(status);
+CREATE INDEX IF NOT EXISTS idx_incidents_triage_status ON incidents(triage_status);
+CREATE INDEX IF NOT EXISTS idx_incidents_assigned_to ON incidents(assigned_to);
+
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS triage_status VARCHAR(50) NOT NULL DEFAULT 'unassigned';
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS assigned_to VARCHAR(128);
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS sla_deadline TIMESTAMPTZ;
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS mitre_attack JSONB NOT NULL DEFAULT '[]';
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS triage_notes TEXT NOT NULL DEFAULT '';
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS resolution_summary TEXT NOT NULL DEFAULT '';
 
 CREATE TABLE IF NOT EXISTS assets (
     id VARCHAR(36) PRIMARY KEY,
@@ -92,12 +107,24 @@ CREATE INDEX IF NOT EXISTS idx_compliance_framework ON compliance_controls(frame
 CREATE TABLE IF NOT EXISTS users (
     id VARCHAR(36) PRIMARY KEY,
     user_id VARCHAR(128) NOT NULL UNIQUE,
+    username VARCHAR(128),
+    password_hash VARCHAR(255),
     role VARCHAR(20) NOT NULL DEFAULT 'analyst',
     client_id VARCHAR(128) NOT NULL DEFAULT 'default',
+    failed_login_count INT NOT NULL DEFAULT 0,
+    locked_until TIMESTAMPTZ,
     is_active BOOLEAN NOT NULL DEFAULT true,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     last_login TIMESTAMPTZ
 );
+CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(128);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_login_count INT NOT NULL DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_until TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 
 CREATE TABLE IF NOT EXISTS audit_entries (
     id VARCHAR(36) PRIMARY KEY,

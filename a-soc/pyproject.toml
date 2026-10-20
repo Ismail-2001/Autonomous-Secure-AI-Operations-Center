@@ -27,6 +27,7 @@ dependencies = [
     "sqlalchemy",
     "psycopg2-binary",
     "alembic",
+    "argon2-cffi",
     "redis[hiredis]",
     "pinecone",
     "openai",

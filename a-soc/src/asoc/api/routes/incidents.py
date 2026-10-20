@@ -8,7 +8,7 @@ from fastapi import Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from src.asoc.audit.audit_trail import get_audit_trail
-from src.asoc.core.auth import require_jwt
+from src.asoc.core.auth import Role, require_jwt, require_role
 from src.asoc.core.connection import get_db_pool
 
 from . import router
@@ -64,7 +64,7 @@ async def list_incidents(limit: int = Query(20, ge=1, le=100)):
         }
 
 
-@router.post("/incidents", dependencies=[Depends(require_jwt)])
+@router.post("/incidents", dependencies=[Depends(require_role(Role.ANALYST))])
 async def create_incident(req: CreateIncidentRequest):
     risk_map = {"critical": 90.0, "high": 70.0, "medium": 50.0, "low": 25.0}
     risk_score = risk_map.get(req.severity, 50.0)
@@ -106,7 +106,7 @@ async def create_incident(req: CreateIncidentRequest):
     }
 
 
-@router.patch("/incidents/{incident_id}/triage", dependencies=[Depends(require_jwt)])
+@router.patch("/incidents/{incident_id}/triage", dependencies=[Depends(require_role(Role.ANALYST))])
 async def triage_incident(incident_id: str, req: TriageRequest):
     db = await get_db_pool()
     async with db.pool.acquire() as conn:
@@ -144,7 +144,7 @@ async def triage_incident(incident_id: str, req: TriageRequest):
     return {"ok": True, "incident_id": incident_id, "triage_status": req.triage_status}
 
 
-@router.post("/incidents/{incident_id}/actions", dependencies=[Depends(require_jwt)])
+@router.post("/incidents/{incident_id}/actions", dependencies=[Depends(require_role(Role.SUPERVISOR))])
 async def add_response_action(incident_id: str, req: ResponseActionRequest):
     db = await get_db_pool()
     async with db.pool.acquire() as conn:
