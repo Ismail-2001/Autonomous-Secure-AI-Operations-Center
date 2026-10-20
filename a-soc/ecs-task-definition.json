@@ -1,0 +1,109 @@
+{
+  "family": "Fargate",
+  "compatibilities": ["EC2", "FARGATE"],
+  "requiresCompatibilities": ["FARGATE"],
+  "networkMode": "awsvpc",
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::ACCOUNT_ID:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::ACCOUNT_ID:role/ecsTaskRole",
+  "containerDefinitions": [
+    {
+      "name": "backend",
+      "image": "ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/asoc-backend:latest",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 9002,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        { "name": "DATABASE_URL", "value": "postgresql+asyncpg://asoc_user:PASSWORD@asoc-db.us-east-1.rds.amazonaws.com:5432/asoc_db" },
+        { "name": "REDIS_URL", "value": "redis://asoc-redis.us-east-1.amazonaws.com:6379/0" },
+        { "name": "OPA_URL", "value": "http://localhost:8181" },
+        { "name": "CORS_ORIGINS", "value": "https://asoc.yourdomain.com" },
+        { "name": "LOG_LEVEL", "value": "info" }
+      ],
+      "secrets": [
+        { "name": "OPENAI_API_KEY", "valueFrom": "arn:aws:ssm:us-east-1:ACCOUNT_ID:parameter/asoc/openai-api-key" },
+        { "name": "HMAC_SECRET", "valueFrom": "arn:aws:ssm:us-east-1:ACCOUNT_ID:parameter/asoc/hmac-secret" },
+        { "name": "WS_API_TOKEN", "valueFrom": "arn:aws:ssm:us-east-1:ACCOUNT_ID:parameter/asoc/ws-api-token" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/asoc-backend",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+      "healthCheck": {
+        "command": ["CMD-SHELL", "curl -f http://localhost:9002/health || exit 1"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 60
+      },
+      "linuxParameters": {
+        "initProcessEnabled": true
+      }
+    },
+    {
+      "name": "dashboard",
+      "image": "ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/asoc-dashboard:latest",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 3000,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        { "name": "NEXT_PUBLIC_API_URL", "value": "http://localhost:9002" },
+        { "name": "NEXT_PUBLIC_WS_URL", "value": "ws://localhost:9002" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/asoc-dashboard",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+      "healthCheck": {
+        "command": ["CMD-SHELL", "curl -f http://localhost:3000 || exit 1"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 60
+      }
+    },
+    {
+      "name": "opa",
+      "image": "openpolicyagent/opa:latest",
+      "essential": false,
+      "portMappings": [
+        {
+          "containerPort": 8181,
+          "protocol": "tcp"
+        }
+      ],
+      "command": ["run", "--server", "--addr=0.0.0.0:8181"],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/asoc-opa",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ],
+  "volumes": [],
+  "placementConstraints": [],
+  "tags": [
+    { "key": "Project", "value": "A-SOC" },
+    { "key": "Environment", "value": "production" }
+  ]
+}

@@ -1,0 +1,15 @@
+node_modules
+.next
+.git
+.gitignore
+README.md
+TECH_DECISIONS.md
+.env*
+*.pem
+*.tsbuildinfo
+next-env.d.ts
+.vercel
+coverage
+build
+out
+.DS_Store

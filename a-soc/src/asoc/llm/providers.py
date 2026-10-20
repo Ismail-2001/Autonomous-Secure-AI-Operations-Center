@@ -1,0 +1,175 @@
+import abc
+import json
+import logging
+from typing import Any, Dict, Optional
+
+from src.asoc.core.config import settings
+
+logger = logging.getLogger("asoc.llm")
+
+
+class LLMResult:
+    def __init__(
+        self, threat_detected: bool, risk_score: float, reasoning: str, attack_technique: Optional[str] = None
+    ):
+        self.threat_detected = threat_detected
+        self.risk_score = max(0.0, min(1.0, risk_score))
+        self.reasoning = reasoning
+        self.attack_technique = attack_technique
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {"risk_score": self.risk_score, "reasoning": self.reasoning, "attack_technique": self.attack_technique}
+
+
+class LLMProvider(abc.ABC):
+    @abc.abstractmethod
+    async def analyze(self, event_data: dict) -> LLMResult: ...
+
+    @property
+    @abc.abstractmethod
+    def name(self) -> str: ...
+
+
+class MockProvider(LLMProvider):
+    @property
+    def name(self) -> str:
+        return "mock"
+
+    async def analyze(self, event_data: dict) -> LLMResult:
+        return LLMResult(
+            threat_detected=True, risk_score=0.85, reasoning="Suspicious ConsoleLogin from unusual IP address (1.2.3.4)"
+        )
+
+
+PROMPT_TEMPLATE = """Analyze this AWS CloudTrail event for security threats.
+Event: {event_json}
+
+Return a JSON object with exactly these fields:
+- threat_detected: boolean
+- risk_score: float between 0.0 and 1.0
+- reasoning: string explaining the analysis
+- attack_technique: string (MITRE ATT&CK ID if applicable, or null)"""
+
+
+class OpenAIProvider(LLMProvider):
+    def __init__(self, api_key: str, model: str = "gpt-4"):
+        self.api_key = api_key
+        self.model = model
+        self._client = None
+
+    @property
+    def name(self) -> str:
+        return f"openai:{self.model}"
+
+    def _lazy_init(self):
+        if self._client is None:
+            from openai import AsyncOpenAI
+
+            self._client = AsyncOpenAI(api_key=self.api_key)
+
+    async def analyze(self, event_data: dict) -> LLMResult:
+        self._lazy_init()
+        try:
+            prompt = PROMPT_TEMPLATE.format(event_json=json.dumps(event_data, indent=2))
+            response = await self._client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0,
+            )
+            result = json.loads(response.choices[0].message.content.strip())
+            return LLMResult(
+                threat_detected=result.get("threat_detected", True),
+                risk_score=result.get("risk_score", 0.5),
+                reasoning=result.get("reasoning", "No reasoning provided"),
+                attack_technique=result.get("attack_technique"),
+            )
+        except Exception as e:
+            logger.error("OpenAI analysis failed: %s", e)
+            raise
+
+
+class AnthropicProvider(LLMProvider):
+    def __init__(self, api_key: str, model: str = "claude-3-opus-20240229"):
+        self.api_key = api_key
+        self.model = model
+        self._client = None
+
+    @property
+    def name(self) -> str:
+        return f"anthropic:{self.model}"
+
+    def _lazy_init(self):
+        if self._client is None:
+            from anthropic import AsyncAnthropic
+
+            self._client = AsyncAnthropic(api_key=self.api_key)
+
+    async def analyze(self, event_data: dict) -> LLMResult:
+        self._lazy_init()
+        try:
+            prompt = PROMPT_TEMPLATE.format(event_json=json.dumps(event_data, indent=2))
+            response = await self._client.messages.create(
+                model=self.model,
+                max_tokens=1024,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            content = response.content[0].text if hasattr(response.content[0], "text") else str(response.content)
+            result = json.loads(content.strip())
+            return LLMResult(
+                threat_detected=result.get("threat_detected", True),
+                risk_score=result.get("risk_score", 0.5),
+                reasoning=result.get("reasoning", "No reasoning provided"),
+                attack_technique=result.get("attack_technique"),
+            )
+        except Exception as e:
+            logger.error("Anthropic analysis failed: %s", e)
+            raise
+
+
+class OllamaProvider(LLMProvider):
+    def __init__(self, model: str = "llama3", base_url: str = "http://localhost:11434"):
+        self.model = model
+        self.base_url = base_url
+        self._client = None
+
+    @property
+    def name(self) -> str:
+        return f"ollama:{self.model}"
+
+    def _lazy_init(self):
+        if self._client is None:
+            from openai import AsyncOpenAI
+
+            self._client = AsyncOpenAI(base_url=f"{self.base_url}/v1", api_key="ollama")
+
+    async def analyze(self, event_data: dict) -> LLMResult:
+        self._lazy_init()
+        try:
+            prompt = PROMPT_TEMPLATE.format(event_json=json.dumps(event_data, indent=2))
+            response = await self._client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0,
+            )
+            result = json.loads(response.choices[0].message.content.strip())
+            return LLMResult(
+                threat_detected=result.get("threat_detected", True),
+                risk_score=result.get("risk_score", 0.5),
+                reasoning=result.get("reasoning", "No reasoning provided"),
+                attack_technique=result.get("attack_technique"),
+            )
+        except Exception as e:
+            logger.error("Ollama analysis failed: %s", e)
+            raise
+
+
+def create_llm_provider() -> LLMProvider:
+    provider_type = settings.LLM_PROVIDER
+    if provider_type == "openai" and settings.OPENAI_API_KEY:
+        return OpenAIProvider(api_key=settings.OPENAI_API_KEY.get_secret_value(), model=settings.LLM_MODEL)
+    if provider_type == "anthropic" and settings.ANTHROPIC_API_KEY:
+        return AnthropicProvider(api_key=settings.ANTHROPIC_API_KEY.get_secret_value(), model=settings.LLM_MODEL)
+    if provider_type in ("ollama", "local"):
+        return OllamaProvider(model=settings.LOCAL_LLM_MODEL, base_url=settings.LOCAL_LLM_BASE_URL)
+    logger.warning("No valid LLM provider configured for '%s'. Using mock fallback.", provider_type)
+    return MockProvider()

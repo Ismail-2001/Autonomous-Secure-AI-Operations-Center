@@ -1,0 +1,8 @@
+# Trivy ignore file for A-SOC
+# Review these exceptions before each release
+
+# CVE-2023-45803 - urllib3 HTTP connection leak (low severity, no public exploit)
+CVE-2023-45803
+
+# CVE-2024-27306 - aiohttp known issue (patched in upstream but requires Python 3.13)
+CVE-2024-27306

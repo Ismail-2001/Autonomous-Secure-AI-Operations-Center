@@ -1,0 +1,91 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "a-soc"
+version = "1.0.0-beta"
+description = "Autonomous Secure AI Operations Center"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic",
+    "pydantic-settings",
+    "langgraph",
+    "langgraph-checkpoint-postgres",
+    "langchain-openai",
+    "langchain-anthropic",
+    "langchain-ollama",
+    "PyJWT",
+    "cryptography",
+    "boto3",
+    "aiofiles",
+    "httpx",
+    "asyncpg",
+    "sqlalchemy",
+    "psycopg2-binary",
+    "alembic",
+    "redis[hiredis]",
+    "pinecone",
+    "openai",
+    "anthropic",
+    "prometheus-fastapi-instrumentator",
+    "opentelemetry-api",
+    "opentelemetry-sdk",
+    "opentelemetry-exporter-otlp-proto-http",
+    "opentelemetry-instrumentation-fastapi",
+    "opentelemetry-instrumentation-httpx",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+markers = [
+    "asyncio: mark test as async",
+    "e2e: end-to-end pipeline tests",
+    "performance: performance regression tests",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.coverage.run]
+source = ["src"]
+omit = ["*/__init__.py", "tests/*", "api.py"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]
+
+[tool.black]
+line-length = 120
+target-version = ["py311"]
+
+[tool.isort]
+profile = "black"
+line_length = 120
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=4.1",
+    "pytest-httpx>=0.30",
+    "black==26.5.1",
+    "isort==9.0.2",
+    "autoflake>=2.2",
+    "mypy>=1.8",
+    "httpx>=0.27",
+]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+warn_unused_ignores = true

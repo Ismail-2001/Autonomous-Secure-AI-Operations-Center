@@ -1,0 +1,22 @@
+# Playwright E2E Test Runner for A-SOC Dashboard
+# Usage: docker build -t a-soc-tests -f Dockerfile.test . && docker run --rm a-soc-tests
+
+FROM node:20-playwright
+
+WORKDIR /app
+
+# Install dependencies
+COPY package.json package-lock.json ./
+RUN rm -f package-lock.json && npm install --legacy-peer-deps
+
+# Install Playwright browsers
+RUN npx playwright install --with-deps chromium
+
+# Copy source
+COPY . .
+
+# Install dev dependencies (including playwright)
+RUN npm install --save-dev @playwright/test
+
+# Run tests
+CMD ["npx", "playwright", "test", "--reporter=list"]

@@ -1,0 +1,102 @@
+version: "3.8"
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.52
+    container_name: asoc-prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/etc/prometheus/console_libraries"
+      - "--web.console.templates=/etc/prometheus/consoles"
+      - "--web.enable-lifecycle"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - asoc-network
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.0
+    container_name: asoc-grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+    volumes:
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3001:3000"
+    networks:
+      - asoc-network
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+
+  loki:
+    image: grafana/loki:3.0
+    container_name: asoc-loki
+    command: "-config.file=/etc/loki/loki.yml"
+    volumes:
+      - ./monitoring/loki.yml:/etc/loki/loki.yml:ro
+      - loki_data:/loki
+    ports:
+      - "3100:3100"
+    networks:
+      - asoc-network
+    restart: unless-stopped
+
+  promtail:
+    image: grafana/promtail:3.0
+    container_name: asoc-promtail
+    command: "-config.file=/etc/promtail/promtail.yml"
+    volumes:
+      - ./monitoring/promtail.yml:/etc/promtail/promtail.yml:ro
+      - /var/log:/var/log:ro
+      - asoc_data:/app/data:ro
+    networks:
+      - asoc-network
+    restart: unless-stopped
+    depends_on:
+      - loki
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.57
+    container_name: asoc-jaeger
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    ports:
+      - "16686:16686"
+      - "4317:4317"
+      - "4318:4318"
+    networks:
+      - asoc-network
+    restart: unless-stopped
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.101
+    container_name: asoc-otel-collector
+    command: ["--config=/etc/otel-collector.yml"]
+    volumes:
+      - ./monitoring/otel-collector.yml:/etc/otel-collector.yml:ro
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    networks:
+      - asoc-network
+    restart: unless-stopped
+    depends_on:
+      - jaeger
+
+volumes:
+  prometheus_data:
+  grafana_data:
+  loki_data:
+
+networks:
+  asoc-network:
+    external: true

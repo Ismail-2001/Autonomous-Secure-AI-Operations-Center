@@ -1,0 +1,9 @@
+# Snyk policy for A-SOC
+exclude:
+  global:
+    - "tests/**/*"
+    - "dashboard/**/*"
+patch:
+  SNYK-PYTHON-URLLIB3-1234:
+    - "*":
+        patched: "2026-01-01"
