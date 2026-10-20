@@ -32,6 +32,7 @@ from src.asoc.api.routes import (  # noqa: F401
     get_event_store,
     hunting,
     incidents,
+    jobs,
 )
 from src.asoc.api.routes import router as api_v1
 from src.asoc.api.routes import threat_intel

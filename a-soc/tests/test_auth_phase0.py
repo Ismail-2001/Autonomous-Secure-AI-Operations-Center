@@ -175,11 +175,11 @@ class TestAuthApiEndpoints:
         asyncio.run(service.create_user("api_test_user", "ValidPassword2026!", role="analyst"))
 
         # 1. Invalid credentials
-        res = client.post("/auth/login", json={"username": "api_test_user", "password": "WrongPassword"})
+        res = client.post("/api/v1/auth/login", json={"username": "api_test_user", "password": "WrongPassword"})
         assert res.status_code == 401
 
         # 2. Valid credentials
-        res = client.post("/auth/login", json={"username": "api_test_user", "password": "ValidPassword2026!"})
+        res = client.post("/api/v1/auth/login", json={"username": "api_test_user", "password": "ValidPassword2026!"})
         assert res.status_code == 200
         data = res.json()
         assert "access_token" in data
@@ -189,12 +189,12 @@ class TestAuthApiEndpoints:
     def test_arbitrary_token_minting_blocked_in_production(self, client):
         # In development: allowed
         with patch.object(settings, "ENVIRONMENT", "development"):
-            res = client.post("/auth/token", json={"user_id": "attacker", "role": "admin"})
+            res = client.post("/api/v1/auth/token", json={"user_id": "attacker", "role": "admin"})
             assert res.status_code == 200
 
         # In production: strictly blocked
         with patch.object(settings, "ENVIRONMENT", "production"):
-            res = client.post("/auth/token", json={"user_id": "attacker", "role": "admin"})
+            res = client.post("/api/v1/auth/token", json={"user_id": "attacker", "role": "admin"})
             assert res.status_code == 403
             assert "disabled in production" in res.json()["detail"]
 
@@ -202,7 +202,7 @@ class TestAuthApiEndpoints:
         tokens = create_token_pair(user_id="soc-analyst", role=Role.ANALYST)
         headers = {"Authorization": f"Bearer {tokens.access_token}"}
 
-        res = client.post("/auth/ws-ticket", headers=headers)
+        res = client.post("/api/v1/auth/ws-ticket", headers=headers)
         assert res.status_code == 200
         data = res.json()
         assert "ticket" in data
@@ -224,7 +224,7 @@ class TestRbacEndpointEnforcement:
 
         # Viewer attempt -> 403 Forbidden
         res_viewer = client.patch(
-            "/incidents/INC-2026-0471/triage",
+            "/api/v1/incidents/INC-2026-0471/triage",
             headers={"Authorization": f"Bearer {viewer_tokens.access_token}"},
             json={"triage_status": "in_progress"},
         )
@@ -232,7 +232,7 @@ class TestRbacEndpointEnforcement:
 
         # Analyst attempt -> authorized (proceeds to business logic)
         res_analyst = client.patch(
-            "/incidents/INC-2026-0471/triage",
+            "/api/v1/incidents/INC-2026-0471/triage",
             headers={"Authorization": f"Bearer {analyst_tokens.access_token}"},
             json={"triage_status": "in_progress"},
         )
@@ -245,7 +245,7 @@ class TestRbacEndpointEnforcement:
 
         # Analyst is forbidden from executing response actions
         res_analyst = client.post(
-            "/incidents/INC-2026-0471/actions",
+            "/api/v1/incidents/INC-2026-0471/actions",
             headers={"Authorization": f"Bearer {analyst_tokens.access_token}"},
             json={"action_type": "isolate_host", "target": "AST-002"},
         )
@@ -253,7 +253,7 @@ class TestRbacEndpointEnforcement:
 
         # Supervisor is permitted
         res_sup = client.post(
-            "/incidents/INC-2026-0471/actions",
+            "/api/v1/incidents/INC-2026-0471/actions",
             headers={"Authorization": f"Bearer {supervisor_tokens.access_token}"},
             json={"action_type": "isolate_host", "target": "AST-002"},
         )

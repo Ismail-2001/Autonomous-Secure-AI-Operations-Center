@@ -137,6 +137,24 @@ CREATE TABLE IF NOT EXISTS audit_entries (
 CREATE INDEX IF NOT EXISTS idx_audit_agent ON audit_entries(agent_id);
 CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_entries(action);
 CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_entries(timestamp);
+
+CREATE TABLE IF NOT EXISTS jobs (
+    id VARCHAR(36) PRIMARY KEY,
+    incident_id VARCHAR(36) NOT NULL,
+    state VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+    attempt INT NOT NULL DEFAULT 0,
+    max_attempts INT NOT NULL DEFAULT 3,
+    locked_by VARCHAR(128),
+    locked_at TIMESTAMPTZ,
+    heartbeat_at TIMESTAMPTZ,
+    error TEXT,
+    state_payload JSONB NOT NULL DEFAULT '{}',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_jobs_state_locked_at ON jobs(state, locked_at);
+CREATE INDEX IF NOT EXISTS idx_jobs_incident_id ON jobs(incident_id);
+CREATE INDEX IF NOT EXISTS idx_jobs_locked_by ON jobs(locked_by);
 """
 
 
@@ -750,6 +768,7 @@ async def main():
         "compliance_controls",
         "users",
         "audit_entries",
+        "jobs",
     }
     missing = target - existing
 
