@@ -245,16 +245,60 @@ class ResponseAgent(BaseAgent):
         )
 
     async def _tool_block_ip(self, ip: str, reason: str = "") -> bool:
-        return await self.provider.block_ip(ip, reason)
+        from src.asoc.core.idempotency import execute_idempotent
+
+        incident_id = getattr(self, "_current_incident_id", "incident-default")
+        executed, res = await execute_idempotent(
+            incident_id=incident_id,
+            action_name="BLOCK_IP",
+            params={"ip": ip},
+            func=self.provider.block_ip,
+            ip=ip,
+            reason=reason,
+        )
+        return res if isinstance(res, bool) else True
 
     async def _tool_revoke_iam(self, user: str, reason: str = "") -> bool:
-        return await self.provider.revoke_iam_access(user, reason)
+        from src.asoc.core.idempotency import execute_idempotent
+
+        incident_id = getattr(self, "_current_incident_id", "incident-default")
+        executed, res = await execute_idempotent(
+            incident_id=incident_id,
+            action_name="REVOKE_IAM",
+            params={"user": user},
+            func=self.provider.revoke_iam_access,
+            user=user,
+            reason=reason,
+        )
+        return res if isinstance(res, bool) else True
 
     async def _tool_isolate(self, instance_id: str, reason: str = "") -> bool:
-        return await self.provider.isolate_instance(instance_id, reason)
+        from src.asoc.core.idempotency import execute_idempotent
+
+        incident_id = getattr(self, "_current_incident_id", "incident-default")
+        executed, res = await execute_idempotent(
+            incident_id=incident_id,
+            action_name="ISOLATE_INSTANCE",
+            params={"instance_id": instance_id},
+            func=self.provider.isolate_instance,
+            instance_id=instance_id,
+            reason=reason,
+        )
+        return res if isinstance(res, bool) else True
 
     async def _tool_quarantine_s3(self, bucket_name: str, reason: str = "") -> bool:
-        return await self.provider.quarantine_s3_bucket(bucket_name, reason)
+        from src.asoc.core.idempotency import execute_idempotent
+
+        incident_id = getattr(self, "_current_incident_id", "incident-default")
+        executed, res = await execute_idempotent(
+            incident_id=incident_id,
+            action_name="QUARANTINE_S3",
+            params={"bucket_name": bucket_name},
+            func=self.provider.quarantine_s3_bucket,
+            bucket_name=bucket_name,
+            reason=reason,
+        )
+        return res if isinstance(res, bool) else True
 
     async def _tool_verify(self, action_type: str, target: str) -> bool:
         return await self.provider.verify_remediation(action_type, target)
@@ -278,6 +322,7 @@ class ResponseAgent(BaseAgent):
 
     @traceable(name="response_perceive", run_type="chain")
     async def perceive(self, state: AgentState) -> Dict[str, Any]:
+        self._current_incident_id = state.get("incident_id", "incident-default")
         latest_msg = state["messages"][-1] if state.get("messages") else None
         action = ""
         target = ""

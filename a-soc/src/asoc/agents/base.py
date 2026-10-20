@@ -49,6 +49,110 @@ class BaseAgent(abc.ABC):
         """Generate structured observation from action results."""
         ...
 
+    async def _run_tool_loop(
+        self,
+        provider: Any,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        max_turns: int = 5,
+        is_authorized: bool = False,
+    ) -> Dict[str, Any]:
+        """Execute an autonomous tool-calling loop using the LLM provider.
+
+        The LLM decides which tools to call, inspects real outputs, and continues
+        until reaching a final structured conclusion or max_turns limit.
+        """
+        tools_schema = []
+        for tool_def in self.tool_registry.list_tools():
+            tools_schema.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": tool_def.name,
+                        "description": tool_def.description,
+                        "parameters": {
+                            "type": "object",
+                            "properties": tool_def.input_schema,
+                        },
+                    },
+                }
+            )
+
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+
+        executed_calls = []
+
+        for turn in range(max_turns):
+            response = await provider.chat_with_tools(messages, tools=tools_schema if tools_schema else None)
+            tool_calls = response.get("tool_calls")
+
+            # If no tool calls requested, we reached the final answer
+            if not tool_calls:
+                return {
+                    "final_content": response.get("content", ""),
+                    "executed_tool_calls": executed_calls,
+                    "turns": turn + 1,
+                }
+
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": response.get("content"),
+                    "tool_calls": tool_calls,
+                }
+            )
+
+            # Execute each requested tool
+            for tc in tool_calls:
+                func_name = tc["function"]["name"]
+                raw_args = tc["function"]["arguments"]
+                call_id = tc["id"]
+
+                try:
+                    args = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
+                except Exception:
+                    args = {}
+
+                # Validate permissions
+                if not self.tool_registry.validate_tool_call(func_name, is_authorized=is_authorized):
+                    tool_result = {"error": f"Tool '{func_name}' unauthorized or forbidden"}
+                else:
+                    try:
+                        tool_result = await self.tool_registry.execute(func_name, **args)
+                    except Exception as e:
+                        tool_result = {"error": str(e)}
+
+                executed_calls.append(
+                    {
+                        "tool": func_name,
+                        "args": args,
+                        "result": tool_result,
+                    }
+                )
+
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": call_id,
+                        "name": func_name,
+                        "content": json.dumps(tool_result, default=str),
+                    }
+                )
+
+        # Max turns reached, request final answer
+        messages.append(
+            {"role": "user", "content": "Conclude your analysis and provide the final structured JSON decision."}
+        )
+        final_resp = await provider.chat_with_tools(messages, tools=None)
+        return {
+            "final_content": final_resp.get("content", ""),
+            "executed_tool_calls": executed_calls,
+            "turns": max_turns,
+        }
+
     @traceable(name="agent_run_cycle", run_type="chain")
     async def run_cycle(self, state: AgentState) -> AgentState:
         """Execute the full perceive-reason-act-observe cycle."""

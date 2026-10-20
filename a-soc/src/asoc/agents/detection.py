@@ -19,6 +19,26 @@ class DetectionAgent(BaseAgent):
         self._provider = provider or create_llm_provider()
 
     def _register_default_tools(self) -> None:
+        from src.asoc.agents.security_tools import (
+            lookup_mitre_technique,
+            lookup_threat_intel,
+            query_siem_events,
+        )
+
+        self.tool_registry.register(
+            name="query_siem_events",
+            func=query_siem_events,
+            description="Search historical SIEM event logs to detect recurring patterns or anomalies",
+            input_schema={"query": {"type": "string"}, "limit": {"type": "integer"}},
+            output_schema={"status": {"type": "string"}, "events": {"type": "array"}},
+        )
+        self.tool_registry.register(
+            name="lookup_threat_intel",
+            func=lookup_threat_intel,
+            description="Lookup IP, domain, or file hash in global threat intelligence feeds",
+            input_schema={"indicator": {"type": "string"}, "indicator_type": {"type": "string"}},
+            output_schema={"found": {"type": "boolean"}, "severity": {"type": "string"}},
+        )
         self.tool_registry.register(
             name="analyze_threat_llm",
             func=self._tool_analyze_threat,
@@ -156,13 +176,20 @@ class DetectionAgent(BaseAgent):
     @traceable(name="detection_reason", run_type="chain")
     async def reason(self, state: AgentState, perceived: Dict[str, Any]) -> List[Dict[str, Any]]:
         event_data = perceived.get("event_data", {})
-        calls = [
-            {"tool": "analyze_threat_llm", "args": {"event_data": event_data}},
-            {"tool": "map_mitre_technique", "args": {"event_data": event_data}},
-        ]
+        calls = []
+
+        # If telemetry contains IP indicator, perform threat intel lookup
+        src_ip = event_data.get("sourceIPAddress", event_data.get("source_ip", event_data.get("ip_address")))
+        if src_ip:
+            calls.append({"tool": "lookup_threat_intel", "args": {"indicator": src_ip, "indicator_type": "ip"}})
+
+        calls.append({"tool": "analyze_threat_llm", "args": {"event_data": event_data}})
+        calls.append({"tool": "map_mitre_technique", "args": {"event_data": event_data}})
+
         event_name = event_data.get("eventName", event_data.get("event_name", ""))
         if event_name:
             calls.append({"tool": "query_risk_rules", "args": {"event_type": event_name}})
+
         calls.append(
             {
                 "tool": "calculate_risk_score",
