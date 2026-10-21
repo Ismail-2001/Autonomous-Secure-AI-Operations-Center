@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import Shell from "@/components/Shell";
+import AuditExportModal from "@/components/AuditExportModal";
 
 const PANEL_BG = "#0a0e1a";
 const PANEL_BORDER = "#1e2a3a";
@@ -40,6 +41,8 @@ export default function GovernancePage() {
   const [activeTab, setActiveTab] = useState<"governance" | "monitoring" | "hunting">("governance");
   const [searchQuery, setSearchQuery] = useState("");
   const [complianceData, setComplianceData] = useState<any>(null);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportFramework, setExportFramework] = useState<"soc2" | "iso27001" | "all">("all");
 
   useEffect(() => {
     import("@/lib/api").then(({ api, endpoints }) => {
@@ -126,8 +129,24 @@ export default function GovernancePage() {
                 }}
               />
             </div>
-            <button className="btn-cyan">Export SOC 2 Audit</button>
-            <button className="btn-gray">Executive Summary</button>
+            <button
+              className="btn-cyan"
+              onClick={() => {
+                setExportFramework("soc2");
+                setShowExportModal(true);
+              }}
+            >
+              Export SOC 2 Audit
+            </button>
+            <button
+              className="btn-gray"
+              onClick={() => {
+                setExportFramework("all");
+                setShowExportModal(true);
+              }}
+            >
+              Executive Summary
+            </button>
           </div>
         </motion.div>
 
@@ -326,22 +345,57 @@ export default function GovernancePage() {
         {/* BOTTOM 3 CARDS */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20 }}>
           {[
-            { title: "Incident History", desc: "Review historical breaches and remediation efficacy.", btn: "VIEW LOGS" },
-            { title: "Trust Center", desc: "Customer-facing security compliance portal dashboard.", btn: "MANAGE PORTAL" },
-            { title: "Audit Readiness", desc: "Pre-scan system for upcoming ISO audit gap analysis.", btn: "RUN GAP ANALYSIS" },
+            {
+              title: "SOC 2 Type II Evidence",
+              desc: "Generate continuous compliance attestations and audit working papers.",
+              btn: "EXPORT SOC 2 PACKAGE",
+              action: () => {
+                setExportFramework("soc2");
+                setShowExportModal(true);
+              },
+            },
+            {
+              title: "ISO/IEC 27001 Readiness",
+              desc: "Continuous controls verification against ISO 27001:2022 clauses A.5 - A.8.",
+              btn: "EXPORT ISO 27001 ATTESTATION",
+              action: () => {
+                setExportFramework("iso27001");
+                setShowExportModal(true);
+              },
+            },
+            {
+              title: "Unified Audit Working Paper",
+              desc: "Download complete cryptographically signed evidence manifest (.json & .pdf).",
+              btn: "GENERATE FULL BUNDLE",
+              action: () => {
+                setExportFramework("all");
+                setShowExportModal(true);
+              },
+            },
           ].map((card, i) => (
             <motion.div
               key={card.title}
-              initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.5 + i * 0.1 }}
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.5 + i * 0.1 }}
               className="bottom-card"
             >
               <h3>{card.title}</h3>
               <p>{card.desc}</p>
-              <button className="bottom-card-btn">{card.btn}</button>
+              <button className="bottom-card-btn" onClick={card.action}>
+                {card.btn}
+              </button>
             </motion.div>
           ))}
         </div>
       </div>
+
+      {/* ONE-CLICK AUDIT EVIDENCE EXPORT MODAL */}
+      <AuditExportModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        defaultFramework={exportFramework}
+      />
     </Shell>
   );
 }

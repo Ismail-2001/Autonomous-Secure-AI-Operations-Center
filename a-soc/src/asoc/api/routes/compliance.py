@@ -3,7 +3,8 @@
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import Depends, Query
+from fastapi import Depends, Query, Response
+from fastapi.responses import HTMLResponse
 
 from src.asoc.audit.compliance_exporter import (
     CompliancePackage,
@@ -62,3 +63,32 @@ async def export_compliance_evidence(
     """Export complete cryptographically signed audit evidence package (Supervisor or above)."""
     exporter = get_compliance_exporter()
     return await exporter.generate_evidence_package(framework=framework, days=days)
+
+
+@router.get("/compliance/export/html", response_class=HTMLResponse, dependencies=[Depends(require_jwt)])
+async def export_compliance_report_html(
+    framework: Framework = Query(Framework.ALL, description="Target compliance framework (soc2, iso27001, all)"),
+    days: int = Query(30, ge=1, le=365, description="Lookback window in days"),
+):
+    """Render a standalone, print-ready HTML / PDF audit attestation certificate."""
+    exporter = get_compliance_exporter()
+    package = await exporter.generate_evidence_package(framework=framework, days=days)
+    html_content = exporter.generate_html_report(package)
+    return HTMLResponse(content=html_content, status_code=200)
+
+
+@router.get("/compliance/export/download", dependencies=[Depends(require_jwt)])
+async def download_compliance_evidence_json(
+    framework: Framework = Query(Framework.ALL, description="Target compliance framework (soc2, iso27001, all)"),
+    days: int = Query(30, ge=1, le=365, description="Lookback window in days"),
+):
+    """Directly download machine-verifiable cryptographic evidence package as JSON attachment."""
+    exporter = get_compliance_exporter()
+    package = await exporter.generate_evidence_package(framework=framework, days=days)
+    filename = f"asoc-audit-evidence-{framework.value}-{package.id}.json"
+    return Response(
+        content=package.model_dump_json(indent=2),
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+

@@ -836,24 +836,57 @@ export default function WarGameModal({ isOpen, onClose, onSimulationComplete }: 
                     </div>
                   </div>
 
-                  <button
-                    onClick={() => handleCopyHash(report.compliance_manifest_sha256)}
-                    style={{
-                      padding: "6px 12px",
-                      borderRadius: 6,
-                      background: copiedSha ? THEME.green : "transparent",
-                      border: `1px solid ${copiedSha ? THEME.green : THEME.cyan}`,
-                      color: copiedSha ? THEME.bg : THEME.cyan,
-                      fontSize: 10,
-                      fontWeight: 700,
-                      cursor: "pointer",
-                      fontFamily: THEME.fontMono,
-                      transition: "all 0.15s ease",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {copiedSha ? "COPIED ✓" : "COPY HASH"}
-                  </button>
+                  <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                    <button
+                      onClick={() => handleCopyHash(report.compliance_manifest_sha256)}
+                      style={{
+                        padding: "6px 10px",
+                        borderRadius: 6,
+                        background: copiedSha ? THEME.green : "transparent",
+                        border: `1px solid ${copiedSha ? THEME.green : THEME.cyan}`,
+                        color: copiedSha ? THEME.bg : THEME.cyan,
+                        fontSize: 9.5,
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        fontFamily: THEME.fontMono,
+                        transition: "all 0.15s ease",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {copiedSha ? "COPIED ✓" : "COPY HASH"}
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        const jsonStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(report, null, 2));
+                        const a = document.createElement("a");
+                        a.href = jsonStr;
+                        a.download = `asoc-wargame-evidence-${report.incident_id}.json`;
+                        document.body.appendChild(a);
+                        a.click();
+                        a.remove();
+                      }}
+                      style={{
+                        padding: "6px 12px",
+                        borderRadius: 6,
+                        background: "rgba(0,229,255,0.15)",
+                        border: `1px solid ${THEME.cyan}`,
+                        color: THEME.cyan,
+                        fontSize: 9.5,
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        fontFamily: THEME.fontMono,
+                        whiteSpace: "nowrap",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 4,
+                      }}
+                      title="Download complete JSON evidence bundle with cryptographic hash"
+                    >
+                      <span>📥</span>
+                      <span>EXPORT EVIDENCE</span>
+                    </button>
+                  </div>
                 </div>
               </motion.div>
             )}

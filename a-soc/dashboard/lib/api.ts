@@ -226,6 +226,32 @@ export interface WarGameReport {
   steps: WarGameStepResult[];
 }
 
+export interface ComplianceControlEvidence {
+  control_id: string;
+  framework: string;
+  name: string;
+  description: string;
+  status: "PASS" | "FAIL" | "IN_REVIEW";
+  evidence_count: number;
+  findings: string[];
+  sample_artifacts: any[];
+}
+
+export interface CompliancePackage {
+  id: string;
+  generated_at: string;
+  period_start: string;
+  period_end: string;
+  framework: string;
+  overall_score: number;
+  status: "PASS" | "FAIL" | "IN_REVIEW";
+  controls_evaluated: number;
+  controls_passed: number;
+  controls_failed: number;
+  manifest_sha256: string;
+  controls: ComplianceControlEvidence[];
+}
+
 export const endpoints = {
   health: () => `${BASE_URL}/api/v1/health`,
   stats: () => `${BASE_URL}/api/v1/dashboard/stats`,
@@ -237,6 +263,9 @@ export const endpoints = {
   threatIntel: () => `${BASE_URL}/api/v1/threat-intel/indicators`,
   audit: () => `${BASE_URL}/api/v1/audit/entries`,
   compliance: () => `${BASE_URL}/api/v1/compliance/report`,
+  complianceExport: (framework = "all", days = 30) => `${BASE_URL}/api/v1/compliance/export?framework=${framework}&days=${days}`,
+  complianceExportHtml: (framework = "all", days = 30) => `${BASE_URL}/api/v1/compliance/export/html?framework=${framework}&days=${days}`,
+  complianceExportDownload: (framework = "all", days = 30) => `${BASE_URL}/api/v1/compliance/export/download?framework=${framework}&days=${days}`,
   huntingEvents: () => `${BASE_URL}/api/v1/hunting/events`,
   searchEvents: () => `${BASE_URL}/api/v1/hunting/events`,
   auth: {
