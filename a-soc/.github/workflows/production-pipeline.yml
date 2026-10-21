@@ -1,0 +1,257 @@
+name: Production CI/CD Pipeline (Multi-Arch, Security Gates & War Game Verification)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  security-events: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── 1. Security & Secrets Quality Gate ────────────────────────────────────
+  security-audit:
+    name: Security & Secrets Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Scan for Hardcoded Secrets (Gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: false
+
+      - name: Dependency Vulnerability Scan (Trivy)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: "fs"
+          scan-ref: "."
+          severity: "CRITICAL,HIGH"
+          format: "table"
+          exit-code: "0"
+
+  # ── 2. Backend Test Matrix (Live Postgres & Redis) ────────────────────────
+  backend-tests:
+    name: Backend Test Suite & Migrations
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: asoc_db
+          POSTGRES_USER: asoc_user
+          POSTGRES_PASSWORD: testpassword123
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-lock.txt
+          pip install pytest pytest-asyncio httpx
+
+      - name: Apply Canonical Database Migrations (Alembic)
+        env:
+          DATABASE_URL: postgresql+asyncpg://asoc_user:testpassword123@localhost:5432/asoc_db
+        run: |
+          alembic upgrade head
+
+      - name: Run Enterprise Pytest Test Suites
+        env:
+          ENVIRONMENT: test
+          DATABASE_URL: postgresql+asyncpg://asoc_user:testpassword123@localhost:5432/asoc_db
+          REDIS_URL: redis://localhost:6379/0
+          HMAC_SECRET: test-hmac-secret-64-bytes-long-for-continuous-ci-testing-key-material
+          JWT_SECRET_KEY: test-jwt-secret-key-32-bytes-minimum-length-for-ci-tests
+          ADMIN_PASSWORD: test-admin-password-123
+          EXECUTION_MODE: SHADOW
+          SPLUNK_HEC_TOKEN: test-hec-token-secret
+        run: |
+          pytest \
+            tests/test_auth_phase0.py \
+            tests/test_worker_phase1.py \
+            tests/test_llm_phase2.py \
+            tests/test_compliance_phase5.py \
+            tests/test_audit_remediation.py \
+            tests/test_war_game.py \
+            tests/test_siem_integrations.py \
+            -v --tb=short
+
+  # ── 3. Frontend Quality Gate ──────────────────────────────────────────────
+  dashboard-quality-gate:
+    name: Dashboard Build & Typescript Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: dashboard/package.json
+
+      - name: Install Node Dependencies
+        working-directory: dashboard
+        run: npm ci --legacy-peer-deps
+
+      - name: TypeScript Static Validation
+        working-directory: dashboard
+        run: npx tsc --noEmit
+
+      - name: Production Bundle Compilation
+        working-directory: dashboard
+        env:
+          NEXT_PUBLIC_API_URL: https://asoc.example.com
+          NEXT_PUBLIC_WS_URL: wss://asoc.example.com/ws/threat-feed
+        run: npm run build
+
+  # ── 4. End-to-End War Game Verification Drill ─────────────────────────────
+  war-game-e2e:
+    name: Adversarial War Game SLA Drill
+    runs-on: ubuntu-latest
+    needs: [backend-tests, dashboard-quality-gate]
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: asoc_db
+          POSTGRES_USER: asoc_user
+          POSTGRES_PASSWORD: testpassword123
+        ports:
+          - 5432:5432
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Dependencies
+        run: |
+          pip install -r requirements-lock.txt
+
+      - name: Apply Migrations
+        env:
+          DATABASE_URL: postgresql+asyncpg://asoc_user:testpassword123@localhost:5432/asoc_db
+        run: alembic upgrade head
+
+      - name: Execute Autonomous War Game Simulation
+        env:
+          ENVIRONMENT: test
+          DATABASE_URL: postgresql+asyncpg://asoc_user:testpassword123@localhost:5432/asoc_db
+          REDIS_URL: redis://localhost:6379/0
+          EXECUTION_MODE: SHADOW
+          HMAC_SECRET: test-hmac-secret-64-bytes-long-for-continuous-ci-testing-key-material
+        run: |
+          python -m src.asoc.tools.war_game --scenario ransomware --mode SHADOW --json > wargame_result.json
+          cat wargame_result.json
+          python -c "
+          import json
+          with open('wargame_result.json') as f:
+              data = json.load(f)
+          assert data['containment_status'] == 'SUCCESS_SIMULATED', 'Containment failed'
+          assert len(data['compliance_manifest_sha256']) == 64, 'Invalid compliance manifest'
+          print(f'✅ War Game verified: MTTD={data[\"mttd_ms\"]}ms, MTTR={data[\"mttr_ms\"]}ms')
+          "
+
+  # ── 5. Multi-Arch Docker BuildKit & GHCR Delivery (linux/amd64, linux/arm64)
+  multi-arch-publish:
+    name: Multi-Arch Build & GHCR Release
+    runs-on: ubuntu-latest
+    needs: [security-audit, backend-tests, dashboard-quality-gate, war-game-e2e]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image_name: asoc-backend
+            context: .
+            dockerfile: Dockerfile
+          - image_name: asoc-dashboard
+            context: ./dashboard
+            dockerfile: ./dashboard/Dockerfile
+
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU (ARM64 Emulation)
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: "arm64,amd64"
+
+      - name: Set up Docker Buildx (BuildKit)
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry (GHCR)
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker Metadata & Tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/${{ matrix.image_name }}
+          tags: |
+            type=raw,value=latest
+            type=sha,prefix=sha-,format=short
+
+      - name: Multi-Platform Build & Push (linux/amd64, linux/arm64)
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
