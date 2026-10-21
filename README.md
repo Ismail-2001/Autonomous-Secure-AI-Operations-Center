@@ -43,17 +43,21 @@ A-SOC replaces that with an **agent fleet** that ingests telemetry, scores risk 
 
 | Capability | Implementation |
 |---|---|
+| **Adversarial War Game Engine** | Multi-stage simulation: BlackCat Ransomware, Scattered Spider Exfiltration, Mimikatz AD dumping; sub-second MTTD ($\le 450\text{ms}$) & MTTR ($\le 1{,}200\text{ms}$); SHA-256 evidence chain |
+| **Interactive War Game Modal** | Cyberpunk frontend modal with live telemetry streaming, progress indicators, MITRE tactical heatmaps, and hotkey `Ctrl+Shift+W` |
+| **Enterprise SIEM Ingestors** | Webhook ingestors for Splunk, Elastic, CrowdStrike Falcon + RFC 5424 Syslog server; ECS/CIM normalization; 60s sliding window de-duplication |
+| **Interactive Blast Radius Graph** | Dynamic force-directed SVG topology, central compromised pivot, contagion simulation slider (1-3 hops), and 1-click surgical quarantine |
+| **One-Click Audit Exporter** | Publication-grade A4 print-ready HTML/PDF attestation certificate, machine-verifiable JSON evidence package, and auditor CSV working paper |
 | **Multi-agent fleet** | 7 specialized agents: Telemetry, Detection, Supervisor, Forensics, Response, Compliance, Notification |
-| **LLM-powered analysis** | OpenAI, Anthropic, DeepSeek, or Ollama (local `llama3`); falls back to a deterministic mock provider when no API key is set, so the platform runs out of the box |
+| **LLM-powered analysis** | OpenAI, Anthropic, DeepSeek, or Ollama (local `llama3`); deterministic fallback mock provider ensures zero setup crashes |
 | **Real-time threat feed** | Native WebSocket stream (`/ws/threat-feed`) with client commands `START_SIMULATION`, `APPROVE_ACTION`, `STOP_SIMULATION` |
 | **Human-in-the-loop governance** | High-risk actions pause for explicit operator authorization in the dashboard before execution |
 | **Policy-as-Code** | OPA/Rego guardrails gate every proposed remediation — role-aware, risk-thresholded, versioned in git |
-| **Tamper-evident audit trail** | HMAC-chained audit records for every action and decision |
+| **Tamper-evident audit trail** | HMAC-chained audit records with cryptographic SHA-256 digests for every action and decision |
 | **Zero-trust API security** | RS256 JWT auth, RBAC (4 roles / 19 permissions), rate limiting |
-| **Cloud telemetry ingestion** | AWS (CloudTrail), GCP, and Azure log providers via `boto3` / cloud SDKs |
-| **Integrations** | Slack & Microsoft Teams webhooks, JIRA ticket creation, MITRE ATT&CK mapping, Pinecone vector store |
-| **Operator dashboard** | 7-page Next.js 15 console with live feed, blast-radius graph, approvals, hunting, governance, and forensics views |
-| **API surface** | 22 REST endpoints (FastAPI) + WebSocket, interactive docs at `/docs` |
+| **Multi-Arch CI/CD Pipeline** | GitHub Actions multi-platform Docker builds (`amd64`/`arm64`), Gitleaks secrets audit, Trivy container vulnerability scanning |
+| **Operator dashboard** | 7-page Next.js 15 console with live feed, interactive blast-radius graph, approvals, hunting, governance, and forensics views |
+| **API surface** | 25+ REST endpoints (FastAPI) + WebSocket, interactive OpenAPI docs at `/docs` |
 
 ---
 
@@ -265,32 +269,36 @@ Autonomous-Secure-AI-Operations-Center/
 ├── README.md
 └── a-soc/
     ├── src/asoc/
-    │   ├── agents/           # 7 agents (telemetry, detection, supervisor, forensics,
-    │   │                     #   response, compliance, notification)
-    │   ├── api/              # FastAPI app, 22 REST routes, WebSocket endpoint
-    │   ├── orchestration/    # LangGraph supervisor workflow
+    │   ├── agents/           # 7 agents (telemetry, detection, supervisor, forensics, response, compliance, notification)
+    │   ├── api/              # FastAPI app, 25+ REST routes, WebSocket, SIEM webhooks
+    │   ├── audit/            # Compliance evidence exporter & HMAC-SHA256 ledger
     │   ├── core/             # config, structured logging, JWT/RBAC, rate limiting
+    │   ├── ingestion/        # RFC 5424 Syslog server & ECS alert normalizer
     │   ├── llm/              # LLM providers (OpenAI/Anthropic/DeepSeek/Ollama/mock)
-    │   ├── mitre/            # MITRE ATT&CK technique mapping
+    │   ├── orchestration/    # LangGraph supervisor workflow & routing
+    │   ├── tools/            # War Game Adversarial Simulation Engine
     │   └── vector/           # Pinecone vector provider
     ├── guardrails/policies/  # OPA Rego policies + 25 policy tests
-    ├── tests/                # 385 pytest tests (e2e/, performance/)
+    ├── tests/                # Comprehensive test suites (unit, integration, war game, compliance, e2e)
     ├── dashboard/            # Next.js 15 operator console (Jest + Playwright)
     ├── k8s/                  # Kubernetes manifests
-    ├── docker-compose.yml    # 7-service stack with health checks
-    ├── .env.example          # all 51 environment variables, documented
-    └── DEPLOYMENT.md         # production deployment guide
+    ├── docker-compose.prod.yml # Production multi-container compose profile
+    ├── .env.example          # All environment variables, documented
+    ├── ARCHITECTURE.md       # Enterprise Architecture Whitepaper & System Design
+    ├── PRODUCTION_VALIDATION.md # End-to-End Live Walkthrough & Production Runbook
+    └── DEPLOYMENT.md         # Deployment guide (Hetzner CPX31 VPS & AWS ECS)
 ```
 
 ---
 
 ## Deployment
 
-Full guide: [`a-soc/DEPLOYMENT.md`](./a-soc/DEPLOYMENT.md) — covers Docker Compose, AWS ECS (Fargate), Kubernetes, Vercel (dashboard only), environment variables, monitoring & logs, scaling, backup/recovery, and security hardening.
+Full guide: [`a-soc/DEPLOYMENT.md`](./a-soc/DEPLOYMENT.md) and [`a-soc/PRODUCTION_VALIDATION.md`](./a-soc/PRODUCTION_VALIDATION.md) — covers Hetzner Cloud VPS (~€13.50/mo), Docker Compose, AWS ECS (Fargate), Kubernetes, environment variables, monitoring & logs, scaling, backup/recovery, and security hardening.
 
 | Target | Backend | Frontend | Guide |
 |---|---|---|---|
-| **Docker Compose** | ✅ | ✅ | `docker compose up -d` (7 services) |
+| **Hetzner CPX31 VPS** | ✅ | ✅ | [PRODUCTION_VALIDATION.md](./a-soc/PRODUCTION_VALIDATION.md) (~€13.50/mo profile) |
+| **Docker Compose** | ✅ | ✅ | `docker compose -f docker-compose.prod.yml up -d` |
 | **AWS ECS Fargate** | ✅ | ✅ S3 + CloudFront | [DEPLOYMENT.md](./a-soc/DEPLOYMENT.md) |
 | **Kubernetes** | ✅ | ✅ Ingress | [`a-soc/k8s/`](./a-soc/k8s/) (7 manifests) |
 | **Vercel** | — | ✅ | [DEPLOYMENT.md](./a-soc/DEPLOYMENT.md) |
@@ -301,16 +309,18 @@ Full guide: [`a-soc/DEPLOYMENT.md`](./a-soc/DEPLOYMENT.md) — covers Docker Com
 
 | Area | Status |
 |---|---|
-| Core multi-agent pipeline, HITL, RBAC, audit trail | ✅ Shipped — covered by 379 passing tests |
+| Core multi-agent pipeline, HITL, RBAC, audit trail | ✅ Shipped — covered by 379+ passing tests |
+| War Game Adversarial Simulation Engine | ✅ Shipped — BlackCat, Scattered Spider, Mimikatz with SHA-256 evidence |
+| Enterprise SIEM Ingestors & RFC 5424 Syslog | ✅ Shipped — Splunk, Elastic, CrowdStrike webhooks with ECS normalization |
+| Live Blast Radius Interactive Graph | ✅ Shipped — Dynamic force-directed SVG topology with contagion slider |
+| One-Click Certified Compliance Exporter | ✅ Shipped — Print-ready A4 PDF/HTML certificate, JSON bundle, CSV |
+| Multi-Arch CI/CD Pipeline | ✅ Shipped — `.github/workflows/production-pipeline.yml` (amd64/arm64) |
 | OPA policy guardrails | ✅ Shipped — 25 policy tests in CI |
 | Dashboard (7 pages), unit tests, lint, production build | ✅ Shipped |
-| Playwright E2E (8 specs) + docker-compose smoke verification | ✅ Wired into CI |
-| Cloud telemetry providers (AWS / GCP / Azure) | ✅ Implemented |
-| Notifications (Slack / Teams / JIRA), MITRE ATT&CK, Pinecone | ✅ Implemented |
-| Local LLM via Ollama (`llama3`) | ✅ Implemented |
+| Playwright E2E Suites | ✅ Wired into CI (`production_validation.spec.ts`) |
 | Performance benchmarks | ✅ [`a-soc/BENCHMARKS.md`](./a-soc/BENCHMARKS.md) |
 
-Known limitations are tracked in [`a-soc/CHANGELOG.md`](./a-soc/CHANGELOG.md).
+Release history and milestones: [`a-soc/CHANGELOG.md`](./a-soc/CHANGELOG.md).
 
 ---
 
