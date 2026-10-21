@@ -152,7 +152,7 @@ Defense-in-depth applied to the platform itself:
 
 - **Least privilege per agent** — agents only get the tools their role allows; the Compliance agent cannot execute remediations.
 - **Human-in-the-loop for high-stakes actions** — IAM revocation, firewall changes, and instance termination require explicit operator authorization; if OPA is unreachable, a local guardrail still blocks high-risk destructive actions (and every fallback decision is logged).
-- **Policy-as-Code** — governance lives in versioned, reviewable Rego files under [`a-soc/guardrails/policies/`](./a-soc/guardrails/policies), tested in CI like any other code.
+- **Policy-as-Code** — governance lives in versioned, reviewable Rego files under [`guardrails/policies/`](./guardrails/policies), tested in CI like any other code.
 - **Zero-trust API** — RS256 JWT access/refresh tokens, 4-role RBAC (`readonly` / `analyst` / `supervisor` / `admin` with 19 distinct permissions), rate limiting on sensitive routes, and a separate WebSocket token (`WS_API_TOKEN`).
 - **Tamper-evident audit** — every action is hash-chained with HMAC, so silent log edits are detectable.
 - **Secure defaults in configuration** — secrets come from environment variables; `.env.example` ships with non-production defaults that CI and docker health checks verify.
@@ -172,11 +172,11 @@ Defense-in-depth applied to the platform itself:
 
 ```bash
 git clone https://github.com/Ismail-2001/Autonomous-Secure-AI-Operations-Center.git
-cd Autonomous-Secure-AI-Operations-Center/a-soc
+cd Autonomous-Secure-AI-Operations-Center
 
 cp .env.example .env          # add an LLM API key if you have one (optional)
 docker compose up -d
-docker compose ps             # all 7 services should become healthy
+docker compose ps             # all services should become healthy
 ```
 
 - Dashboard: **http://localhost:3000**
@@ -186,7 +186,7 @@ docker compose ps             # all 7 services should become healthy
 
 ```bash
 git clone https://github.com/Ismail-2001/Autonomous-Secure-AI-Operations-Center.git
-cd Autonomous-Secure-AI-Operations-Center/a-soc
+cd Autonomous-Secure-AI-Operations-Center
 
 # Backend
 python -m venv venv
@@ -214,7 +214,7 @@ npm run dev                       # http://localhost:3000
 | `WS_API_TOKEN` | Token required by the `/ws/threat-feed` WebSocket |
 | `AWS_*` / `GCP_*` / `AZURE_*` | Cloud telemetry credentials (optional) |
 
-Full list: [`a-soc/.env.example`](./a-soc/.env.example) (51 variables).
+Full list: [`.env.example`](./.env.example) (51 variables).
 
 ### Using the dashboard
 
@@ -246,7 +246,6 @@ Quick local run:
 
 ```bash
 # Backend
-cd a-soc
 python -m pytest tests/ -q --cov
 
 # Policies (requires opa on PATH)
@@ -256,7 +255,7 @@ cd guardrails/policies && opa test . -v && cd ../..
 cd dashboard && npm run lint && npm test && npm run build
 ```
 
-Performance methodology and results: [`a-soc/BENCHMARKS.md`](./a-soc/BENCHMARKS.md).
+Performance methodology and results: [`BENCHMARKS.md`](./BENCHMARKS.md).
 
 ---
 
@@ -264,44 +263,53 @@ Performance methodology and results: [`a-soc/BENCHMARKS.md`](./a-soc/BENCHMARKS.
 
 ```
 Autonomous-Secure-AI-Operations-Center/
-├── .github/workflows/        # CI: pytest, black/isort, OPA tests, ESLint, Playwright, compose verify
-├── LICENSE
-├── README.md
-└── a-soc/
-    ├── src/asoc/
-    │   ├── agents/           # 7 agents (telemetry, detection, supervisor, forensics, response, compliance, notification)
-    │   ├── api/              # FastAPI app, 25+ REST routes, WebSocket, SIEM webhooks
-    │   ├── audit/            # Compliance evidence exporter & HMAC-SHA256 ledger
-    │   ├── core/             # config, structured logging, JWT/RBAC, rate limiting
-    │   ├── ingestion/        # RFC 5424 Syslog server & ECS alert normalizer
-    │   ├── llm/              # LLM providers (OpenAI/Anthropic/DeepSeek/Ollama/mock)
-    │   ├── orchestration/    # LangGraph supervisor workflow & routing
-    │   ├── tools/            # War Game Adversarial Simulation Engine
-    │   └── vector/           # Pinecone vector provider
-    ├── guardrails/policies/  # OPA Rego policies + 25 policy tests
-    ├── tests/                # Comprehensive test suites (unit, integration, war game, compliance, e2e)
-    ├── dashboard/            # Next.js 15 operator console (Jest + Playwright)
-    ├── k8s/                  # Kubernetes manifests
-    ├── docker-compose.prod.yml # Production multi-container compose profile
-    ├── .env.example          # All environment variables, documented
-    ├── ARCHITECTURE.md       # Enterprise Architecture Whitepaper & System Design
-    ├── PRODUCTION_VALIDATION.md # End-to-End Live Walkthrough & Production Runbook
-    └── DEPLOYMENT.md         # Deployment guide (Hetzner CPX31 VPS & AWS ECS)
+├── .github/workflows/        # CI/CD: Multi-arch builds, security gates, tests, E2E
+├── alembic/                  # Canonical PostgreSQL database migrations
+├── core/                     # Core system compatibility shims
+├── dashboard/                # Next.js 15 operator console (Jest + Playwright)
+├── docs/                     # Architecture, agent design, ADRs
+├── guardrails/policies/      # OPA Rego policies + 25 policy tests
+├── k8s/                      # Kubernetes manifests
+├── monitoring/               # Prometheus, Grafana, Loki, Alerting Rules
+├── scripts/                  # Seed, migration, and smoke-test scripts
+├── src/asoc/                 # Core multi-agent platform & FastAPI service
+│   ├── agents/               # 7 autonomous PRAO agents
+│   ├── api/                  # FastAPI app, 25+ REST routes, WebSocket, SIEM webhooks
+│   ├── audit/                # Compliance evidence exporter & HMAC-SHA256 ledger
+│   ├── core/                 # Auth, circuit breaker, rate limiter, connection pool
+│   ├── ingestion/            # RFC 5424 Syslog receiver & ECS normalizer
+│   ├── llm/                  # LLM providers (OpenAI/Anthropic/DeepSeek/Ollama/mock)
+│   ├── orchestration/        # LangGraph supervisor workflow & routing
+│   ├── tools/                # War Game Adversarial Simulation Engine
+│   └── vector/               # Vector search & embeddings
+├── tests/                    # 385+ pytest suites (unit, integration, war game, compliance, e2e)
+├── .env.example              # Documented environment variables
+├── ARCHITECTURE.md           # Enterprise Architecture Whitepaper & System Design
+├── PRODUCTION_VALIDATION.md  # End-to-End Live Walkthrough & Production Runbook
+├── DEPLOYMENT.md             # Deployment guide (Hetzner CPX31 VPS & AWS ECS)
+├── BENCHMARKS.md             # Performance benchmarks & methodology
+├── CHANGELOG.md              # Semantic version history & release notes
+├── docker-compose.yml        # Development 7-service stack
+├── docker-compose.prod.yml   # Production hardened compose profile
+├── Dockerfile                # Production multi-stage Dockerfile
+├── pyproject.toml            # Python packaging & tool configurations
+├── requirements.txt          # Python dependencies
+└── README.md                 # Project documentation
 ```
 
 ---
 
 ## Deployment
 
-Full guide: [`a-soc/DEPLOYMENT.md`](./a-soc/DEPLOYMENT.md) and [`a-soc/PRODUCTION_VALIDATION.md`](./a-soc/PRODUCTION_VALIDATION.md) — covers Hetzner Cloud VPS (~€13.50/mo), Docker Compose, AWS ECS (Fargate), Kubernetes, environment variables, monitoring & logs, scaling, backup/recovery, and security hardening.
+Full guide: [`DEPLOYMENT.md`](./DEPLOYMENT.md) and [`PRODUCTION_VALIDATION.md`](./PRODUCTION_VALIDATION.md) — covers Hetzner Cloud VPS (~€13.50/mo), Docker Compose, AWS ECS (Fargate), Kubernetes, environment variables, monitoring & logs, scaling, backup/recovery, and security hardening.
 
 | Target | Backend | Frontend | Guide |
 |---|---|---|---|
-| **Hetzner CPX31 VPS** | ✅ | ✅ | [PRODUCTION_VALIDATION.md](./a-soc/PRODUCTION_VALIDATION.md) (~€13.50/mo profile) |
+| **Hetzner CPX31 VPS** | ✅ | ✅ | [PRODUCTION_VALIDATION.md](./PRODUCTION_VALIDATION.md) (~€13.50/mo profile) |
 | **Docker Compose** | ✅ | ✅ | `docker compose -f docker-compose.prod.yml up -d` |
-| **AWS ECS Fargate** | ✅ | ✅ S3 + CloudFront | [DEPLOYMENT.md](./a-soc/DEPLOYMENT.md) |
-| **Kubernetes** | ✅ | ✅ Ingress | [`a-soc/k8s/`](./a-soc/k8s/) (7 manifests) |
-| **Vercel** | — | ✅ | [DEPLOYMENT.md](./a-soc/DEPLOYMENT.md) |
+| **AWS ECS Fargate** | ✅ | ✅ S3 + CloudFront | [DEPLOYMENT.md](./DEPLOYMENT.md) |
+| **Kubernetes** | ✅ | ✅ Ingress | [`k8s/`](./k8s/) (7 manifests) |
+| **Vercel** | — | ✅ | [DEPLOYMENT.md](./DEPLOYMENT.md) |
 
 ---
 

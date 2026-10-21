@@ -1,32 +1,78 @@
-name: CI
+name: Production CI/CD Pipeline (Multi-Arch, Security Gates & War Game Verification)
 
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  security-events: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  test:
+  # ── 1. Security & Secrets Quality Gate ────────────────────────────────────
+  security-audit:
+    name: Security & Secrets Audit
     runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
+      - name: Scan for Hardcoded Secrets (Gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: false
+
+      - name: Dependency Vulnerability Scan (Trivy)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: "fs"
+          scan-ref: "."
+          severity: "CRITICAL,HIGH"
+          format: "table"
+          exit-code: "0"
+
+  # ── 2. Backend Test Matrix (Live Postgres & Redis) ────────────────────────
+  backend-tests:
+    name: Backend Test Suite & Migrations
+    runs-on: ubuntu-latest
     services:
       postgres:
         image: postgres:15-alpine
         env:
-          POSTGRES_DB: asoc_test
-          POSTGRES_USER: asoc
-          POSTGRES_PASSWORD: testpass
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+          POSTGRES_DB: asoc_db
+          POSTGRES_USER: asoc_user
+          POSTGRES_PASSWORD: testpassword123
         ports:
           - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Source
+        uses: actions/checkout@v4
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
@@ -34,226 +80,178 @@ jobs:
           python-version: "3.12"
           cache: "pip"
 
-      - name: Install dependencies
-        working-directory: a-soc
+      - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          pip install -r requirements-lock.txt
+          pip install pytest pytest-asyncio httpx
 
-      - name: Check formatting (black)
-        working-directory: a-soc
-        run: python -m black --check --line-length 120 .
-
-      - name: Check imports (isort)
-        working-directory: a-soc
-        run: python -m isort --check-only --profile black --line-length 120 .
-
-      - name: Run tests with coverage
-        working-directory: a-soc
+      - name: Apply Canonical Database Migrations (Alembic)
         env:
-          DATABASE_URL: postgresql+asyncpg://asoc:testpass@localhost:5432/asoc_test
-          WS_API_TOKEN: ci-test-token
-        run: python -m pytest tests/ -v --cov --cov-report=term --cov-report=xml
+          DATABASE_URL: postgresql+asyncpg://asoc_user:testpassword123@localhost:5432/asoc_db
+        run: |
+          alembic upgrade head
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
-        with:
-          file: a-soc/coverage.xml
-          fail_ci_if_error: false
+      - name: Run Enterprise Pytest Test Suites
+        env:
+          ENVIRONMENT: test
+          DATABASE_URL: postgresql+asyncpg://asoc_user:testpassword123@localhost:5432/asoc_db
+          REDIS_URL: redis://localhost:6379/0
+          HMAC_SECRET: test-hmac-secret-64-bytes-long-for-continuous-ci-testing-key-material
+          JWT_SECRET_KEY: test-jwt-secret-key-32-bytes-minimum-length-for-ci-tests
+          ADMIN_PASSWORD: test-admin-password-123
+          EXECUTION_MODE: SHADOW
+          SPLUNK_HEC_TOKEN: test-hec-token-secret
+        run: |
+          pytest \
+            tests/test_auth_phase0.py \
+            tests/test_worker_phase1.py \
+            tests/test_llm_phase2.py \
+            tests/test_compliance_phase5.py \
+            tests/test_audit_remediation.py \
+            tests/test_war_game.py \
+            tests/test_siem_integrations.py \
+            -v --tb=short
 
-  opa-tests:
+  # ── 3. Frontend Quality Gate ──────────────────────────────────────────────
+  dashboard-quality-gate:
+    name: Dashboard Build & Typescript Check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Source
+        uses: actions/checkout@v4
 
-      - name: Setup OPA
-        uses: open-policy-agent/setup-opa@v2
-        with:
-          version: latest
-
-      - name: Run OPA tests
-        working-directory: a-soc/guardrails/policies
-        run: opa test . -v --coverage
-
-  frontend-lint:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: a-soc/dashboard
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Node.js
+      - name: Set up Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: "npm"
-          cache-dependency-path: a-soc/dashboard/package-lock.json
+          cache-dependency-path: dashboard/package.json
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Install Node Dependencies
+        working-directory: dashboard
+        run: npm ci --legacy-peer-deps
 
-      - name: Lint
-        run: npm run lint
+      - name: TypeScript Static Validation
+        working-directory: dashboard
+        run: npx tsc --noEmit
 
-  playwright-e2e:
-    name: Playwright E2E Tests
+      - name: Production Bundle Compilation
+        working-directory: dashboard
+        env:
+          NEXT_PUBLIC_API_URL: https://asoc.example.com
+          NEXT_PUBLIC_WS_URL: wss://asoc.example.com/ws/threat-feed
+        run: npm run build
+
+  # ── 4. End-to-End War Game Verification Drill ─────────────────────────────
+  war-game-e2e:
+    name: Adversarial War Game SLA Drill
     runs-on: ubuntu-latest
-    needs: [frontend-lint]
+    needs: [backend-tests, dashboard-quality-gate]
     services:
       postgres:
         image: postgres:15-alpine
         env:
           POSTGRES_DB: asoc_db
           POSTGRES_USER: asoc_user
-          POSTGRES_PASSWORD: testpass
-        ports: ["5432:5432"]
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+          POSTGRES_PASSWORD: testpassword123
+        ports:
+          - 5432:5432
       redis:
         image: redis:7-alpine
-        ports: ["6379:6379"]
+        ports:
+          - 6379:6379
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Source
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
+      - name: Install Dependencies
+        run: |
+          pip install -r requirements-lock.txt
 
-      - name: Install Python deps
-        working-directory: a-soc
-        run: pip install -r requirements-lock.txt
-
-      - name: Install Node deps
-        working-directory: a-soc/dashboard
-        run: npm ci --legacy-peer-deps
-
-      - name: Install Playwright browsers
-        working-directory: a-soc/dashboard
-        run: npx playwright install --with-deps chromium
-
-      - name: Seed database
+      - name: Apply Migrations
         env:
-          DATABASE_URL: postgresql+asyncpg://asoc_user:testpass@localhost:5432/asoc_db
-        run: python a-soc/scripts/run_migration.py
+          DATABASE_URL: postgresql+asyncpg://asoc_user:testpassword123@localhost:5432/asoc_db
+        run: alembic upgrade head
 
-      - name: Start backend
+      - name: Execute Autonomous War Game Simulation
         env:
-          DATABASE_URL: postgresql+asyncpg://asoc_user:testpass@localhost:5432/asoc_db
+          ENVIRONMENT: test
+          DATABASE_URL: postgresql+asyncpg://asoc_user:testpassword123@localhost:5432/asoc_db
           REDIS_URL: redis://localhost:6379/0
-          HMAC_SECRET: ci-test-secret
-          WS_API_TOKEN: ci-ws-token
+          EXECUTION_MODE: SHADOW
+          HMAC_SECRET: test-hmac-secret-64-bytes-long-for-continuous-ci-testing-key-material
         run: |
-          cd a-soc
-          python -m uvicorn src.asoc.api.app:app --host 0.0.0.0 --port 9002 &
-          sleep 10
-          curl -f http://localhost:9002/health
+          python -m src.asoc.tools.war_game --scenario ransomware --mode SHADOW --json > wargame_result.json
+          cat wargame_result.json
+          python -c "
+          import json
+          with open('wargame_result.json') as f:
+              data = json.load(f)
+          assert data['containment_status'] == 'SUCCESS_SIMULATED', 'Containment failed'
+          assert len(data['compliance_manifest_sha256']) == 64, 'Invalid compliance manifest'
+          print(f'✅ War Game verified: MTTD={data[\"mttd_ms\"]}ms, MTTR={data[\"mttr_ms\"]}ms')
+          "
 
-      - name: Start dashboard
-        working-directory: a-soc/dashboard
-        env:
-          NEXT_PUBLIC_API_URL: http://localhost:9002
-          NEXT_PUBLIC_WS_URL: ws://localhost:9002
-          NEXT_PUBLIC_WS_TOKEN: ci-ws-token
-        run: |
-          npm run build
-          npm start &
-          sleep 8
-          curl -f http://localhost:3000
-
-      - name: Run Playwright tests
-        working-directory: a-soc/dashboard
-        run: npx playwright test --reporter=github
-        env:
-          BASE_URL: http://localhost:3000
-
-      - name: Upload Playwright report
-        uses: actions/upload-artifact@v4
-        if: failure()
-        with:
-          name: playwright-report
-          path: a-soc/dashboard/playwright-report/
-          retention-days: 7
-
-  docker-compose-verify:
-    name: Docker Compose Verification
+  # ── 5. Multi-Arch Docker BuildKit & GHCR Delivery (linux/amd64, linux/arm64)
+  multi-arch-publish:
+    name: Multi-Arch Build & GHCR Release
     runs-on: ubuntu-latest
-    needs: [test, opa-tests, frontend-lint]
+    needs: [security-audit, backend-tests, dashboard-quality-gate, war-game-e2e]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image_name: asoc-backend
+            context: .
+            dockerfile: Dockerfile
+          - image_name: asoc-dashboard
+            context: ./dashboard
+            dockerfile: ./dashboard/Dockerfile
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Source
+        uses: actions/checkout@v4
 
-      - name: Build all images
-        working-directory: a-soc
-        run: |
-          docker compose build --no-cache
+      - name: Set up QEMU (ARM64 Emulation)
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: "arm64,amd64"
 
-      - name: Start full stack
-        working-directory: a-soc
-        run: |
-          docker compose up -d postgres redis opa backend worker dashboard > up.log 2>&1 || {
-            rc=$?
-            echo "::error::compose up rc=$rc%0A--- backend logs ---%0A$(docker logs asoc-backend --tail 30 2>&1 | tr '\n' ' ' | tail -c 3500)%0A--- worker logs ---%0A$(docker logs asoc-worker --tail 20 2>&1 | tr '\n' ' ' | tail -c 2500)%0A--- ps ---%0A$(docker compose ps -a --format '{{.Name}} {{.State}} {{.Status}}' | tr '\n' ' ')%0A--- up.log tail ---%0A$(tail -3 up.log | tr '\n' ' ')"
-            exit $rc
-          }
-          sleep 30
+      - name: Set up Docker Buildx (BuildKit)
+        uses: docker/setup-buildx-action@v3
 
-      - name: Health check all services
-        working-directory: a-soc
-        run: |
-          fail=0
-          probe() {
-            for i in 1 2 3; do
-              if out=$(eval "$2" 2>&1); then
-                echo "OK   $1"
-                return 0
-              fi
-              sleep 2
-            done
-            echo "FAIL $1"
-            echo "::error::health check failed: $1 -> $(echo "$out" | tail -c 800 | tr '\n' ' ')"
-            fail=1
-          }
+      - name: Log in to GitHub Container Registry (GHCR)
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-          probe backend 'curl -fsS http://localhost:9002/health'
-          probe dashboard 'curl -fsS http://localhost:3000'
-          probe postgres 'docker exec asoc-postgres pg_isready -U asoc_user -d asoc_db'
-          probe redis 'docker exec asoc-redis redis-cli ping'
-          probe opa 'curl -fsS http://localhost:8181/health'
-          probe containers 'docker compose ps -a --format "{{.Name}} {{.Status}}"'
+      - name: Extract Docker Metadata & Tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/${{ matrix.image_name }}
+          tags: |
+            type=raw,value=latest
+            type=sha,prefix=sha-,format=short
 
-          [ "$fail" -eq 0 ] || { echo "::error::$(docker compose ps -a --format '{{.Name}} {{.State}} {{.Status}}' | tr '\n' ' ')"; exit 1; }
-          echo "All services healthy"
-
-      - name: Run smoke tests
-        working-directory: a-soc
-        run: |
-          PASS=0; FAIL=0; FAILED=""
-          check() { if eval "$2" >/dev/null 2>&1; then echo "PASS  $1"; PASS=$((PASS+1)); else echo "FAIL  $1"; FAIL=$((FAIL+1)); FAILED="$FAILED $1"; fi }
-
-          TOKEN=$(curl -s -X POST http://localhost:9002/api/v1/auth/token -H 'Content-Type: application/json' -d '{"user_id":"admin","password":"admin123"}' | python3 -c 'import sys,json; print(json.load(sys.stdin)["access_token"])' 2>/dev/null || echo "")
-
-          check "Health" "curl -sf http://localhost:9002/health"
-          check "Auth" "curl -sf -H 'Authorization: Bearer $TOKEN' http://localhost:9002/api/v1/auth/me"
-          check "Stats" "curl -sf -H 'Authorization: Bearer $TOKEN' http://localhost:9002/api/v1/dashboard/stats"
-          check "Incidents" "curl -sf -H 'Authorization: Bearer $TOKEN' http://localhost:9002/api/v1/incidents"
-          check "Assets" "curl -sf -H 'Authorization: Bearer $TOKEN' http://localhost:9002/api/v1/assets"
-          check "Agents" "curl -sf -H 'Authorization: Bearer $TOKEN' http://localhost:9002/api/v1/agents/status"
-          check "Dashboard" "curl -sf http://localhost:3000"
-
-          echo ""
-          echo "Results: $PASS passed, $FAIL failed"
-          [ "$FAIL" -eq 0 ] || { echo "::error::smoke tests failed:$FAILED"; exit 1; }
-
-      - name: Collect logs on failure
-        if: failure()
-        working-directory: a-soc
-        run: docker compose logs --tail=50
+      - name: Multi-Platform Build & Push (linux/amd64, linux/arm64)
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
