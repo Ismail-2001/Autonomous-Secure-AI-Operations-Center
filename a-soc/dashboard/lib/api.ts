@@ -199,6 +199,33 @@ export interface ThreatEvent {
   mitigated?: boolean;
 }
 
+export interface WarGameStepResult {
+  step_number: number;
+  stage_name: string;
+  technique_id: string;
+  status: string;
+  elapsed_ms: number;
+  details?: Record<string, any>;
+}
+
+export interface WarGameReport {
+  incident_id: string;
+  scenario_name: string;
+  threat_actor: string;
+  execution_mode: "SHADOW" | "ACTIVE_ENFORCEMENT" | string;
+  started_at: string;
+  completed_at: string;
+  total_duration_ms: number;
+  mttd_ms: number;
+  mttr_ms: number;
+  mitre_tactics_identified: string[];
+  threat_intel_matches: string[];
+  containment_action_taken: string;
+  containment_status: string;
+  compliance_manifest_sha256: string;
+  steps: WarGameStepResult[];
+}
+
 export const endpoints = {
   health: () => `${BASE_URL}/api/v1/health`,
   stats: () => `${BASE_URL}/api/v1/dashboard/stats`,

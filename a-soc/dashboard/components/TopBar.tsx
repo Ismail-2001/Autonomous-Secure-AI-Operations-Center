@@ -6,10 +6,11 @@ import { useAuth } from "@/contexts/AuthContext";
 
 interface TopBarProps {
   onSimulate?: () => void;
+  onWarGame?: () => void;
   simulating?: boolean;
 }
 
-export default function TopBar({ onSimulate, simulating }: TopBarProps) {
+export default function TopBar({ onSimulate, onWarGame, simulating }: TopBarProps) {
   const [time, setTime] = useState(new Date());
   const [searchQuery, setSearchQuery] = useState("");
   const { logout } = useAuth();
@@ -242,6 +243,35 @@ export default function TopBar({ onSimulate, simulating }: TopBarProps) {
             }}
           />
         </motion.button>
+
+        {onWarGame && (
+          <motion.button
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={onWarGame}
+            style={{
+              height: 34,
+              padding: "0 12px",
+              borderRadius: 8,
+              border: "1px solid rgba(239, 68, 68, 0.45)",
+              background: "rgba(239, 68, 68, 0.1)",
+              color: "#f87171",
+              cursor: "pointer",
+              fontSize: 11,
+              fontWeight: 700,
+              fontFamily: "'Courier New', monospace",
+              letterSpacing: 0.5,
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              boxShadow: "0 0 12px rgba(239, 68, 68, 0.2)",
+            }}
+            title="Launch Adversarial War Game Attack Simulation"
+          >
+            <span style={{ fontSize: 13 }}>⚔️</span>
+            WAR GAME
+          </motion.button>
+        )}
 
         <motion.button
           whileHover={{ scale: 1.02 }}

@@ -156,6 +156,23 @@ export function useThreatFeed() {
               dispatch({ type: "ADD_EVENT", payload: event });
               break;
             }
+            case "WAR_GAME_STAGE_EVENT": {
+              const stage = msg.event || {};
+              const event: ThreatFeedEvent = {
+                id: `wg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                timestamp: msg.timestamp || new Date().toISOString(),
+                severity: "critical",
+                source: "WAR_GAME_ENGINE",
+                type: stage.technique || "ADVERSARY_SIMULATION",
+                description: `[STAGE ${stage.step || 1}] ${stage.name || "Adversary Injection"} (${stage.technique || "T1078"}) - Target: ${stage.payload?.host || stage.payload?.target_path || stage.payload?.destination_ip || "CORP_INFRA"}`,
+                agent: "WarGameAdversary",
+                confidence: 0.99,
+                mitigated: false,
+                raw: msg,
+              };
+              dispatch({ type: "ADD_EVENT", payload: event });
+              break;
+            }
             case "TELEMETRY": {
               const tel: ThreatFeedEvent = {
                 id: `tel-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,

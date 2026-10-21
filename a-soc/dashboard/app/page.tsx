@@ -6,6 +6,7 @@ import Shell from "@/components/Shell";
 import { useThreatFeed } from "@/hooks/useThreatFeed";
 import { SkeletonKPI, SkeletonAgent, SkeletonCard } from "@/components/Skeleton";
 import InvestigationPanel from "@/components/InvestigationPanel";
+import WarGameModal from "@/components/WarGameModal";
 import { useAuth } from "@/contexts/AuthContext";
 import { type Incident } from "@/lib/api";
 
@@ -777,6 +778,7 @@ export default function LiveMonitoringPage() {
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showWarGameModal, setShowWarGameModal] = useState(false);
   const [newIncident, setNewIncident] = useState({ title: "", description: "", severity: "medium" as string, source: "Dashboard", tags: "" });
   const [creating, setCreating] = useState(false);
   const feed = useThreatFeed();
@@ -919,24 +921,40 @@ export default function LiveMonitoringPage() {
     return true;
   });
 
-  const handleSimulate = useCallback(async () => {
-    if (simulating || feed.simulating) {
-      feed.stopSimulation();
-      setSimulating(false);
-    } else {
-      feed.startSimulation();
-      setSimulating(true);
-      try {
-        const { api, endpoints } = await import("@/lib/api");
-        await api.post(endpoints.jobs.enqueue(), {
-          incident_id: "INC-2026-0471",
-          max_attempts: 3,
-        });
-      } catch (err) {
-        console.warn("Simulation job enqueue:", err);
-      }
+  const handleOpenWarGame = useCallback(() => {
+    setShowWarGameModal(true);
+  }, []);
+
+  const handleWarGameComplete = useCallback(async (_report: any) => {
+    try {
+      const { api, endpoints } = await import("@/lib/api");
+      const [statsData, incidentsData] = await Promise.all([
+        api.get(endpoints.stats()).catch(() => null),
+        api.get<{ incidents: Incident[] }>(endpoints.incidents()).catch(() => null),
+      ]);
+      if (statsData) setStats(statsData as any);
+      if (incidentsData?.incidents) setIncidents(incidentsData.incidents);
+    } catch (e) {
+      console.warn("Failed to refresh telemetry after War Game:", e);
     }
-  }, [simulating, feed]);
+  }, []);
+
+  // Global keyboard shortcut: Ctrl+Shift+W to open War Game
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "w") {
+        e.preventDefault();
+        setShowWarGameModal(true);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  const handleSimulate = useCallback(async () => {
+    // Open the comprehensive War Game simulation modal
+    setShowWarGameModal(true);
+  }, []);
 
   const handleCreateIncident = async () => {
     if (!newIncident.title.trim() || !newIncident.description.trim()) return;
@@ -963,7 +981,12 @@ export default function LiveMonitoringPage() {
   };
 
   return (
-    <Shell onSimulate={handleSimulate} simulating={simulating} connectionState={feed.connectionState}>
+    <Shell
+      onSimulate={handleSimulate}
+      onWarGame={handleOpenWarGame}
+      simulating={simulating}
+      connectionState={feed.connectionState}
+    >
       <div
         style={{
           background: DARK.bg,
@@ -1578,25 +1601,58 @@ export default function LiveMonitoringPage() {
         </>
       )}
 
-      {/* + NEW INCIDENT BUTTON */}
+      {/* FLOATING ACTION BUTTONS */}
       {role !== "readonly" && (
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={() => setShowCreateModal(true)}
-          style={{
-            position: "fixed", bottom: 24, right: 24, zIndex: 50,
-            width: 48, height: 48, borderRadius: "50%",
-            background: DARK.cyan, color: DARK.bg,
-            border: "none", cursor: "pointer",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            boxShadow: `0 0 20px ${DARK.cyan}60`,
-            fontSize: 20, fontWeight: 700,
-          }}
-        >
-          +
-        </motion.button>
+        <>
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => setShowWarGameModal(true)}
+            style={{
+              position: "fixed", bottom: 24, right: 84, zIndex: 50,
+              height: 48, padding: "0 18px", borderRadius: 24,
+              background: "linear-gradient(135deg, rgba(239,68,68,0.95), rgba(185,28,28,0.95))",
+              color: "#ffffff",
+              border: "1px solid rgba(254, 202, 202, 0.4)",
+              cursor: "pointer",
+              display: "flex", alignItems: "center", gap: 8,
+              boxShadow: "0 0 24px rgba(239,68,68,0.5)",
+              fontSize: 12, fontWeight: 800,
+              fontFamily: DARK.fontMono,
+              letterSpacing: "0.06em",
+            }}
+            title="Launch Adversarial War Game Attack Simulation (Ctrl+Shift+W)"
+          >
+            <span style={{ fontSize: 16 }}>⚔️</span>
+            <span>WAR GAME</span>
+          </motion.button>
+
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => setShowCreateModal(true)}
+            style={{
+              position: "fixed", bottom: 24, right: 24, zIndex: 50,
+              width: 48, height: 48, borderRadius: "50%",
+              background: DARK.cyan, color: DARK.bg,
+              border: "none", cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              boxShadow: `0 0 20px ${DARK.cyan}60`,
+              fontSize: 20, fontWeight: 700,
+            }}
+            title="Create Custom Incident"
+          >
+            +
+          </motion.button>
+        </>
       )}
+
+      {/* WAR GAME ADVERSARIAL SIMULATION MODAL */}
+      <WarGameModal
+        isOpen={showWarGameModal}
+        onClose={() => setShowWarGameModal(false)}
+        onSimulationComplete={handleWarGameComplete}
+      />
     </Shell>
   );
 }
