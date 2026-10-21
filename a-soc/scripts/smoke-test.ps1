@@ -75,6 +75,21 @@ Test-Check "Compliance endpoint returns score" {
     $null -ne $r.score
 }
 
+Test-Check "Compliance HTML attestation report returns 200" {
+    $r = Invoke-WebRequest "$BACKEND/api/v1/compliance/export/html?framework=soc2&days=30" -Headers $headers -TimeoutSec 10 -ErrorAction Stop
+    $r.StatusCode -eq 200 -and $r.Content -match "Autonomous Security Operations Center"
+}
+
+Test-Check "Compliance JSON evidence download returns attachment" {
+    $r = Invoke-WebRequest "$BACKEND/api/v1/compliance/export/download?framework=all&days=30" -Headers $headers -TimeoutSec 10 -ErrorAction Stop
+    $r.StatusCode -eq 200 -and ($r.Headers["Content-Disposition"] -match "asoc-audit-evidence")
+}
+
+Test-Check "War Game scenarios endpoint returns scenarios" {
+    $r = Invoke-RestMethod "$BACKEND/api/v1/simulation/scenarios" -Headers $headers -ErrorAction Stop
+    $r.Count -ge 3
+}
+
 Test-Check "Agents status endpoint returns agents" {
     $r = Invoke-RestMethod "$BACKEND/api/v1/agents/status" -Headers $headers -ErrorAction Stop
     ($r.agents.Count -ge 1) -or ($r.Count -ge 1)
