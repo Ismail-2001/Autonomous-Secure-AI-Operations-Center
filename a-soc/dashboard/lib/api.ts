@@ -231,4 +231,8 @@ export const endpoints = {
     addAction: (id: string) => `${BASE_URL}/api/v1/incidents/${id}/actions`,
     getActions: (id: string) => `${BASE_URL}/api/v1/incidents/${id}/actions`,
   },
+  simulation: {
+    warGame: () => `${BASE_URL}/api/v1/simulation/war-game`,
+    scenarios: () => `${BASE_URL}/api/v1/simulation/scenarios`,
+  },
 };

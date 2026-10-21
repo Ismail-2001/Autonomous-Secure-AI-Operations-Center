@@ -33,6 +33,7 @@ from src.asoc.api.routes import (  # noqa: F401
     hunting,
     incidents,
     jobs,
+    simulation,
 )
 from src.asoc.api.routes import router as api_v1
 from src.asoc.api.routes import threat_intel
