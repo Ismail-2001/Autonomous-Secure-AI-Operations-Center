@@ -83,6 +83,12 @@ class Settings(BaseSettings):
     JIRA_API_TOKEN: Optional[SecretStr] = None
     JIRA_PROJECT_KEY: Optional[str] = None
 
+    # SIEM & EDR Enterprise Ingestion Connectors
+    SPLUNK_HEC_TOKEN: Optional[SecretStr] = None
+    SENTINEL_WEBHOOK_SECRET: Optional[SecretStr] = None
+    CROWDSTRIKE_WEBHOOK_SECRET: Optional[SecretStr] = None
+    SIEM_INGESTION_TOKEN: Optional[SecretStr] = None
+
     CORS_ORIGINS: str = "http://localhost:3000"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")

@@ -32,6 +32,7 @@ from src.asoc.api.routes import (  # noqa: F401
     get_event_store,
     hunting,
     incidents,
+    integrations,
     jobs,
     simulation,
 )

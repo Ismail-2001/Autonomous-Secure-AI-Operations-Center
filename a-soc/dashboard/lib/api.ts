@@ -235,4 +235,10 @@ export const endpoints = {
     warGame: () => `${BASE_URL}/api/v1/simulation/war-game`,
     scenarios: () => `${BASE_URL}/api/v1/simulation/scenarios`,
   },
+  integrations: {
+    splunkHec: () => `${BASE_URL}/api/v1/integrations/splunk/hec`,
+    sentinelWebhook: () => `${BASE_URL}/api/v1/integrations/sentinel/webhook`,
+    crowdstrikeWebhook: () => `${BASE_URL}/api/v1/integrations/crowdstrike/webhook`,
+    genericWebhook: () => `${BASE_URL}/api/v1/integrations/generic/webhook`,
+  },
 };
