@@ -30,7 +30,7 @@ async def list_jobs(
     return await service.list_jobs(incident_id=incident_id, state=state, limit=limit)
 
 
-@router.get("/{job_id}", response_model=Job)
+@router.get("/jobs/{job_id}", response_model=Job)
 async def get_job(
     job_id: str,
     current_user: TokenPayload = Depends(require_role(Role.ANALYST)),
@@ -46,7 +46,7 @@ async def get_job(
     return job
 
 
-@router.post("/enqueue", response_model=Job, status_code=status.HTTP_201_CREATED)
+@router.post("/jobs/enqueue", response_model=Job, status_code=status.HTTP_201_CREATED)
 async def enqueue_job(
     request: EnqueueJobRequest,
     current_user: TokenPayload = Depends(require_role(Role.ANALYST)),
@@ -60,7 +60,7 @@ async def enqueue_job(
     )
 
 
-@router.post("/{job_id}/cancel")
+@router.post("/jobs/{job_id}/cancel")
 async def cancel_job(
     job_id: str,
     request: CancelJobRequest,

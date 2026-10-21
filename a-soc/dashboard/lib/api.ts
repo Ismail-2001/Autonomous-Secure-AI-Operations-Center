@@ -11,7 +11,7 @@ const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:9002";
 const REQUEST_TIMEOUT_MS = 15000;
 let cachedToken: string | null = null;
 
-async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
+async function request<T>(url: string, options: RequestInit & { _isRetry?: boolean } = {}): Promise<T> {
   if (cachedToken === null && typeof window !== "undefined") {
     cachedToken = localStorage.getItem("asoc_token");
   }
@@ -27,6 +27,31 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
   try {
     const res = await fetch(url, { ...options, headers, signal: controller.signal });
     if (!res.ok) {
+      if (res.status === 401 && !options._isRetry && typeof window !== "undefined") {
+        const refreshToken = localStorage.getItem("asoc_refresh_token");
+        if (refreshToken) {
+          try {
+            const refreshRes = await fetch(`${BASE_URL}/api/v1/auth/refresh`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ refresh_token: refreshToken }),
+            });
+            if (refreshRes.ok) {
+              const data = await refreshRes.json();
+              if (data.access_token) {
+                cachedToken = data.access_token;
+                localStorage.setItem("asoc_token", data.access_token);
+                if (data.refresh_token) {
+                  localStorage.setItem("asoc_refresh_token", data.refresh_token);
+                }
+                return request<T>(url, { ...options, _isRetry: true });
+              }
+            }
+          } catch {
+            // Refresh failed, continue to throw
+          }
+        }
+      }
       const text = await res.text().catch(() => "Unknown error");
       throw new ApiError(`${res.status}: ${text}`, res.status);
     }
@@ -183,13 +208,23 @@ export const endpoints = {
   assets: () => `${BASE_URL}/api/v1/assets`,
   forensics: () => `${BASE_URL}/api/v1/forensics/jobs`,
   threatIntel: () => `${BASE_URL}/api/v1/threat-intel/indicators`,
-  audit: () => `${BASE_URL}/api/v1/audit/events`,
+  audit: () => `${BASE_URL}/api/v1/audit/entries`,
   compliance: () => `${BASE_URL}/api/v1/compliance/report`,
   huntingEvents: () => `${BASE_URL}/api/v1/hunting/events`,
-  searchEvents: () => `${BASE_URL}/api/v1/events/search`,
+  searchEvents: () => `${BASE_URL}/api/v1/hunting/events`,
   auth: {
+    login: () => `${BASE_URL}/api/v1/auth/login`,
     token: () => `${BASE_URL}/api/v1/auth/token`,
+    refresh: () => `${BASE_URL}/api/v1/auth/refresh`,
+    logout: () => `${BASE_URL}/api/v1/auth/logout`,
+    wsTicket: () => `${BASE_URL}/api/v1/auth/ws-ticket`,
     me: () => `${BASE_URL}/api/v1/auth/me`,
+  },
+  jobs: {
+    list: () => `${BASE_URL}/api/v1/jobs`,
+    get: (id: string) => `${BASE_URL}/api/v1/jobs/${id}`,
+    enqueue: () => `${BASE_URL}/api/v1/jobs/enqueue`,
+    cancel: (id: string) => `${BASE_URL}/api/v1/jobs/${id}/cancel`,
   },
   triage: {
     update: (id: string) => `${BASE_URL}/api/v1/incidents/${id}/triage`,

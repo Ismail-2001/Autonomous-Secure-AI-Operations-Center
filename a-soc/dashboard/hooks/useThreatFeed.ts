@@ -101,15 +101,29 @@ export function useThreatFeed() {
   const { token } = useAuth();
   const [simulating, setSimulating] = useState(false);
 
-  const connect = useCallback(() => {
+  const connect = useCallback(async () => {
     if (!mountedRef.current) return;
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
     dispatch({ type: "SET_STATE", payload: { connectionState: "CONNECTING" } });
 
+    let wsUrl = config.ws.url;
+    if (token) {
+      try {
+        const { api, endpoints } = await import("@/lib/api");
+        const ticketRes = await api.post<{ ticket: string }>(endpoints.auth.wsTicket());
+        if (ticketRes?.ticket) {
+          wsUrl = `${config.ws.url}?ticket=${encodeURIComponent(ticketRes.ticket)}`;
+        } else {
+          wsUrl = `${config.ws.url}?token=${encodeURIComponent(token)}`;
+        }
+      } catch {
+        wsUrl = `${config.ws.url}?token=${encodeURIComponent(token)}`;
+      }
+    }
+
     try {
-      const url = `${config.ws.url}?token=${token || config.ws.token}`;
-      const ws = new WebSocket(url);
+      const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
       ws.onopen = () => {

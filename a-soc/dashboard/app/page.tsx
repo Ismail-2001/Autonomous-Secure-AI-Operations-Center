@@ -919,10 +919,24 @@ export default function LiveMonitoringPage() {
     return true;
   });
 
-  const handleSimulate = useCallback(() => {
-    setSimulating(true);
-    setTimeout(() => setSimulating(false), 5000);
-  }, []);
+  const handleSimulate = useCallback(async () => {
+    if (simulating || feed.simulating) {
+      feed.stopSimulation();
+      setSimulating(false);
+    } else {
+      feed.startSimulation();
+      setSimulating(true);
+      try {
+        const { api, endpoints } = await import("@/lib/api");
+        await api.post(endpoints.jobs.enqueue(), {
+          incident_id: "INC-2026-0471",
+          max_attempts: 3,
+        });
+      } catch (err) {
+        console.warn("Simulation job enqueue:", err);
+      }
+    }
+  }, [simulating, feed]);
 
   const handleCreateIncident = async () => {
     if (!newIncident.title.trim() || !newIncident.description.trim()) return;
@@ -1396,7 +1410,15 @@ export default function LiveMonitoringPage() {
                     ACTION:
                   </span>
                   <span style={{ fontSize: 10, color: DARK.textPrimary, fontWeight: 600, fontFamily: DARK.fontMono }}>
-                    ISOLATE_HOST_302
+                    {feed.approvalRequest?.action || "ISOLATE_HOST_302"}
+                  </span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ fontSize: 10, color: DARK.textMuted, fontFamily: DARK.fontMono }}>
+                    TARGET:
+                  </span>
+                  <span style={{ fontSize: 10, color: DARK.orange, fontWeight: 600, fontFamily: DARK.fontMono }}>
+                    {feed.approvalRequest?.target || "AST-002"}
                   </span>
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between" }}>
@@ -1404,7 +1426,7 @@ export default function LiveMonitoringPage() {
                     CONFIDENCE:
                   </span>
                   <span style={{ fontSize: 10, color: DARK.cyan, fontWeight: 600, fontFamily: DARK.fontMono }}>
-                    98.4%
+                    {feed.approvalRequest ? `${Math.round((feed.approvalRequest.risk_score || 0.95) * 100)}%` : "98.4%"}
                   </span>
                 </div>
               </div>
@@ -1418,13 +1440,13 @@ export default function LiveMonitoringPage() {
                   paddingLeft: 8,
                 }}
               >
-                &quot;Host exhibiting behavior consistent with BlackCat ransomware encryption
-                phase.&quot;
+                &quot;{feed.approvalRequest?.reasoning || "Host exhibiting behavior consistent with BlackCat ransomware encryption phase."}&quot;
               </div>
               <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
                 <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
+                  onClick={() => feed.approveAction(feed.approvalRequest?.id || "apr-default")}
                   style={{
                     flex: 1,
                     fontSize: 10,
@@ -1444,6 +1466,7 @@ export default function LiveMonitoringPage() {
                 <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
+                  onClick={() => feed.denyAction(feed.approvalRequest?.id || "apr-default")}
                   style={{
                     flex: 1,
                     fontSize: 10,

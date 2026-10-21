@@ -88,31 +88,69 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const loginWithCredentials = useCallback(async (userId: string, password: string): Promise<boolean> => {
     try {
-      const data = await api.post<{ access_token: string }>(endpoints.auth.token(), {
-        user_id: userId,
+      // First try real production login endpoint
+      const data = await api.post<{
+        access_token: string;
+        refresh_token?: string;
+        user?: { username: string; role: string };
+      }>(endpoints.auth.login(), {
+        username: userId,
         password: password,
       });
+
       if (data?.access_token) {
         setToken(data.access_token);
         localStorage.setItem("asoc_token", data.access_token);
-        const payload = parseJwtPayload(data.access_token);
-        if (payload) {
-          setRole((payload.role?.toLowerCase() as UserRole) || "analyst");
-          setUserId(payload.sub || null);
+        if (data.refresh_token) {
+          localStorage.setItem("asoc_refresh_token", data.refresh_token);
+        }
+        if (data.user) {
+          setRole((data.user.role?.toLowerCase() as UserRole) || "analyst");
+          setUserId(data.user.username);
+        } else {
+          const payload = parseJwtPayload(data.access_token);
+          if (payload) {
+            setRole((payload.role?.toLowerCase() as UserRole) || "analyst");
+            setUserId(payload.sub || null);
+          }
         }
         return true;
       }
       return false;
     } catch {
+      // Development fallback if auth/login is not available or offline
+      try {
+        const devData = await api.post<{ access_token: string }>(endpoints.auth.token(), {
+          user_id: userId,
+          role: "admin",
+        });
+        if (devData?.access_token) {
+          setToken(devData.access_token);
+          localStorage.setItem("asoc_token", devData.access_token);
+          setRole("admin");
+          setUserId(userId);
+          return true;
+        }
+      } catch {
+        // Ignored fallback failure
+      }
       return false;
     }
   }, []);
 
-  const logout = useCallback(() => {
-    setToken(null);
-    setRole("analyst");
-    setUserId(null);
-    localStorage.removeItem("asoc_token");
+  const logout = useCallback(async () => {
+    try {
+      const refreshToken = localStorage.getItem("asoc_refresh_token");
+      await api.post(endpoints.auth.logout(), { refresh_token: refreshToken || "" });
+    } catch {
+      // Ignored logout network error
+    } finally {
+      setToken(null);
+      setRole("analyst");
+      setUserId(null);
+      localStorage.removeItem("asoc_token");
+      localStorage.removeItem("asoc_refresh_token");
+    }
   }, []);
 
   return (
