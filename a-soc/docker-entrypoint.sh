@@ -6,7 +6,8 @@ if [ -n "$1" ]; then
 fi
 
 if [ "$SKIP_MIGRATIONS" != "true" ] && [ -n "$DATABASE_URL" ]; then
-    echo "Database migrations handled by connection.py at startup."
+    echo "Applying canonical database migrations via Alembic..."
+    alembic upgrade head || echo "Warning: Alembic migration check finished with status $?, proceeding..."
 fi
 
 mkdir -p /app/data || true

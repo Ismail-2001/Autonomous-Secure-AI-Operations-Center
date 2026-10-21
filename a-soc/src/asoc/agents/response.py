@@ -89,6 +89,12 @@ class AWSRemediationProvider(RemediationProvider):
         return self._s3_client
 
     async def block_ip(self, ip: str, reason: str = "") -> bool:
+        from src.asoc.core.config import settings
+
+        if settings.EXECUTION_MODE in ("SHADOW", "DRY_RUN"):
+            logger.info("shadow_mode_block_ip_intercepted", ip=ip, reason=reason, mode=settings.EXECUTION_MODE)
+            return True
+
         client = self._get_ec2_client()
         if client is None:
             return await MockRemediationProvider().block_ip(ip, reason)
@@ -98,15 +104,35 @@ class AWSRemediationProvider(RemediationProvider):
             loop = asyncio.get_event_loop()
 
             def _block():
-                security_groups = client.describe_security_groups()["SecurityGroups"]
-                for sg in security_groups:
-                    if sg["GroupName"] == "a-soc-blocklist":
-                        client.authorize_security_group_ingress(
-                            GroupId=sg["GroupId"],
-                            IpPermissions=[{"IpProtocol": "-1", "IpRanges": [{"CidrIp": f"{ip}/32"}]}],
+                # Correct AWS implementation: Network ACL (NACL) deny entry (Security Groups do NOT support deny rules)
+                nacls = client.describe_network_acls()["NetworkAcls"]
+                if not nacls:
+                    return False
+                nacl_id = nacls[0]["NetworkAclId"]
+                rule_num = 50
+                try:
+                    client.create_network_acl_entry(
+                        NetworkAclId=nacl_id,
+                        RuleNumber=rule_num,
+                        Protocol="-1",
+                        RuleAction="deny",
+                        Egress=False,
+                        CidrBlock=f"{ip}/32",
+                    )
+                    logger.info("aws_nacl_deny_created", nacl_id=nacl_id, ip=ip)
+                    return True
+                except Exception as ce:
+                    if "RuleAlreadyExists" in str(ce) or "InvalidParameterValue" in str(ce):
+                        client.replace_network_acl_entry(
+                            NetworkAclId=nacl_id,
+                            RuleNumber=rule_num,
+                            Protocol="-1",
+                            RuleAction="deny",
+                            Egress=False,
+                            CidrBlock=f"{ip}/32",
                         )
                         return True
-                return False
+                    raise
 
             return await loop.run_in_executor(None, _block)
         except Exception as e:
@@ -114,6 +140,12 @@ class AWSRemediationProvider(RemediationProvider):
             return False
 
     async def revoke_iam_access(self, user: str, reason: str = "") -> bool:
+        from src.asoc.core.config import settings
+
+        if settings.EXECUTION_MODE in ("SHADOW", "DRY_RUN"):
+            logger.info("shadow_mode_revoke_iam_intercepted", user=user, reason=reason, mode=settings.EXECUTION_MODE)
+            return True
+
         client = self._get_iam_client()
         if client is None:
             return await MockRemediationProvider().revoke_iam_access(user, reason)
@@ -135,6 +167,12 @@ class AWSRemediationProvider(RemediationProvider):
             return False
 
     async def isolate_instance(self, instance_id: str, reason: str = "") -> bool:
+        from src.asoc.core.config import settings
+
+        if settings.EXECUTION_MODE in ("SHADOW", "DRY_RUN"):
+            logger.info("shadow_mode_isolate_instance_intercepted", instance_id=instance_id, reason=reason, mode=settings.EXECUTION_MODE)
+            return True
+
         client = self._get_ec2_client()
         if client is None:
             return await MockRemediationProvider().isolate_instance(instance_id, reason)
@@ -144,14 +182,26 @@ class AWSRemediationProvider(RemediationProvider):
             loop = asyncio.get_event_loop()
 
             def _isolate():
-                sg = client.create_security_group(
-                    GroupName=f"a-soc-quarantine-{instance_id}", Description="A-SOC quarantine"
-                )
-                client.authorize_security_group_ingress(
-                    GroupId=sg["GroupId"],
-                    IpPermissions=[{"IpProtocol": "-1", "UserIdGroupPairs": [{"GroupId": sg["GroupId"]}]}],
-                )
-                client.modify_instance_attribute(InstanceId=instance_id, Groups=[sg["GroupId"]])
+                # Create a blackhole security group with zero ingress and zero egress rules
+                sg_name = f"asoc-quarantine-{instance_id}"
+                try:
+                    sg = client.create_security_group(
+                        GroupName=sg_name, Description="A-SOC emergency quarantine isolation"
+                    )
+                    sg_id = sg["GroupId"]
+                    # Revoke default 0.0.0.0/0 egress so instance is 100% network isolated
+                    client.revoke_security_group_egress(
+                        GroupId=sg_id,
+                        IpPermissions=[{"IpProtocol": "-1", "IpRanges": [{"CidrIp": "0.0.0.0/0"}]}],
+                    )
+                except Exception:
+                    sgs = client.describe_security_groups(
+                        Filters=[{"Name": "group-name", "Values": [sg_name]}]
+                    )["SecurityGroups"]
+                    sg_id = sgs[0]["GroupId"]
+
+                client.modify_instance_attribute(InstanceId=instance_id, Groups=[sg_id])
+                logger.info("aws_instance_isolated", instance_id=instance_id, sg_id=sg_id)
                 return True
 
             return await loop.run_in_executor(None, _isolate)

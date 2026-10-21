@@ -30,6 +30,18 @@ class Settings(BaseSettings):
     LOCAL_LLM_MODEL: str = "llama3"
     LOCAL_LLM_BASE_URL: str = "http://localhost:11434"
 
+    EXECUTION_MODE: str = "SHADOW"  # ["SHADOW", "DRY_RUN", "ACTIVE_ENFORCEMENT"]
+    ABUSEIPDB_API_KEY: Optional[SecretStr] = None
+    VIRUSTOTAL_API_KEY: Optional[SecretStr] = None
+
+    @field_validator("EXECUTION_MODE")
+    @classmethod
+    def validate_execution_mode(cls, v: str) -> str:
+        allowed = {"shadow", "dry_run", "active_enforcement"}
+        if v.lower() not in allowed:
+            raise ValueError(f"EXECUTION_MODE must be one of {allowed}, got '{v}'")
+        return v.upper()
+
     @field_validator("LLM_PROVIDER")
     @classmethod
     def validate_llm_provider(cls, v: str) -> str:

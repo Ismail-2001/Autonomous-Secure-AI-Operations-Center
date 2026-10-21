@@ -48,6 +48,9 @@ class DatabasePool:
         return self._pool
 
     async def _run_migrations(self) -> None:
+        if os.getenv("ENVIRONMENT") == "production":
+            # In production, schemas are managed by Alembic in docker-entrypoint.sh
+            return
         async with self._pool.acquire() as conn:
             await conn.execute("""
                 CREATE TABLE IF NOT EXISTS events (

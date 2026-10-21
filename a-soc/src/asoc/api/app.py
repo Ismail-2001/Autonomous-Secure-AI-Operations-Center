@@ -73,7 +73,7 @@ class ConnectionManager:
             except ValueError:
                 pass
 
-    async def broadcast(self, message: dict) -> None:
+    async def _local_broadcast(self, message: dict) -> None:
         async with self._lock:
             dead: List[WebSocket] = []
             for conn in self._connections:
@@ -86,6 +86,45 @@ class ConnectionManager:
                     self._connections.remove(conn)
                 except ValueError:
                     pass
+
+    async def broadcast(self, message: dict) -> None:
+        # 1. Local broadcast
+        await self._local_broadcast(message)
+
+        # 2. Redis Pub/Sub publish for multi-replica pod synchronization
+        try:
+            import json
+            from src.asoc.core.redis_client import get_redis
+
+            r = get_redis()
+            if r is not None:
+                await r.publish("asoc:threat-feed:pubsub", json.dumps(message))
+        except Exception as e:
+            logger.debug("redis_broadcast_publish_skipped", error=str(e))
+
+    async def start_pubsub_listener(self) -> None:
+        """Subscribe to Redis Pub/Sub channel for multi-replica WebSocket synchronization."""
+        try:
+            import json
+            from src.asoc.core.redis_client import get_redis
+
+            r = get_redis()
+            if r is None:
+                return
+            pubsub = r.pubsub()
+            await pubsub.subscribe("asoc:threat-feed:pubsub")
+            logger.info("websocket_redis_pubsub_subscribed")
+            async for raw in pubsub.listen():
+                if raw and raw.get("type") == "message":
+                    try:
+                        data = json.loads(raw.get("data", "{}"))
+                        await self._local_broadcast(data)
+                    except Exception:
+                        pass
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            logger.warning("redis_pubsub_listener_stopped", error=str(e))
 
     async def _reap_stale(self) -> None:
         while True:
@@ -128,9 +167,11 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("initial_admin_seed_notice", message=str(e))
 
+    ps_task = asyncio.create_task(manager.start_pubsub_listener())
     bg = asyncio.create_task(background_telemetry())
     tf = asyncio.create_task(threat_feedsimulation())
     yield
+    ps_task.cancel()
     bg.cancel()
     tf.cancel()
     await close_db_pool()

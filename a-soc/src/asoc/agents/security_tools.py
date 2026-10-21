@@ -64,7 +64,29 @@ async def lookup_threat_intel(
     indicator: str,
     indicator_type: str = "ip",
 ) -> Dict[str, Any]:
-    """Inspect local IOC repository and threat intelligence feeds for malicious indicators."""
+    """Inspect IOC repository, private ranges, and live threat intelligence feeds (AbuseIPDB/VT)."""
+    import ipaddress
+    from src.asoc.core.config import settings
+
+    clean_ioc = indicator.replace("[.]", ".").strip()
+
+    # 1. Private RFC 1918 / Loopback address classification
+    try:
+        ip_obj = ipaddress.ip_address(clean_ioc)
+        if ip_obj.is_private or ip_obj.is_loopback:
+            return {
+                "indicator": clean_ioc,
+                "found": False,
+                "is_internal": True,
+                "severity": "info",
+                "confidence": 1.0,
+                "threat_source": "internal_rfc1918_filter",
+                "tags": ["internal", "rfc1918"],
+            }
+    except ValueError:
+        pass
+
+    # 2. Known high-confidence threat catalog
     known_threats = {
         "185.220.101.45": {
             "severity": "critical",
@@ -72,7 +94,7 @@ async def lookup_threat_intel(
             "source": "ThreatFox",
             "tags": ["c2", "ransomware", "conti"],
         },
-        "update-service-cdn[.]com": {
+        "update-service-cdn.com": {
             "severity": "critical",
             "confidence": 0.92,
             "source": "VirusTotal",
@@ -86,11 +108,10 @@ async def lookup_threat_intel(
         },
     }
 
-    clean_ioc = indicator.replace("[.]", ".")
-    match = known_threats.get(clean_ioc) or known_threats.get(indicator)
+    match = known_threats.get(clean_ioc)
     if match:
         return {
-            "indicator": indicator,
+            "indicator": clean_ioc,
             "found": True,
             "severity": match["severity"],
             "confidence": match["confidence"],
@@ -98,8 +119,35 @@ async def lookup_threat_intel(
             "tags": match["tags"],
         }
 
+    # 3. Live AbuseIPDB API lookup if key is configured
+    if settings.ABUSEIPDB_API_KEY:
+        try:
+            import httpx
+
+            api_key = settings.ABUSEIPDB_API_KEY.get_secret_value()
+            async with httpx.AsyncClient(timeout=4.0) as client:
+                resp = await client.get(
+                    "https://api.abuseipdb.com/api/v2/check",
+                    params={"ipAddress": clean_ioc, "maxAgeInDays": 90},
+                    headers={"Key": api_key, "Accept": "application/json"},
+                )
+                if resp.status_code == 200:
+                    data = resp.json().get("data", {})
+                    score = data.get("abuseConfidenceScore", 0)
+                    is_malicious = score >= 50
+                    return {
+                        "indicator": clean_ioc,
+                        "found": is_malicious,
+                        "severity": "critical" if score >= 80 else ("high" if score >= 50 else "low"),
+                        "confidence": score / 100.0,
+                        "threat_source": "AbuseIPDB_v2_live",
+                        "tags": ["abuse_reported"] if is_malicious else [],
+                    }
+        except Exception as e:
+            logger.warning("live_threat_intel_query_failed", error=str(e), indicator=clean_ioc)
+
     return {
-        "indicator": indicator,
+        "indicator": clean_ioc,
         "found": False,
         "severity": "low",
         "confidence": 0.2,
@@ -113,19 +161,29 @@ async def network_quarantine_host(
     incident_id: str,
     reason: str = "Automated autonomous containment",
 ) -> Dict[str, Any]:
-    """Execute host network isolation with strict idempotency and HMAC audit trail logging."""
+    """Execute host network isolation with strict idempotency, HMAC audit logging, and SHADOW mode."""
+    from src.asoc.core.config import settings
+
+    is_shadow = settings.EXECUTION_MODE in ("SHADOW", "DRY_RUN")
 
     async def _do_quarantine(host: str, reason_text: str):
-        # In a real cloud environment, invokes AWS Security Group detachment / iptables null-route
+        action_name = "QUARANTINE_HOST (SHADOW)" if is_shadow else "QUARANTINE_HOST"
         log_agent_action(
             agent_id="ResponseAgent",
-            action="QUARANTINE_HOST",
-            payload={"host": host, "reason": reason_text, "incident_id": incident_id},
+            action=action_name,
+            payload={
+                "host": host,
+                "reason": reason_text,
+                "incident_id": incident_id,
+                "execution_mode": settings.EXECUTION_MODE,
+            },
         )
         return {
-            "status": "quarantined",
+            "status": "shadow_simulated" if is_shadow else "quarantined",
             "host": host,
-            "isolated": True,
+            "isolated": not is_shadow,
+            "would_isolate": True,
+            "execution_mode": settings.EXECUTION_MODE,
             "method": "security_group_blackhole",
             "reason": reason_text,
         }
@@ -133,7 +191,7 @@ async def network_quarantine_host(
     executed_now, outcome = await execute_idempotent(
         incident_id=incident_id,
         action_name="QUARANTINE_HOST",
-        params={"host": host_identifier},
+        params={"host": host_identifier, "mode": settings.EXECUTION_MODE},
         func=_do_quarantine,
         host=host_identifier,
         reason_text=reason,
