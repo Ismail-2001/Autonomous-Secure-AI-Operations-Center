@@ -46,3 +46,55 @@ groups:
         annotations:
           summary: "Database is down"
           description: "PostgreSQL instance {{ $labels.instance }} is unreachable"
+
+      # ── ASOC Enterprise Pipeline & Worker Alerts ────────────────────────────
+
+      - alert: ASOCWorkerJobFailureRateHigh
+        expr: rate(asoc_worker_jobs_failed_total[5m]) / (rate(asoc_worker_jobs_total[5m]) + 0.001) > 0.10
+        for: 2m
+        labels:
+          severity: critical
+          tier: operations
+        annotations:
+          summary: "Worker job failure rate exceeds 10%"
+          description: "Failure rate for async incident investigation jobs is {{ $value | humanizePercentage }} over last 5m"
+
+      - alert: ASOCStaleLockRecoveredSpike
+        expr: increase(asoc_stale_lock_recovered_total[5m]) > 2
+        for: 1m
+        labels:
+          severity: warning
+          tier: operations
+        annotations:
+          summary: "Stale worker job locks being reclaimed"
+          description: "{{ $value }} abandoned worker locks recovered in the last 5 minutes. Check worker pod health/restarts."
+
+      - alert: ASOCLLMFallbackSpike
+        expr: increase(asoc_llm_fallback_total[5m]) > 3
+        for: 1m
+        labels:
+          severity: warning
+          tier: ai-core
+        annotations:
+          summary: "Frequent LLM provider failover triggered"
+          description: "Autonomous reasoning engine failed over {{ $value }} times in 5m. Check Groq/DeepSeek API quotas and latency."
+
+      - alert: ASOCAuthAccountLockoutSpike
+        expr: increase(asoc_auth_lockout_total[5m]) > 3
+        for: 2m
+        labels:
+          severity: critical
+          tier: security
+        annotations:
+          summary: "Multiple account lockouts detected (Potential Brute Force)"
+          description: "{{ $value }} accounts locked out due to exceeding maximum password attempts in 5 minutes."
+
+      - alert: ASOCHMACVerificationFailure
+        expr: increase(asoc_hmac_verify_failed_total[5m]) > 0
+        for: 30s
+        labels:
+          severity: critical
+          tier: security
+        annotations:
+          summary: "Event signature verification failed (Tamper Alert)"
+          description: "Cryptographic HMAC-SHA256 signature mismatch detected on incoming message bus telemetry."
