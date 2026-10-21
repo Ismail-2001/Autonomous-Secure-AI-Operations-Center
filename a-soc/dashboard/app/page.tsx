@@ -7,24 +7,9 @@ import { useThreatFeed } from "@/hooks/useThreatFeed";
 import { SkeletonKPI, SkeletonAgent, SkeletonCard } from "@/components/Skeleton";
 import InvestigationPanel from "@/components/InvestigationPanel";
 import WarGameModal from "@/components/WarGameModal";
+import BlastRadiusGraph from "@/components/BlastRadiusGraph";
 import { useAuth } from "@/contexts/AuthContext";
 import { type Incident } from "@/lib/api";
-
-interface AgentNode {
-  id: string;
-  label: string;
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  risk: number;
-  compromised: boolean;
-}
-
-interface GraphEdge {
-  source: string;
-  target: string;
-}
 
 interface ThreatNode {
   id: string;
@@ -95,37 +80,6 @@ const TIMELINE = [
   { time: "2023.10.24 14:01:45", event: "DNS Query: edge-01.asoc.internal" },
   { time: "2023.10.24 14:01:42", event: "Auth success: OPERATOR_042" },
   { time: "2023.10.24 14:01:39", event: "Heartbeat: SENSOR_CLUSTER_6" },
-];
-
-const GRAPH_NODES: { id: string; label: string; risk: number; compromised: boolean }[] = [
-  { id: "gateway", label: "GATEWAY", risk: 20, compromised: false },
-  { id: "fw01", label: "FW-01", risk: 15, compromised: false },
-  { id: "web01", label: "WEB-01", risk: 85, compromised: true },
-  { id: "app01", label: "APP-01", risk: 60, compromised: true },
-  { id: "db01", label: "FINANCE_DB", risk: 95, compromised: true },
-  { id: "dns", label: "DNS-01", risk: 10, compromised: false },
-  { id: "auth", label: "AUTH-SVC", risk: 30, compromised: false },
-  { id: "redis", label: "REDIS-01", risk: 5, compromised: false },
-  { id: "monitor", label: "SIEM", risk: 8, compromised: false },
-  { id: "sensor", label: "SENSOR-6", risk: 12, compromised: false },
-  { id: "edge01", label: "EDGE-01", risk: 25, compromised: false },
-  { id: "backup", label: "BACKUP", risk: 10, compromised: false },
-];
-
-const GRAPH_EDGES: GraphEdge[] = [
-  { source: "gateway", target: "fw01" },
-  { source: "fw01", target: "web01" },
-  { source: "fw01", target: "dns" },
-  { source: "web01", target: "app01" },
-  { source: "app01", target: "db01" },
-  { source: "app01", target: "auth" },
-  { source: "app01", target: "redis" },
-  { source: "monitor", target: "web01" },
-  { source: "monitor", target: "db01" },
-  { source: "sensor", target: "edge01" },
-  { source: "edge01", target: "web01" },
-  { source: "backup", target: "db01" },
-  { source: "dns", target: "gateway" },
 ];
 
 function KpiCard({
@@ -428,345 +382,6 @@ function ThreatCard({ threat, index, onClick }: { threat: (typeof THREATS)[0]; i
         ))}
       </div>
     </motion.div>
-  );
-}
-
-function BlastRadiusGraph({ threatNodes }: { threatNodes?: ThreatNode[] }) {
-  const svgRef = useRef<SVGSVGElement>(null);
-  const nodesRef = useRef<AgentNode[]>([]);
-  const animRef = useRef<number>(0);
-  const [hovered, setHovered] = useState<string | null>(null);
-  const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [tick, setTick] = useState(0);
-  const dragRef = useRef<{
-    active: boolean;
-    startX: number;
-    startY: number;
-    startPanX: number;
-    startPanY: number;
-  }>({ active: false, startX: 0, startY: 0, startPanX: 0, startPanY: 0 });
-  const W = 600;
-  const H = 380;
-
-  useEffect(() => {
-    const cx = W / 2;
-    const cy = H / 2;
-    nodesRef.current = GRAPH_NODES.map((n) => ({
-      ...n,
-      x: cx + (Math.random() - 0.5) * 280,
-      y: cy + (Math.random() - 0.5) * 200,
-      vx: 0,
-      vy: 0,
-    }));
-
-    let iterations = 0;
-    const runTick = () => {
-      if (iterations >= 250) return;
-      iterations++;
-      const nodes = nodesRef.current;
-      for (let i = 0; i < nodes.length; i++) {
-        let fx = 0,
-          fy = 0;
-        for (let j = 0; j < nodes.length; j++) {
-          if (i === j) continue;
-          const dx = nodes[i].x - nodes[j].x;
-          const dy = nodes[i].y - nodes[j].y;
-          const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-          fx += (dx / dist) * 2500 / dist;
-          fy += (dy / dist) * 2500 / dist;
-        }
-        fx += (cx - nodes[i].x) * 0.008;
-        fy += (cy - nodes[i].y) * 0.008;
-        nodes[i].vx = (nodes[i].vx + fx) * 0.82;
-        nodes[i].vy = (nodes[i].vy + fy) * 0.82;
-      }
-      for (const edge of GRAPH_EDGES) {
-        const src = nodes.find((n) => n.id === edge.source);
-        const tgt = nodes.find((n) => n.id === edge.target);
-        if (!src || !tgt) continue;
-        const dx = tgt.x - src.x;
-        const dy = tgt.y - src.y;
-        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-        const force = (dist - 75) * 0.004;
-        src.vx += (dx / dist) * force;
-        src.vy += (dy / dist) * force;
-        tgt.vx -= (dx / dist) * force;
-        tgt.vy -= (dy / dist) * force;
-      }
-      for (const node of nodes) {
-        node.x = Math.max(35, Math.min(W - 35, node.x + node.vx));
-        node.y = Math.max(35, Math.min(H - 35, node.y + node.vy));
-      }
-      setTick((t) => t + 1);
-      animRef.current = requestAnimationFrame(runTick);
-    };
-    animRef.current = requestAnimationFrame(runTick);
-    return () => cancelAnimationFrame(animRef.current);
-  }, []);
-
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault();
-    setZoom((z) => Math.max(0.4, Math.min(2.5, z - e.deltaY * 0.001)));
-  }, []);
-
-  const handleMouseDown = useCallback(
-    (e: React.MouseEvent) => {
-      dragRef.current = {
-        active: true,
-        startX: e.clientX,
-        startY: e.clientY,
-        startPanX: pan.x,
-        startPanY: pan.y,
-      };
-    },
-    [pan]
-  );
-
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!dragRef.current.active) return;
-    setPan({
-      x: dragRef.current.startPanX + (e.clientX - dragRef.current.startX),
-      y: dragRef.current.startPanY + (e.clientY - dragRef.current.startY),
-    });
-  }, []);
-
-  const handleMouseUp = useCallback(() => {
-    dragRef.current.active = false;
-  }, []);
-
-  const nodes = nodesRef.current;
-
-  return (
-    <div style={{ position: "relative", width: "100%", height: H, overflow: "hidden", borderRadius: 10 }}>
-      <svg
-        ref={svgRef}
-        width="100%"
-        height={H}
-        viewBox={`0 0 ${W} ${H}`}
-        onWheel={handleWheel}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
-        style={{ cursor: dragRef.current.active ? "grabbing" : "grab", display: "block" }}
-      >
-        <defs>
-          <radialGradient id="nodeGlow" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor={DARK.cyan} stopOpacity={0.4} />
-            <stop offset="100%" stopColor={DARK.cyan} stopOpacity={0} />
-          </radialGradient>
-          <radialGradient id="redGlow" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor={DARK.red} stopOpacity={0.5} />
-            <stop offset="100%" stopColor={DARK.red} stopOpacity={0} />
-          </radialGradient>
-          <filter id="edgeGlow">
-            <feGaussianBlur stdDeviation="1.5" result="blur" />
-            <feMerge>
-              <feMergeNode in="blur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-        </defs>
-        <g transform={`translate(${pan.x},${pan.y}) scale(${zoom})`}>
-          {GRAPH_EDGES.map((edge, i) => {
-            const src = nodes.find((n) => n.id === edge.source);
-            const tgt = nodes.find((n) => n.id === edge.target);
-            if (!src || !tgt) return null;
-            const isHighlighted = hovered === edge.source || hovered === edge.target;
-            const isCompromisedPath = src.compromised || tgt.compromised;
-            return (
-              <line
-                key={i}
-                x1={src.x}
-                y1={src.y}
-                x2={tgt.x}
-                y2={tgt.y}
-                stroke={isHighlighted ? DARK.cyan : isCompromisedPath ? `${DARK.red}60` : `${DARK.textMuted}30`}
-                strokeWidth={isHighlighted ? 2 : 1}
-                strokeDasharray={isCompromisedPath ? "none" : "4 4"}
-                filter={isHighlighted ? "url(#edgeGlow)" : "none"}
-              />
-            );
-          })}
-          {nodes.map((node) => {
-            const isHovered = hovered === node.id;
-            const r = isHovered ? 18 : node.compromised ? 14 : 11;
-            const color = node.compromised ? DARK.red : DARK.cyan;
-            return (
-              <g
-                key={node.id}
-                onMouseEnter={() => setHovered(node.id)}
-                onMouseLeave={() => setHovered(null)}
-                style={{ cursor: "pointer" }}
-              >
-                {node.compromised && (
-                  <circle cx={node.x} cy={node.y} r={r + 10} fill="url(#redGlow)" />
-                )}
-                {isHovered && !node.compromised && (
-                  <circle cx={node.x} cy={node.y} r={r + 8} fill="url(#nodeGlow)" />
-                )}
-                <circle
-                  cx={node.x}
-                  cy={node.y}
-                  r={r}
-                  fill={node.compromised ? `${DARK.red}30` : `${DARK.cyan}20`}
-                  stroke={color}
-                  strokeWidth={isHovered ? 2.5 : 1.5}
-                />
-                <circle cx={node.x} cy={node.y} r={r * 0.4} fill={color} opacity={0.8} />
-                <text
-                  x={node.x}
-                  y={node.y + r + 12}
-                  textAnchor="middle"
-                  fill={isHovered ? DARK.textPrimary : DARK.textMuted}
-                  fontSize={9}
-                  fontFamily={DARK.fontMono}
-                  fontWeight={isHovered ? 600 : 400}
-                >
-                  {node.label}
-                </text>
-              </g>
-            );
-          })}
-          {(() => {
-            const threatNode = nodes.find((n) => n.id === "web01");
-            if (!threatNode) return null;
-            return (
-              <g>
-                <line
-                  x1={threatNode.x - 60}
-                  y1={threatNode.y - 30}
-                  x2={threatNode.x - 15}
-                  y2={threatNode.y - 5}
-                  stroke={DARK.red}
-                  strokeWidth={1}
-                  strokeDasharray="3 3"
-                  opacity={0.7}
-                />
-                <rect
-                  x={threatNode.x - 145}
-                  y={threatNode.y - 48}
-                  width={130}
-                  height={18}
-                  rx={3}
-                  fill={`${DARK.red}20`}
-                  stroke={`${DARK.red}50`}
-                  strokeWidth={0.5}
-                />
-                <text
-                  x={threatNode.x - 80}
-                  y={threatNode.y - 35}
-                  textAnchor="middle"
-                  fill={DARK.red}
-                  fontSize={8}
-                  fontFamily={DARK.fontMono}
-                  fontWeight={600}
-                >
-                  THREAT_ORIGIN: EXFIL_V3
-                </text>
-              </g>
-            );
-          })()}
-          {(threatNodes || []).map((tn) => {
-            const sevColor = tn.severity === "CRITICAL" ? DARK.red : tn.severity === "HIGH" ? DARK.orange : tn.severity === "MEDIUM" ? "#eab308" : DARK.cyan;
-            return (
-              <g key={tn.id}>
-                <circle cx={tn.x} cy={tn.y} r={20} fill="none" stroke={sevColor} strokeWidth={1} opacity={0.4}>
-                  <animate attributeName="r" from="8" to="25" dur="1.5s" repeatCount="indefinite" />
-                  <animate attributeName="opacity" from="0.6" to="0" dur="1.5s" repeatCount="indefinite" />
-                </circle>
-                <circle cx={tn.x} cy={tn.y} r={8} fill={`${sevColor}30`} stroke={sevColor} strokeWidth={2} />
-                <circle cx={tn.x} cy={tn.y} r={3} fill={sevColor} />
-                <text x={tn.x} y={tn.y + 18} textAnchor="middle" fill={sevColor} fontSize={8} fontFamily={DARK.fontMono} fontWeight={600}>
-                  {tn.label}
-                </text>
-                <text x={tn.x} y={tn.y + 27} textAnchor="middle" fill={DARK.textMuted} fontSize={7} fontFamily={DARK.fontMono}>
-                  {tn.severity}
-                </text>
-              </g>
-            );
-          })}
-        </g>
-      </svg>
-      <div
-        style={{
-          position: "absolute",
-          bottom: 10,
-          left: 10,
-          display: "flex",
-          gap: 14,
-          fontSize: 9,
-          color: DARK.textMuted,
-          fontFamily: DARK.fontMono,
-        }}
-      >
-        <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-          <span
-            style={{
-              width: 7,
-              height: 7,
-              borderRadius: "50%",
-              background: DARK.cyan,
-              display: "inline-block",
-            }}
-          />
-          HEALTHY
-        </span>
-        <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-          <span
-            style={{
-              width: 7,
-              height: 7,
-              borderRadius: "50%",
-              background: DARK.red,
-              display: "inline-block",
-            }}
-          />
-          COMPROMISED
-        </span>
-      </div>
-      <div style={{ position: "absolute", top: 8, right: 8, display: "flex", gap: 4 }}>
-        <button
-          onClick={() => setZoom((z) => Math.min(2.5, z + 0.2))}
-          style={{
-            width: 24,
-            height: 24,
-            borderRadius: 4,
-            background: DARK.card,
-            border: `1px solid ${DARK.cardBorder}`,
-            color: DARK.textMuted,
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 12,
-            fontFamily: DARK.fontMono,
-          }}
-        >
-          +
-        </button>
-        <button
-          onClick={() => setZoom((z) => Math.max(0.4, z - 0.2))}
-          style={{
-            width: 24,
-            height: 24,
-            borderRadius: 4,
-            background: DARK.card,
-            border: `1px solid ${DARK.cardBorder}`,
-            color: DARK.textMuted,
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 12,
-            fontFamily: DARK.fontMono,
-          }}
-        >
-          −
-        </button>
-      </div>
-    </div>
   );
 }
 
@@ -1141,48 +756,59 @@ export default function LiveMonitoringPage() {
                   NETWORK BLAST RADIUS
                 </div>
                 <div style={{ fontSize: 10, color: `${DARK.textMuted}80`, marginTop: 2 }}>
-                  REAL-TIME PROPAGATION GRAPH
+                  INTERACTIVE TOPOLOGY & CONTAGION ENGINE
                 </div>
               </div>
-              {threatNodes.length > 0 && (
-                <motion.span
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                {threatNodes.length > 0 && (
+                  <motion.span
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    style={{
+                      fontSize: 9,
+                      fontWeight: 600,
+                      color: DARK.red,
+                      background: `${DARK.red}15`,
+                      padding: "3px 8px",
+                      borderRadius: 4,
+                      fontFamily: DARK.fontMono,
+                    }}
+                  >
+                    {threatNodes.length} ACTIVE THREAT{threatNodes.length !== 1 ? "S" : ""}
+                  </motion.span>
+                )}
+                <span
                   style={{
                     fontSize: 9,
                     fontWeight: 600,
-                    color: DARK.red,
-                    background: `${DARK.red}15`,
+                    color: DARK.cyan,
+                    background: `${DARK.cyan}15`,
                     padding: "3px 8px",
                     borderRadius: 4,
                     fontFamily: DARK.fontMono,
                   }}
                 >
-                  {threatNodes.length} ACTIVE THREAT{threatNodes.length !== 1 ? "S" : ""}
-                </motion.span>
-              )}
+                  LIVE TOPOLOGY
+                </span>
+              </div>
             </div>
-            <BlastRadiusGraph threatNodes={threatNodes} />
-            <div style={{ display: "flex", justifyContent: "flex-end" }}>
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                style={{
-                  fontSize: 10,
-                  fontWeight: 600,
-                  color: DARK.cyan,
-                  background: `${DARK.cyan}12`,
-                  border: `1px solid ${DARK.cyan}40`,
-                  borderRadius: 6,
-                  padding: "6px 14px",
-                  cursor: "pointer",
-                  fontFamily: DARK.fontMono,
-                  letterSpacing: "0.05em",
-                }}
-              >
-                RE-SCAN TOPOLOGY
-              </motion.button>
-            </div>
+            <BlastRadiusGraph
+              threatEvents={feed.events}
+              onQuarantineHost={async (nodeId, nodeName) => {
+                try {
+                  const { api, endpoints } = await import("@/lib/api");
+                  if (selectedIncident) {
+                    await api.post(endpoints.triage.addAction(selectedIncident.id), {
+                      type: "QUARANTINE_HOST",
+                      description: `Network quarantine executed for ${nodeName} (${nodeId}) via Blast Radius graph`,
+                      target: nodeName,
+                    });
+                  }
+                } catch (err) {
+                  console.warn("Quarantine action execution:", err);
+                }
+              }}
+            />
           </motion.div>
 
           {/* RIGHT COLUMN */}
