@@ -1,0 +1,217 @@
+version: "3.8"
+
+# ==============================================================================
+# Production Docker Compose — Hetzner CPX31 Optimized (~€13.50/mo: 4 vCPU, 8 GB RAM)
+# Architecture:
+# - Caddy: Automated Let's Encrypt SSL, HTTP/2 & WebSocket reverse proxy
+# - Backend: Scaled FastAPI API (512M-1G RAM)
+# - Worker: Multi-replica async workers with SKIP LOCKED concurrency (2x 512M RAM)
+# - Dashboard: Production Next.js UI (384M RAM)
+# - OPA: Embedded policy decision engine (128M RAM)
+# - Redis: Auth tokens, rate limiting, and distributed cache (128M RAM)
+# - Database: External Managed Postgres (Neon / Supabase / DO) or optional local Postgres
+# ==============================================================================
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: asoc-proxy-prod
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - DOMAIN=${DOMAIN:-asoc.example.com}
+    volumes:
+      - ./Caddyfile.prod:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - asoc-prod-network
+    depends_on:
+      - backend
+      - dashboard
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: "0.25"
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: asoc-backend:prod
+    restart: unless-stopped
+    environment:
+      ENVIRONMENT: production
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PASSWORD}@redis:6379/0}
+      OPA_URL: http://opa:8181
+      HMAC_SECRET: ${HMAC_SECRET}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      LLM_PROVIDER: ${LLM_PROVIDER:-groq}
+      LLM_MODEL: ${LLM_MODEL:-llama-3.3-70b-versatile}
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://${DOMAIN:-asoc.example.com}}
+      DB_POOL_MIN_SIZE: "2"
+      DB_POOL_MAX_SIZE: "10"
+    depends_on:
+      redis:
+        condition: service_healthy
+      opa:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9002/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    networks:
+      - asoc-prod-network
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+          cpus: "1.0"
+        reservations:
+          memory: 512M
+          cpus: "0.25"
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: asoc-worker:prod
+    command: ["python", "-m", "src.asoc.worker"]
+    restart: unless-stopped
+    environment:
+      ENVIRONMENT: production
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PASSWORD}@redis:6379/0}
+      OPA_URL: http://opa:8181
+      HMAC_SECRET: ${HMAC_SECRET}
+      LLM_PROVIDER: ${LLM_PROVIDER:-groq}
+      LLM_MODEL: ${LLM_MODEL:-llama-3.3-70b-versatile}
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      DB_POOL_MIN_SIZE: "2"
+      DB_POOL_MAX_SIZE: "5"
+    depends_on:
+      redis:
+        condition: service_healthy
+      opa:
+        condition: service_healthy
+    networks:
+      - asoc-prod-network
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          memory: 768M
+          cpus: "1.0"
+        reservations:
+          memory: 256M
+          cpus: "0.25"
+
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    image: asoc-dashboard:prod
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: https://${DOMAIN:-asoc.example.com}
+      NEXT_PUBLIC_WS_URL: wss://${DOMAIN:-asoc.example.com}/ws/threat-feed
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/"]
+      interval: 20s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    networks:
+      - asoc-prod-network
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+          cpus: "0.5"
+        reservations:
+          memory: 128M
+          cpus: "0.1"
+
+  opa:
+    image: openpolicyagent/opa:latest
+    container_name: asoc-opa-prod
+    restart: unless-stopped
+    command:
+      - "run"
+      - "--server"
+      - "--addr=0.0.0.0:8181"
+      - "--log-level=warning"
+      - "/policies"
+    volumes:
+      - ./guardrails/policies:/policies:ro
+    healthcheck:
+      test: ["CMD", "opa", "version"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+    networks:
+      - asoc-prod-network
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: "0.25"
+
+  redis:
+    image: redis:7-alpine
+    container_name: asoc-redis-prod
+    restart: unless-stopped
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - redis_prod_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    networks:
+      - asoc-prod-network
+    deploy:
+      resources:
+        limits:
+          memory: 160M
+          cpus: "0.25"
+
+volumes:
+  caddy_data:
+  caddy_config:
+  redis_prod_data:
+
+networks:
+  asoc-prod-network:
+    driver: bridge

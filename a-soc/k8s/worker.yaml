@@ -1,0 +1,96 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: asoc-worker
+  namespace: asoc
+  labels:
+    app: asoc-worker
+    component: async-orchestration
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: asoc-worker
+  template:
+    metadata:
+      labels:
+        app: asoc-worker
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+      - name: worker
+        image: ghcr.io/yourorg/asoc-backend:latest
+        command: ["python", "-m", "src.asoc.worker"]
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        env:
+        - name: WORKER_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: asoc-secrets
+              key: database-url
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: asoc-secrets
+              key: redis-url
+        - name: OPA_URL
+          value: "http://opa:8181"
+        - name: LLM_PROVIDER
+          valueFrom:
+            configMapKeyRef:
+              name: asoc-config
+              key: llm-provider
+              optional: true
+        - name: GROQ_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: asoc-secrets
+              key: groq-api-key
+              optional: true
+        - name: DEEPSEEK_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: asoc-secrets
+              key: deepseek-api-key
+              optional: true
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: asoc-secrets
+              key: openai-api-key
+              optional: true
+        - name: DB_POOL_MIN_SIZE
+          value: "2"
+        - name: DB_POOL_MAX_SIZE
+          value: "5"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "768Mi"
+            cpu: "1000m"
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir: {}

@@ -4,29 +4,27 @@ metadata:
   name: asoc-ingress
   namespace: asoc
   annotations:
+    # NGINX Ingress Controller annotations
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/proxy-body-size: "10m"
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
     nginx.ingress.kubernetes.io/websocket-services: "asoc-backend"
+    # Traefik (k3s default) annotations
+    traefik.ingress.kubernetes.io/router.entrypoints: "web,websecure"
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    # cert-manager ACME automatic Let's Encrypt TLS
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
 spec:
-  ingressClassName: nginx
+  ingressClassName: traefik
   tls:
   - hosts:
-    - asoc.yourdomain.com
+    - asoc.example.com
     secretName: asoc-tls
   rules:
-  - host: asoc.yourdomain.com
+  - host: asoc.example.com
     http:
       paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: asoc-dashboard
-            port:
-              number: 3000
       - path: /api
         pathType: Prefix
         backend:
@@ -41,3 +39,10 @@ spec:
             name: asoc-backend
             port:
               number: 9002
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: asoc-dashboard
+            port:
+              number: 3000

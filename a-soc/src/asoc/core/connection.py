@@ -10,21 +10,28 @@ logger = get_logger("asoc.database")
 
 
 class DatabasePool:
-    def __init__(self, dsn: str, min_size: int = 5, max_size: int = 20):
+    def __init__(self, dsn: str, min_size: Optional[int] = None, max_size: Optional[int] = None):
         self._dsn = dsn
-        self._min_size = min_size
-        self._max_size = max_size
+        self._min_size = min_size or int(os.getenv("DB_POOL_MIN_SIZE", "2"))
+        self._max_size = max_size or int(os.getenv("DB_POOL_MAX_SIZE", "10"))
         self._pool: Optional[asyncpg.Pool] = None
 
     async def connect(self) -> None:
         if self._pool is not None:
             return
-        self._pool = await asyncpg.create_pool(
-            dsn=self._dsn,
-            min_size=self._min_size,
-            max_size=self._max_size,
-            command_timeout=10,
-        )
+        
+        # Support managed cloud databases (Neon, Supabase, RDS) with SSL
+        pool_kwargs = {
+            "dsn": self._dsn,
+            "min_size": self._min_size,
+            "max_size": self._max_size,
+            "command_timeout": 10,
+        }
+        if "sslmode=require" in self._dsn or "ssl=require" in self._dsn:
+            # asyncpg accepts ssl="require" or SSLContext directly
+            pool_kwargs["ssl"] = "require"
+
+        self._pool = await asyncpg.create_pool(**pool_kwargs)
         logger.info("database_pool_created", min_size=self._min_size, max_size=self._max_size)
         await self._run_migrations()
 

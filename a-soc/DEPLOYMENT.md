@@ -77,7 +77,47 @@ aws ecs create-service \
   --launch-type FARGATE
 ```
 
-### Kubernetes Deployment
+### Hetzner Cloud CPX31 Deployment (~€13.50/mo)
+
+The system is optimized to run comfortably on a single Hetzner CPX31 VPS (4 vCPU, 8 GB RAM, 160 GB NVMe SSD) using external Cloud LLMs (Groq / DeepSeek / OpenAI):
+
+#### Resource Allocation Profile:
+| Service | CPU Limit | Memory Limit | Notes |
+|---------|-----------|--------------|-------|
+| Caddy Reverse Proxy | 0.25 vCPU | 128 MB | Automated Let's Encrypt TLS & WSS proxying |
+| Backend API | 1.0 vCPU | 1024 MB | FastAPI, async connection pool (min 2, max 10) |
+| Async Worker (2 Replicas) | 2.0 vCPU | 1536 MB (2x 768M) | `SELECT FOR UPDATE SKIP LOCKED` pipeline |
+| Dashboard UI | 0.5 vCPU | 384 MB | Next.js production SSR bundle |
+| Redis 7 Alpine | 0.25 vCPU | 160 MB | Auth tokens, rate limiting, and distributed cache |
+| OPA Policy Engine | 0.25 vCPU | 128 MB | In-memory guardrails evaluation |
+| **Total Allocation** | **4.25 vCPU burst** | **~3.3 GB RAM** | **~4.7 GB RAM headroom for OS & caching** |
+
+#### Option A: 1-Click Production Docker Compose
+```bash
+# 1. Copy production compose configuration
+cp docker-compose.prod.yml docker-compose.yml
+
+# 2. Configure environment with your domain & secrets
+export DOMAIN=asoc.yourdomain.com
+export DATABASE_URL="postgresql://user:pass@ep-cool-db.us-east-2.aws.neon.tech/asoc?sslmode=require"
+export REDIS_PASSWORD="generate-secure-redis-pass"
+export HMAC_SECRET="generate-64-byte-hmac-key"
+export JWT_SECRET_KEY="generate-64-byte-jwt-key"
+export ADMIN_PASSWORD="your-strong-admin-pass"
+export GROQ_API_KEY="gsk_..."
+
+# 3. Start production stack with automated TLS
+docker compose -f docker-compose.prod.yml up -d
+```
+
+#### Option B: Hetzner k3s Automated Bootstrap
+```bash
+# Make script executable and run with your domain & ACME email
+chmod +x k8s/k3s-hetzner-deploy.sh
+./k8s/k3s-hetzner-deploy.sh asoc.yourdomain.com security@yourdomain.com
+```
+
+### Kubernetes Deployment (Standard / Multi-node)
 
 ```bash
 kubectl apply -f k8s/namespace.yaml
@@ -86,6 +126,7 @@ kubectl apply -f k8s/postgres.yaml
 kubectl apply -f k8s/redis.yaml
 kubectl apply -f k8s/opa.yaml
 kubectl apply -f k8s/backend.yaml
+kubectl apply -f k8s/worker.yaml
 kubectl apply -f k8s/dashboard.yaml
 kubectl apply -f k8s/ingress.yaml
 ```
