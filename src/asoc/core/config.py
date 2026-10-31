@@ -45,7 +45,7 @@ class Settings(BaseSettings):
     @field_validator("LLM_PROVIDER")
     @classmethod
     def validate_llm_provider(cls, v: str) -> str:
-        allowed = {"openai", "anthropic", "ollama", "deepseek", "local", "groq"}
+        allowed = {"openai", "anthropic", "ollama", "deepseek", "local", "groq", "mock"}
         if v.lower() not in allowed:
             raise ValueError(f"LLM_PROVIDER must be one of {allowed}, got '{v}'")
         return v.lower()
@@ -125,6 +125,10 @@ class Settings(BaseSettings):
             )
         if not s.DATABASE_URL or "changeme" in s.DATABASE_URL:
             warnings.append("DATABASE_URL is using default credentials — set a strong password in .env")
+        if not s.JWT_PRIVATE_KEY or not s.JWT_PUBLIC_KEY:
+            warnings.append(
+                "JWT_PRIVATE_KEY or JWT_PUBLIC_KEY is not set — production multi-pod authentication requires static RSA key pairs"
+            )
         return warnings
 
 

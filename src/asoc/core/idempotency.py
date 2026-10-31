@@ -35,9 +35,16 @@ class IdempotencyManager:
     def __init__(self, default_ttl_seconds: int = 86400):
         self.default_ttl = default_ttl_seconds
 
+    async def _get_r(self):
+        import inspect
+        r = get_redis()
+        if inspect.isawaitable(r):
+            r = await r
+        return r
+
     async def acquire_lock(self, key: str, lock_ttl_seconds: int = 300) -> bool:
         """Attempt to acquire in-flight execution lock. Returns True if acquired."""
-        r = get_redis()
+        r = await self._get_r()
         lock_key = f"{key}:lock"
         if r is not None:
             try:
@@ -60,7 +67,7 @@ class IdempotencyManager:
 
     async def release_lock(self, key: str) -> None:
         """Release the in-flight lock (used if the operation failed and should be retriable)."""
-        r = get_redis()
+        r = await self._get_r()
         lock_key = f"{key}:lock"
         if r is not None:
             try:
@@ -71,7 +78,7 @@ class IdempotencyManager:
 
     async def check_executed(self, key: str) -> Tuple[bool, Optional[Any]]:
         """Check if action was already completed. Returns (is_completed, cached_result)."""
-        r = get_redis()
+        r = await self._get_r()
         if r is not None:
             try:
                 cached = await r.get(key)
@@ -97,7 +104,7 @@ class IdempotencyManager:
     async def mark_completed(self, key: str, result: Any, ttl_seconds: Optional[int] = None) -> None:
         """Record completed execution result and clear the in-flight lock."""
         ttl = ttl_seconds or self.default_ttl
-        r = get_redis()
+        r = await self._get_r()
         serialized = json.dumps(result, default=str)
 
         if r is not None:

@@ -304,8 +304,8 @@ class PostgresEventStore:
         pool = await get_db_pool()
         trunc = "hour" if bucket == "hour" else "day" if bucket == "day" else "minute"
         conditions: List[str] = []
-        params: List[Any] = []
-        idx = 1
+        params: List[Any] = [trunc]
+        idx = 2
 
         if query:
             conditions.append(f"payload::text ILIKE ${idx}")
@@ -329,12 +329,11 @@ class PostgresEventStore:
         async with pool.pool.acquire() as conn:
             rows = await conn.fetch(
                 f"""
-                SELECT date_trunc($${idx}, timestamp) AS time_bucket, COUNT(*) AS count
+                SELECT date_trunc($1, timestamp) AS time_bucket, COUNT(*) AS count
                 FROM events{where}
                 GROUP BY time_bucket
                 ORDER BY time_bucket ASC
                 """,
-                trunc,
                 *params,
             )
         return [{"time": r["time_bucket"].isoformat(), "count": r["count"]} for r in rows]

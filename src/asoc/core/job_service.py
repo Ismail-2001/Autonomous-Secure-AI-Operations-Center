@@ -4,12 +4,15 @@ Provides concurrency-safe job scheduling, claiming (SELECT ... FOR UPDATE SKIP L
 heartbeating, stale worker recovery, checkpoint state tracking, and cancellation.
 """
 
+from __future__ import annotations
+
 import asyncio
-import json
-import uuid
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from enum import Enum
+import json
 from typing import Any, Optional
+import uuid
 
 from pydantic import BaseModel, Field
 
@@ -51,24 +54,25 @@ _job_lock = asyncio.Lock()
 class JobService:
     """Service handling job dispatch, claiming, and lifecycle tracking."""
 
-    def __init__(self, database_url: Optional[str] = None):
+    def __init__(self, database_url: Optional[str] = None) -> None:
         self.db_url = database_url or settings.DATABASE_URL
         if self.db_url:
             self.clean_db_url = self.db_url.replace("postgresql+asyncpg://", "postgresql://")
         else:
             self.clean_db_url = None
 
-    async def _get_pg_conn(self):
-        """Acquire asyncpg connection if Postgres is available."""
-        if not self.clean_db_url:
-            return None
+    @asynccontextmanager
+    async def _get_conn(self):
+        """Acquire asyncpg connection from shared DatabasePool, or yield None."""
         try:
-            import asyncpg
+            from src.asoc.core.connection import get_db_pool
 
-            conn = await asyncpg.connect(self.clean_db_url, timeout=3.0)
-            return conn
-        except Exception:
-            return None
+            db_pool = await get_db_pool()
+            async with db_pool.pool.acquire() as conn:
+                yield conn
+        except Exception as e:
+            logger.debug("db_pool_unavailable_falling_back_to_memory", error=str(e))
+            yield None
 
     async def enqueue_job(
         self,
@@ -84,30 +88,28 @@ class JobService:
             state_payload=state_payload or {},
         )
 
-        conn = await self._get_pg_conn()
-        if conn:
-            try:
-                payload_json = json.dumps(job.state_payload)
-                await conn.execute(
-                    """
-                    INSERT INTO jobs (id, incident_id, state, attempt, max_attempts, state_payload, created_at, updated_at)
-                    VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8)
-                    """,
-                    job.id,
-                    job.incident_id,
-                    job.state.value,
-                    job.attempt,
-                    job.max_attempts,
-                    payload_json,
-                    job.created_at,
-                    job.updated_at,
-                )
-                logger.info("job_enqueued_db", job_id=job.id, incident_id=incident_id)
-                return job
-            except Exception as e:
-                logger.warning("db_enqueue_failed_falling_back_to_memory", error=str(e))
-            finally:
-                await conn.close()
+        async with self._get_conn() as conn:
+            if conn:
+                try:
+                    payload_json = json.dumps(job.state_payload)
+                    await conn.execute(
+                        """
+                        INSERT INTO jobs (id, incident_id, state, attempt, max_attempts, state_payload, created_at, updated_at)
+                        VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8)
+                        """,
+                        job.id,
+                        job.incident_id,
+                        job.state.value,
+                        job.attempt,
+                        job.max_attempts,
+                        payload_json,
+                        job.created_at,
+                        job.updated_at,
+                    )
+                    logger.info("job_enqueued_db", job_id=job.id, incident_id=incident_id)
+                    return job
+                except Exception as e:
+                    logger.warning("db_enqueue_failed_falling_back_to_memory", error=str(e))
 
         # In-memory fallback
         async with _job_lock:
@@ -121,58 +123,56 @@ class JobService:
         stale_timeout_seconds: int = 300,
     ) -> Optional[Job]:
         """Claim next pending/retrying job or recover a stale abandoned job using SKIP LOCKED."""
-        conn = await self._get_pg_conn()
-        if conn:
-            try:
-                row = await conn.fetchrow(
-                    f"""
-                    WITH candidate AS (
-                        SELECT id FROM jobs
-                        WHERE state IN ('PENDING', 'RETRYING')
-                           OR (state = 'RUNNING' AND heartbeat_at < NOW() - INTERVAL '{int(stale_timeout_seconds)} seconds')
-                        ORDER BY created_at ASC
-                        FOR UPDATE SKIP LOCKED
-                        LIMIT 1
+        async with self._get_conn() as conn:
+            if conn:
+                try:
+                    row = await conn.fetchrow(
+                        f"""
+                        WITH candidate AS (
+                            SELECT id FROM jobs
+                            WHERE state IN ('PENDING', 'RETRYING')
+                               OR (state = 'RUNNING' AND heartbeat_at < NOW() - INTERVAL '{int(stale_timeout_seconds)} seconds')
+                            ORDER BY created_at ASC
+                            FOR UPDATE SKIP LOCKED
+                            LIMIT 1
+                        )
+                        UPDATE jobs
+                        SET state = 'RUNNING',
+                            locked_by = $1,
+                            locked_at = NOW(),
+                            heartbeat_at = NOW(),
+                            attempt = attempt + 1,
+                            updated_at = NOW()
+                        FROM candidate
+                        WHERE jobs.id = candidate.id
+                        RETURNING jobs.id, jobs.incident_id, jobs.state, jobs.attempt, jobs.max_attempts,
+                                  jobs.locked_by, jobs.locked_at, jobs.heartbeat_at, jobs.error,
+                                  jobs.state_payload, jobs.created_at, jobs.updated_at;
+                        """,
+                        worker_id,
                     )
-                    UPDATE jobs
-                    SET state = 'RUNNING',
-                        locked_by = $1,
-                        locked_at = NOW(),
-                        heartbeat_at = NOW(),
-                        attempt = attempt + 1,
-                        updated_at = NOW()
-                    FROM candidate
-                    WHERE jobs.id = candidate.id
-                    RETURNING jobs.id, jobs.incident_id, jobs.state, jobs.attempt, jobs.max_attempts,
-                              jobs.locked_by, jobs.locked_at, jobs.heartbeat_at, jobs.error,
-                              jobs.state_payload, jobs.created_at, jobs.updated_at;
-                    """,
-                    worker_id,
-                )
-                if row:
-                    payload = row["state_payload"]
-                    if isinstance(payload, str):
-                        payload = json.loads(payload)
-                    job = Job(
-                        id=row["id"],
-                        incident_id=row["incident_id"],
-                        state=JobState(row["state"]),
-                        attempt=row["attempt"],
-                        max_attempts=row["max_attempts"],
-                        locked_by=row["locked_by"],
-                        locked_at=row["locked_at"],
-                        heartbeat_at=row["heartbeat_at"],
-                        error=row["error"],
-                        state_payload=payload if isinstance(payload, dict) else {},
-                        created_at=row["created_at"],
-                        updated_at=row["updated_at"],
-                    )
-                    logger.info("job_claimed_db", job_id=job.id, worker_id=worker_id, attempt=job.attempt)
-                    return job
-            except Exception as e:
-                logger.warning("db_claim_failed_falling_back_to_memory", error=str(e))
-            finally:
-                await conn.close()
+                    if row:
+                        payload = row["state_payload"]
+                        if isinstance(payload, str):
+                            payload = json.loads(payload)
+                        job = Job(
+                            id=row["id"],
+                            incident_id=row["incident_id"],
+                            state=JobState(row["state"]),
+                            attempt=row["attempt"],
+                            max_attempts=row["max_attempts"],
+                            locked_by=row["locked_by"],
+                            locked_at=row["locked_at"],
+                            heartbeat_at=row["heartbeat_at"],
+                            error=row["error"],
+                            state_payload=payload if isinstance(payload, dict) else {},
+                            created_at=row["created_at"],
+                            updated_at=row["updated_at"],
+                        )
+                        logger.info("job_claimed_db", job_id=job.id, worker_id=worker_id, attempt=job.attempt)
+                        return job
+                except Exception as e:
+                    logger.warning("db_claim_failed_falling_back_to_memory", error=str(e))
 
         # In-memory fallback
         async with _job_lock:
@@ -203,24 +203,22 @@ class JobService:
 
     async def heartbeat_job(self, job_id: str, worker_id: str) -> bool:
         """Send liveness heartbeat for an active job."""
-        conn = await self._get_pg_conn()
         now = datetime.now(timezone.utc)
-        if conn:
-            try:
-                res = await conn.execute(
-                    """
-                    UPDATE jobs
-                    SET heartbeat_at = NOW(), updated_at = NOW()
-                    WHERE id = $1 AND locked_by = $2 AND state = 'RUNNING'
-                    """,
-                    job_id,
-                    worker_id,
-                )
-                return "UPDATE 1" in res
-            except Exception as e:
-                logger.warning("db_heartbeat_failed", error=str(e))
-            finally:
-                await conn.close()
+        async with self._get_conn() as conn:
+            if conn:
+                try:
+                    res = await conn.execute(
+                        """
+                        UPDATE jobs
+                        SET heartbeat_at = NOW(), updated_at = NOW()
+                        WHERE id = $1 AND locked_by = $2 AND state = 'RUNNING'
+                        """,
+                        job_id,
+                        worker_id,
+                    )
+                    return "UPDATE 1" in res
+                except Exception as e:
+                    logger.warning("db_heartbeat_failed", error=str(e))
 
         # In-memory fallback
         async with _job_lock:
@@ -237,33 +235,31 @@ class JobService:
         state_payload: Optional[dict[str, Any]] = None,
     ) -> bool:
         """Mark a job as COMPLETED."""
-        conn = await self._get_pg_conn()
         now = datetime.now(timezone.utc)
         payload_json = json.dumps(state_payload or {}) if state_payload else None
 
-        if conn:
-            try:
-                if payload_json:
-                    query = """
-                        UPDATE jobs
-                        SET state = 'COMPLETED', locked_by = NULL, locked_at = NULL,
-                            state_payload = $2::jsonb, updated_at = NOW()
-                        WHERE id = $1
-                    """
-                    res = await conn.execute(query, job_id, payload_json)
-                else:
-                    query = """
-                        UPDATE jobs
-                        SET state = 'COMPLETED', locked_by = NULL, locked_at = NULL, updated_at = NOW()
-                        WHERE id = $1
-                    """
-                    res = await conn.execute(query, job_id)
-                logger.info("job_completed_db", job_id=job_id)
-                return "UPDATE 1" in res
-            except Exception as e:
-                logger.warning("db_complete_failed", error=str(e))
-            finally:
-                await conn.close()
+        async with self._get_conn() as conn:
+            if conn:
+                try:
+                    if payload_json:
+                        query = """
+                            UPDATE jobs
+                            SET state = 'COMPLETED', locked_by = NULL, locked_at = NULL,
+                                state_payload = $2::jsonb, updated_at = NOW()
+                            WHERE id = $1
+                        """
+                        res = await conn.execute(query, job_id, payload_json)
+                    else:
+                        query = """
+                            UPDATE jobs
+                            SET state = 'COMPLETED', locked_by = NULL, locked_at = NULL, updated_at = NOW()
+                            WHERE id = $1
+                        """
+                        res = await conn.execute(query, job_id)
+                    logger.info("job_completed_db", job_id=job_id)
+                    return "UPDATE 1" in res
+                except Exception as e:
+                    logger.warning("db_complete_failed", error=str(e))
 
         # In-memory fallback
         async with _job_lock:
@@ -294,26 +290,24 @@ class JobService:
         should_retry = can_retry and (job.attempt < job.max_attempts)
         new_state = JobState.RETRYING if should_retry else JobState.FAILED
 
-        conn = await self._get_pg_conn()
-        if conn:
-            try:
-                res = await conn.execute(
-                    """
-                    UPDATE jobs
-                    SET state = $2, locked_by = NULL, locked_at = NULL,
-                        error = $3, updated_at = NOW()
-                    WHERE id = $1
-                    """,
-                    job_id,
-                    new_state.value,
-                    error_message,
-                )
-                logger.info("job_failed_db", job_id=job_id, state=new_state.value, error=error_message)
-                return "UPDATE 1" in res
-            except Exception as e:
-                logger.warning("db_fail_failed", error=str(e))
-            finally:
-                await conn.close()
+        async with self._get_conn() as conn:
+            if conn:
+                try:
+                    res = await conn.execute(
+                        """
+                        UPDATE jobs
+                        SET state = $2, locked_by = NULL, locked_at = NULL,
+                            error = $3, updated_at = NOW()
+                        WHERE id = $1
+                        """,
+                        job_id,
+                        new_state.value,
+                        error_message,
+                    )
+                    logger.info("job_failed_db", job_id=job_id, state=new_state.value, error=error_message)
+                    return "UPDATE 1" in res
+                except Exception as e:
+                    logger.warning("db_fail_failed", error=str(e))
 
         # In-memory fallback
         async with _job_lock:
@@ -330,26 +324,24 @@ class JobService:
 
     async def cancel_job(self, job_id: str, reason: str = "Cancelled by user") -> bool:
         """Cancel an in-progress or queued job."""
-        conn = await self._get_pg_conn()
         now = datetime.now(timezone.utc)
-        if conn:
-            try:
-                res = await conn.execute(
-                    """
-                    UPDATE jobs
-                    SET state = 'CANCELLED', locked_by = NULL, locked_at = NULL,
-                        error = $2, updated_at = NOW()
-                    WHERE id = $1 AND state IN ('PENDING', 'RUNNING', 'RETRYING')
-                    """,
-                    job_id,
-                    reason,
-                )
-                logger.info("job_cancelled_db", job_id=job_id, reason=reason)
-                return "UPDATE 1" in res
-            except Exception as e:
-                logger.warning("db_cancel_failed", error=str(e))
-            finally:
-                await conn.close()
+        async with self._get_conn() as conn:
+            if conn:
+                try:
+                    res = await conn.execute(
+                        """
+                        UPDATE jobs
+                        SET state = 'CANCELLED', locked_by = NULL, locked_at = NULL,
+                            error = $2, updated_at = NOW()
+                        WHERE id = $1 AND state IN ('PENDING', 'RUNNING', 'RETRYING')
+                        """,
+                        job_id,
+                        reason,
+                    )
+                    logger.info("job_cancelled_db", job_id=job_id, reason=reason)
+                    return "UPDATE 1" in res
+                except Exception as e:
+                    logger.warning("db_cancel_failed", error=str(e))
 
         # In-memory fallback
         async with _job_lock:
@@ -366,32 +358,30 @@ class JobService:
 
     async def get_job(self, job_id: str) -> Optional[Job]:
         """Fetch job details by ID."""
-        conn = await self._get_pg_conn()
-        if conn:
-            try:
-                row = await conn.fetchrow("SELECT * FROM jobs WHERE id = $1", job_id)
-                if row:
-                    payload = row["state_payload"]
-                    if isinstance(payload, str):
-                        payload = json.loads(payload)
-                    return Job(
-                        id=row["id"],
-                        incident_id=row["incident_id"],
-                        state=JobState(row["state"]),
-                        attempt=row["attempt"],
-                        max_attempts=row["max_attempts"],
-                        locked_by=row["locked_by"],
-                        locked_at=row["locked_at"],
-                        heartbeat_at=row["heartbeat_at"],
-                        error=row["error"],
-                        state_payload=payload if isinstance(payload, dict) else {},
-                        created_at=row["created_at"],
-                        updated_at=row["updated_at"],
-                    )
-            except Exception as e:
-                logger.warning("db_get_job_failed", error=str(e))
-            finally:
-                await conn.close()
+        async with self._get_conn() as conn:
+            if conn:
+                try:
+                    row = await conn.fetchrow("SELECT * FROM jobs WHERE id = $1", job_id)
+                    if row:
+                        payload = row["state_payload"]
+                        if isinstance(payload, str):
+                            payload = json.loads(payload)
+                        return Job(
+                            id=row["id"],
+                            incident_id=row["incident_id"],
+                            state=JobState(row["state"]),
+                            attempt=row["attempt"],
+                            max_attempts=row["max_attempts"],
+                            locked_by=row["locked_by"],
+                            locked_at=row["locked_at"],
+                            heartbeat_at=row["heartbeat_at"],
+                            error=row["error"],
+                            state_payload=payload if isinstance(payload, dict) else {},
+                            created_at=row["created_at"],
+                            updated_at=row["updated_at"],
+                        )
+                except Exception as e:
+                    logger.warning("db_get_job_failed", error=str(e))
 
         # In-memory fallback
         async with _job_lock:
@@ -404,50 +394,48 @@ class JobService:
         limit: int = 50,
     ) -> list[Job]:
         """List jobs matching criteria."""
-        conn = await self._get_pg_conn()
-        if conn:
-            try:
-                clauses = []
-                params = []
-                idx = 1
-                if incident_id:
-                    clauses.append(f"incident_id = ${idx}")
-                    params.append(incident_id)
-                    idx += 1
-                if state:
-                    clauses.append(f"state = ${idx}")
-                    params.append(state.value)
-                    idx += 1
+        async with self._get_conn() as conn:
+            if conn:
+                try:
+                    clauses: list[str] = []
+                    params: list[Any] = []
+                    idx = 1
+                    if incident_id:
+                        clauses.append(f"incident_id = ${idx}")
+                        params.append(incident_id)
+                        idx += 1
+                    if state:
+                        clauses.append(f"state = ${idx}")
+                        params.append(state.value)
+                        idx += 1
 
-                where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
-                sql = f"SELECT * FROM jobs {where_sql} ORDER BY created_at DESC LIMIT {int(limit)}"
-                rows = await conn.fetch(sql, *params)
-                jobs = []
-                for r in rows:
-                    payload = r["state_payload"]
-                    if isinstance(payload, str):
-                        payload = json.loads(payload)
-                    jobs.append(
-                        Job(
-                            id=r["id"],
-                            incident_id=r["incident_id"],
-                            state=JobState(r["state"]),
-                            attempt=r["attempt"],
-                            max_attempts=r["max_attempts"],
-                            locked_by=r["locked_by"],
-                            locked_at=r["locked_at"],
-                            heartbeat_at=r["heartbeat_at"],
-                            error=r["error"],
-                            state_payload=payload if isinstance(payload, dict) else {},
-                            created_at=r["created_at"],
-                            updated_at=r["updated_at"],
+                    where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+                    sql = f"SELECT * FROM jobs {where_sql} ORDER BY created_at DESC LIMIT {int(limit)}"
+                    rows = await conn.fetch(sql, *params)
+                    jobs: list[Job] = []
+                    for r in rows:
+                        payload = r["state_payload"]
+                        if isinstance(payload, str):
+                            payload = json.loads(payload)
+                        jobs.append(
+                            Job(
+                                id=r["id"],
+                                incident_id=r["incident_id"],
+                                state=JobState(r["state"]),
+                                attempt=r["attempt"],
+                                max_attempts=r["max_attempts"],
+                                locked_by=r["locked_by"],
+                                locked_at=r["locked_at"],
+                                heartbeat_at=r["heartbeat_at"],
+                                error=r["error"],
+                                state_payload=payload if isinstance(payload, dict) else {},
+                                created_at=r["created_at"],
+                                updated_at=r["updated_at"],
+                            )
                         )
-                    )
-                return jobs
-            except Exception as e:
-                logger.warning("db_list_jobs_failed", error=str(e))
-            finally:
-                await conn.close()
+                    return jobs
+                except Exception as e:
+                    logger.warning("db_list_jobs_failed", error=str(e))
 
         # In-memory fallback
         async with _job_lock:

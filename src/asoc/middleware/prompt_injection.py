@@ -120,12 +120,17 @@ def _sanitize(text: str) -> str:
     return _CONTROL_CHARS.sub("", text)
 
 
-def detect_injection(text: str, context: str = "") -> DetectionResult:
+# Exclude raw security indicators from triggering blocks on security telemetry/logs
+_TELEMETRY_EXCLUDED_PATTERNS = {"exfiltration_url", "xss_attempt"}
+
+
+def detect_injection(text: str, context: str = "", is_telemetry: bool = False) -> DetectionResult:
     """Scan text for prompt injection patterns.
 
     Args:
         text: The user-controlled string to scan.
         context: Optional context (e.g., agent name) for logging.
+        is_telemetry: If True, skips URL and script indicators common in security telemetry.
 
     Returns:
         DetectionResult with threat level, matched patterns, and sanitized text.
@@ -139,6 +144,8 @@ def detect_injection(text: str, context: str = "") -> DetectionResult:
     level_order = [ThreatLevel.NONE, ThreatLevel.LOW, ThreatLevel.MEDIUM, ThreatLevel.HIGH, ThreatLevel.CRITICAL]
 
     for pattern, level, desc in _INJECTION_PATTERNS:
+        if is_telemetry and desc in _TELEMETRY_EXCLUDED_PATTERNS:
+            continue
         if pattern.search(sanitized):
             matches.append(desc)
             if level_order.index(level) > level_order.index(max_level):
@@ -164,14 +171,14 @@ def detect_injection(text: str, context: str = "") -> DetectionResult:
     )
 
 
-def scan_for_injection(*texts: str, context: str = "") -> DetectionResult:
+def scan_for_injection(*texts: str, context: str = "", is_telemetry: bool = False) -> DetectionResult:
     """Scan multiple text fields and return the highest threat level found."""
     worst = DetectionResult(threat_level=ThreatLevel.NONE)
 
     level_order = [ThreatLevel.NONE, ThreatLevel.LOW, ThreatLevel.MEDIUM, ThreatLevel.HIGH, ThreatLevel.CRITICAL]
 
     for text in texts:
-        result = detect_injection(text, context)
+        result = detect_injection(text, context, is_telemetry=is_telemetry)
         if level_order.index(result.threat_level) > level_order.index(worst.threat_level):
             worst = result
         worst.matched_patterns.extend(result.matched_patterns)
@@ -184,6 +191,7 @@ def scan_for_injection(*texts: str, context: str = "") -> DetectionResult:
 
 def validate_agent_input(
     agent_name: str,
+    is_telemetry: Optional[bool] = None,
     **fields: str,
 ) -> None:
     """Validate all input fields for an agent. Raises ValueError if injection detected.
@@ -199,8 +207,13 @@ def validate_agent_input(
     if not texts:
         return
 
+    # Auto-detect telemetry context if field names represent telemetry/event payloads
+    telemetry_keys = {"event_data", "incident_data", "telemetry", "raw_log", "log_payload", "events"}
+    if is_telemetry is None:
+        is_telemetry = any(k.lower() in telemetry_keys for k in fields.keys()) or "telemetry" in agent_name.lower()
+
     combined = " | ".join(texts)
-    result = scan_for_injection(combined, context=agent_name)
+    result = scan_for_injection(combined, context=agent_name, is_telemetry=is_telemetry)
 
     if result.blocked:
         raise ValueError(

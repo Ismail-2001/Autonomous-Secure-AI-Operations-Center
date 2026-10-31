@@ -69,6 +69,24 @@ class DatabasePool:
                 CREATE INDEX IF NOT EXISTS idx_events_type ON events(event_type);
                 CREATE INDEX IF NOT EXISTS idx_events_incident ON events(incident_id);
                 CREATE INDEX IF NOT EXISTS idx_events_status ON events(status);
+
+                CREATE TABLE IF NOT EXISTS jobs (
+                    id VARCHAR(36) PRIMARY KEY,
+                    incident_id VARCHAR(36) NOT NULL,
+                    state VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+                    attempt INT NOT NULL DEFAULT 0,
+                    max_attempts INT NOT NULL DEFAULT 3,
+                    locked_by VARCHAR(128),
+                    locked_at TIMESTAMPTZ,
+                    heartbeat_at TIMESTAMPTZ,
+                    error TEXT,
+                    state_payload JSONB NOT NULL DEFAULT '{}',
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS idx_jobs_state_locked_at ON jobs(state, locked_at);
+                CREATE INDEX IF NOT EXISTS idx_jobs_incident_id ON jobs(incident_id);
+                CREATE INDEX IF NOT EXISTS idx_jobs_locked_by ON jobs(locked_by);
             """)
             logger.info("database_migrations_complete")
 
