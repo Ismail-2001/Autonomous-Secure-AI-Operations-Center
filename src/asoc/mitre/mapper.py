@@ -248,6 +248,12 @@ class MitreMapper:
                 seen[key] = MitreTechnique(id=tid, name=name, tactic=tactic, description=desc)
         return list(seen.values())
 
+    def get_technique(self, technique_id: str) -> Optional[MitreTechnique]:
+        for tech in self.get_all_techniques():
+            if tech.id.lower() == technique_id.lower():
+                return tech
+        return None
+
     def group_by_tactic(self) -> Dict[str, List[MitreTechnique]]:
         grouped: Dict[str, List[MitreTechnique]] = {}
         for technique in self.get_all_techniques():

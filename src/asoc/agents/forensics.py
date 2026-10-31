@@ -1,3 +1,4 @@
+import hashlib
 import json
 import uuid
 from datetime import datetime, timezone
@@ -86,7 +87,8 @@ class ForensicsAgent(BaseAgent):
             resources = event.get("resources", [])
             for res in resources[:2]:
                 res_name = res.get("name", res.get("type", "resource"))
-                res_node_id = f"res-{hash(res_name)}"
+                res_hash = hashlib.sha256(str(res_name).encode()).hexdigest()[:12]
+                res_node_id = f"res-{res_hash}"
                 if res_node_id not in node_ids:
                     risk = "high" if "Delete" in event_name or "Terminate" in event_name else "medium"
                     nodes.append({"id": res_node_id, "type": "resource", "label": res_name, "risk": risk})

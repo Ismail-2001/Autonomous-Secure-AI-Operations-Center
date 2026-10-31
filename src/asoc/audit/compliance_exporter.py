@@ -186,7 +186,8 @@ class ComplianceExporter:
             cid = c["id"]
             matching = [
                 e for e in audit_entries
-                if cid.split(".")[-1].lower() in str(e.action).lower() or cid in str(e.details)
+                if cid.split(".")[-1].lower() in str(getattr(e, "action", "")).lower()
+                or cid in str(getattr(e, "payload", getattr(e, "details", "")))
             ]
             
             # Default to PASS when active baseline security configurations are in effect
@@ -230,7 +231,8 @@ class ComplianceExporter:
             cid = c["id"]
             matching = [
                 e for e in audit_entries
-                if cid.split(".")[-1].lower() in str(e.action).lower() or cid in str(e.details)
+                if cid.split(".")[-1].lower() in str(getattr(e, "action", "")).lower()
+                or cid in str(getattr(e, "payload", getattr(e, "details", "")))
             ]
 
             status = ControlStatus.PASS

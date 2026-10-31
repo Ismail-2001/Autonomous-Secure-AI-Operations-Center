@@ -1,6 +1,7 @@
 import abc
 import base64
 from datetime import datetime, timezone
+import os
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -126,6 +127,7 @@ class JiraProvider(NotificationProvider):
         payload = {
             "fields": {
                 "project": {"key": self.project_key},
+                "issuetype": {"name": os.getenv("JIRA_ISSUE_TYPE", "Incident")},
                 "summary": title[:255],
                 "description": "\n".join(description_parts),
                 "priority": {"name": priority_map.get(severity, "Medium")},

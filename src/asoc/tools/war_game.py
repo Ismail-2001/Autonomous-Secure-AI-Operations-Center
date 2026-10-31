@@ -27,7 +27,7 @@ from pydantic import BaseModel, Field
 from src.asoc.audit.audit_trail import log_agent_action
 from src.asoc.audit.compliance_exporter import Framework, get_compliance_exporter
 from src.asoc.core.config import settings
-from src.asoc.core.job_service import Job, JobState, get_job_service
+from src.asoc.core.job_service import Job, JobService, JobState, get_job_service
 from src.asoc.core.logging import get_logger
 from src.asoc.mitre.mapper import mitre_mapper
 
@@ -358,6 +358,12 @@ class WarGameEngine:
 
 
 def print_cli_report(report: WarGameReport) -> None:
+    try:
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
     CYAN = "\033[96m"
     GREEN = "\033[92m"
     YELLOW = "\033[93m"

@@ -488,9 +488,13 @@ class SupervisorAgent(BaseAgent):
         quality_passed = True
         escalation_level = "auto_retry"
         should_page = False
+        opa_allowed = True
 
         for i, r in enumerate(tool_results):
-            if isinstance(r, dict):
+            if isinstance(r, bool):
+                if r is False:
+                    opa_allowed = False
+            elif isinstance(r, dict):
                 if "route" in r or (isinstance(r, str) and r in ("hitl", "auto_approve", "block", "forensics")):
                     route = r if isinstance(r, str) else r.get("route", "forensics")
                 if "passed" in r:
@@ -499,8 +503,14 @@ class SupervisorAgent(BaseAgent):
                     escalation_level = r["level"]
                 if "should_page_human" in r:
                     should_page = r["should_page_human"]
+                if "allowed" in r and r["allowed"] is False:
+                    opa_allowed = False
             elif isinstance(r, str) and r in ("hitl", "auto_approve", "block", "forensics"):
                 route = r
+
+        if not opa_allowed:
+            route = "hitl"
+            should_page = True
 
         if not quality_passed:
             route = "supervisor"
