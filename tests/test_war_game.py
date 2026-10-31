@@ -87,7 +87,7 @@ class TestWarGameApiEndpoints:
         return TestClient(app)
 
     def test_list_scenarios_requires_analyst(self, client):
-        viewer_tokens = create_token_pair(user_id="viewer-wg-test", role=Role.VIEWER)
+        viewer_tokens = create_token_pair(user_id="viewer-wg-test", role=Role.READONLY)
         analyst_tokens = create_token_pair(user_id="analyst-wg-test", role=Role.ANALYST)
 
         # Unauthenticated -> 401

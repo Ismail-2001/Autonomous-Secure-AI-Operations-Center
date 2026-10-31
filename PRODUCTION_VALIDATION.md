@@ -123,10 +123,10 @@ Operators and auditors validate defense posture on demand without risking produc
 
 ```powershell
 # 1. Run Comprehensive Smoke Test Suite against Live Deployment
-.\a-soc\scripts\smoke-test.ps1
+.\scripts\smoke-test.ps1
 
 # 2. Run Headless Playwright E2E Test Suite
-cd a-soc\dashboard
+cd dashboard
 npx playwright test e2e/production_validation.spec.ts
 
 # 3. Verify Docker Container Health & Restart Policies
@@ -139,18 +139,18 @@ docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 
 | Test Suite | File Path | Focus & Validation Criteria | Gate Requirement |
 | :--- | :--- | :--- | :--- |
-| **Threat Pipeline E2E** | [`test_threat_pipeline.py`](file:///c:/Users/HP/Downloads/Autonomous-Secure-AI-Operations-Center-main/Autonomous-Secure-AI-Operations-Center-main/a-soc/tests/e2e/test_threat_pipeline.py) | Full multi-agent cycle: Ingestion -> Telemetry -> Detection -> Supervisor -> Response. | 100% Pass |
-| **War Game Engine** | [`test_war_game.py`](file:///c:/Users/HP/Downloads/Autonomous-Secure-AI-Operations-Center-main/Autonomous-Secure-AI-Operations-Center-main/a-soc/tests/test_war_game.py) | Multi-stage ransomware, cloud exfiltration, MTTD/MTTR calculation, SHA-256 manifest. | 100% Pass |
-| **Compliance Exporter** | [`test_compliance_phase5.py`](file:///c:/Users/HP/Downloads/Autonomous-Secure-AI-Operations-Center-main/Autonomous-Secure-AI-Operations-Center-main/a-soc/tests/test_compliance_phase5.py) | SOC 2 Type II, ISO/IEC 27001:2022, SHA-256 reproducibility, Supervisor RBAC enforcement. | 100% Pass |
-| **Graph & Routing** | [`test_graph_integration.py`](file:///c:/Users/HP/Downloads/Autonomous-Secure-AI-Operations-Center-main/Autonomous-Secure-AI-Operations-Center-main/a-soc/tests/test_graph_integration.py) | Agent workflow graph routing, confidence degradation, HITL branch conditions. | 100% Pass |
-| **Dashboard E2E** | [`production_validation.spec.ts`](file:///c:/Users/HP/Downloads/Autonomous-Secure-AI-Operations-Center-main/Autonomous-Secure-AI-Operations-Center-main/a-soc/dashboard/e2e/production_validation.spec.ts) | UI War Game Modal, Blast Radius SVG Graph, Contagion Slider, Audit Exporter triggers. | 100% Pass |
-| **CI/CD Security Gate** | [`production-pipeline.yml`](file:///c:/Users/HP/Downloads/Autonomous-Secure-AI-Operations-Center-main/Autonomous-Secure-AI-Operations-Center-main/a-soc/.github/workflows/production-pipeline.yml) | Multi-arch Docker build (amd64/arm64), Gitleaks secrets audit, Trivy container vulnerability scan. | Zero High/Crit |
+| **Threat Pipeline E2E** | [`test_threat_pipeline.py`](file:///c:/Users/HP/Downloads/Autonomous-Secure-AI-Operations-Center-main/Autonomous-Secure-AI-Operations-Center-main/tests/e2e/test_threat_pipeline.py) | Full multi-agent cycle: Ingestion -> Telemetry -> Detection -> Supervisor -> Response. | 100% Pass |
+| **War Game Engine** | [`test_war_game.py`](file:///c:/Users/HP/Downloads/Autonomous-Secure-AI-Operations-Center-main/Autonomous-Secure-AI-Operations-Center-main/tests/test_war_game.py) | Multi-stage ransomware, cloud exfiltration, MTTD/MTTR calculation, SHA-256 manifest. | 100% Pass |
+| **Compliance Exporter** | [`test_compliance_phase5.py`](file:///c:/Users/HP/Downloads/Autonomous-Secure-AI-Operations-Center-main/Autonomous-Secure-AI-Operations-Center-main/tests/test_compliance_phase5.py) | SOC 2 Type II, ISO/IEC 27001:2022, SHA-256 reproducibility, Supervisor RBAC enforcement. | 100% Pass |
+| **Graph & Routing** | [`test_graph_integration.py`](file:///c:/Users/HP/Downloads/Autonomous-Secure-AI-Operations-Center-main/Autonomous-Secure-AI-Operations-Center-main/tests/test_graph_integration.py) | Agent workflow graph routing, confidence degradation, HITL branch conditions. | 100% Pass |
+| **Dashboard E2E** | [`production_validation.spec.ts`](file:///c:/Users/HP/Downloads/Autonomous-Secure-AI-Operations-Center-main/Autonomous-Secure-AI-Operations-Center-main/dashboard/e2e/production_validation.spec.ts) | UI War Game Modal, Blast Radius SVG Graph, Contagion Slider, Audit Exporter triggers. | 100% Pass |
+| **CI/CD Security Gate** | [`ci.yml`](file:///c:/Users/HP/Downloads/Autonomous-Secure-AI-Operations-Center-main/Autonomous-Secure-AI-Operations-Center-main/.github/workflows/ci.yml) | Multi-arch Docker build (amd64/arm64), Gitleaks secrets audit, Trivy container vulnerability scan. | Zero High/Crit |
 
 ---
 
 ## 5. Production Observability & Prometheus Alerting
 
-The alerting rules are codified in [`monitoring/alerting-rules.yml`](file:///c:/Users/HP/Downloads/Autonomous-Secure-AI-Operations-Center-main/Autonomous-Secure-AI-Operations-Center-main/a-soc/monitoring/alerting-rules.yml):
+The alerting rules are codified in [`monitoring/alerting-rules.yml`](file:///c:/Users/HP/Downloads/Autonomous-Secure-AI-Operations-Center-main/Autonomous-Secure-AI-Operations-Center-main/monitoring/alerting-rules.yml):
 
 - `AsocBackendDown`: Critical alert if backend API unreachable for $> 1\,\text{min}$.
 - `HighP95InferenceLatency`: Warning if agent decision latency exceeds $2{,}500\,\text{ms}$ over a 5-minute window.
@@ -166,7 +166,7 @@ The alerting rules are codified in [`monitoring/alerting-rules.yml`](file:///c:/
 ### RPO (Recovery Point Objective): $< 1\,\text{minute}$
 
 1. **Database Backup & Restoration:**
-   - Automated hourly PostgreSQL WAL archiving via [`backup-postgres.sh`](file:///c:/Users/HP/Downloads/Autonomous-Secure-AI-Operations-Center-main/Autonomous-Secure-AI-Operations-Center-main/a-soc/scripts/backup-postgres.sh).
+   - Automated hourly PostgreSQL WAL archiving via [`backup-postgres.sh`](file:///c:/Users/HP/Downloads/Autonomous-Secure-AI-Operations-Center-main/Autonomous-Secure-AI-Operations-Center-main/scripts/backup-postgres.sh).
    - Point-in-time recovery (PITR) verified against dedicated disaster recovery target.
 2. **Circuit Breaker Reset Protocol:**
    - If automated response exceeds threshold and trips the circuit breaker:

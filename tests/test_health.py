@@ -1,7 +1,7 @@
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from api import app
+from src.asoc.api.app import app
 
 transport = ASGITransport(app=app)
 

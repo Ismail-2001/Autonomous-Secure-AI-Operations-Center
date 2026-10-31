@@ -11,8 +11,8 @@
 ### 1. Clone & Configure
 
 ```bash
-git clone https://github.com/Ismail-2001/Autonomous-Secure-AI-Operations-Center-2.git
-cd Autonomous-Secure-AI-Operations-Center-2/a-soc
+git clone https://github.com/Ismail-2001/Autonomous-Secure-AI-Operations-Center.git
+cd Autonomous-Secure-AI-Operations-Center
 cp .env.example .env
 ```
 
@@ -121,7 +121,6 @@ chmod +x k8s/k3s-hetzner-deploy.sh
 
 ```bash
 kubectl apply -f k8s/namespace.yaml
-kubectl apply -f k8s/secrets.yaml
 kubectl apply -f k8s/postgres.yaml
 kubectl apply -f k8s/redis.yaml
 kubectl apply -f k8s/opa.yaml

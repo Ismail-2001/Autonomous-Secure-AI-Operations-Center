@@ -202,7 +202,7 @@ To guarantee high-throughput reasoning under API outages or rate limits, the rea
 | **Optional** | **OpenAI** | `gpt-4o` | ~70 tokens/s | Enterprise commercial fallback |
 
 ### 5.2. Autonomous Security Tools
-The LLM agents possess first-class autonomous tool-calling capabilities ([src/asoc/agents/security_tools.py](file:///c:/Users/HP/Downloads/Autonomous-Secure-AI-Operations-Center-main/Autonomous-Secure-AI-Operations-Center-main/a-soc/src/asoc/agents/security_tools.py)):
+The LLM agents possess first-class autonomous tool-calling capabilities ([src/asoc/agents/security_tools.py](file:///c:/Users/HP/Downloads/Autonomous-Secure-AI-Operations-Center-main/Autonomous-Secure-AI-Operations-Center-main/src/asoc/agents/security_tools.py)):
 - `query_siem_events(query, agent_source, limit)`: Semantic log inspection over the Event Store.
 - `lookup_threat_intel(indicator)`: High-speed RFC 1918 private address pre-filtering with live AbuseIPDB v2 / VirusTotal enrichment.
 - `lookup_mitre_technique(technique_id)`: MITRE ATT&CK taxonomy and sub-technique resolution.
@@ -336,7 +336,7 @@ A-SOC avoids multi-thousand-dollar monthly cloud infrastructure bills. The entir
 
 ## 10. Operational SLA Benchmarks (The "War Game" Engine)
 
-A-SOC includes a built-in adversarial attack simulation engine ([src/asoc/tools/war_game.py](file:///c:/Users/HP/Downloads/Autonomous-Secure-AI-Operations-Center-main/Autonomous-Secure-AI-Operations-Center-main/a-soc/src/asoc/tools/war_game.py)) that continuously benchmarks detection and response velocity against simulated BlackCat ransomware and cloud exfiltration campaigns:
+A-SOC includes a built-in adversarial attack simulation engine ([src/asoc/tools/war_game.py](file:///c:/Users/HP/Downloads/Autonomous-Secure-AI-Operations-Center-main/Autonomous-Secure-AI-Operations-Center-main/src/asoc/tools/war_game.py)) that continuously benchmarks detection and response velocity against simulated BlackCat ransomware and cloud exfiltration campaigns:
 
 ```text
 ============================================================================
