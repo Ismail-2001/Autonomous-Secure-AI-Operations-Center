@@ -7,6 +7,7 @@ Provides direct webhook and event collector ingestion endpoints for:
 - Generic SIEM / Syslog Forwarders
 """
 
+import hmac
 import json
 from typing import Any, Dict, List, Optional, Union
 
@@ -98,11 +99,21 @@ async def _process_and_dispatch_alert(alert: NormalizedSecurityAlert) -> Dict[st
 
 
 def _verify_token(provided_token: Optional[str], expected_secret: Optional[Any], name: str) -> None:
-    """Validate incoming webhook token if configured in production."""
+    """Validate incoming webhook token using constant-time comparison.
+    
+    Fails closed in production if secrets are unconfigured.
+    """
     if expected_secret is None:
+        if settings.ENVIRONMENT == "production":
+            logger.error("siem_ingest_secret_unconfigured_in_production", integration=name)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"{name} ingestion endpoint is unconfigured in production",
+            )
         return  # In dev / unconfigured mode, allow incoming telemetry
+
     expected = expected_secret.get_secret_value() if hasattr(expected_secret, "get_secret_value") else str(expected_secret)
-    if not provided_token or provided_token.strip() != expected.strip():
+    if not provided_token or not hmac.compare_digest(provided_token.strip(), expected.strip()):
         logger.warning("siem_ingest_token_rejected", integration=name)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

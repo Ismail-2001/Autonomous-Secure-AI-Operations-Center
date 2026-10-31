@@ -95,10 +95,13 @@ class ConnectionManager:
 
         # 2. Redis Pub/Sub publish for multi-replica pod synchronization
         try:
+            import inspect
             import json
             from src.asoc.core.redis_client import get_redis
 
             r = get_redis()
+            if inspect.isawaitable(r):
+                r = await r
             if r is not None:
                 await r.publish("asoc:threat-feed:pubsub", json.dumps(message))
         except Exception as e:
@@ -107,10 +110,13 @@ class ConnectionManager:
     async def start_pubsub_listener(self) -> None:
         """Subscribe to Redis Pub/Sub channel for multi-replica WebSocket synchronization."""
         try:
+            import inspect
             import json
             from src.asoc.core.redis_client import get_redis
 
             r = get_redis()
+            if inspect.isawaitable(r):
+                r = await r
             if r is None:
                 return
             pubsub = r.pubsub()
@@ -170,12 +176,20 @@ async def lifespan(app: FastAPI):
         logger.warning("initial_admin_seed_notice", message=str(e))
 
     ps_task = asyncio.create_task(manager.start_pubsub_listener())
-    bg = asyncio.create_task(background_telemetry())
-    tf = asyncio.create_task(threat_feedsimulation())
+    bg = None
+    tf = None
+    sim_enabled = os.getenv("ENABLE_SIMULATION_FEED", "false").lower() in ("true", "1", "yes")
+    if sim_enabled or settings.ENVIRONMENT == "development":
+        bg = asyncio.create_task(background_telemetry())
+        tf = asyncio.create_task(threat_feedsimulation())
+
     yield
+
     ps_task.cancel()
-    bg.cancel()
-    tf.cancel()
+    if bg:
+        bg.cancel()
+    if tf:
+        tf.cancel()
     await close_db_pool()
     await close_message_bus()
     logger.info("app_stopped")
@@ -344,18 +358,33 @@ async def websocket_endpoint(
 
     try:
         while True:
-            data = await websocket.receive_text()
+            raw_data = await websocket.receive_text()
 
-            if data == "PONG":
+            if raw_data == "PONG":
                 continue
 
-            if data == "START_SIMULATION":
+            command_type = ""
+            payload = {}
+            try:
+                import json
+
+                parsed = json.loads(raw_data)
+                if isinstance(parsed, dict):
+                    command_type = parsed.get("type", "")
+                    payload = parsed
+            except (json.JSONDecodeError, ValueError):
+                pass
+
+            if not command_type:
+                command_type = raw_data.strip()
+
+            if command_type == "START_SIMULATION":
                 if current_task:
                     current_task.cancel()
                 permission_event.clear()
                 current_task = asyncio.create_task(run_simulation(permission_event))
 
-            elif data == "APPROVE_ACTION":
+            elif command_type == "APPROVE_ACTION":
                 permission_event.set()
                 await manager.broadcast(
                     {
@@ -365,10 +394,25 @@ async def websocket_endpoint(
                         "status": "approved",
                         "message": "Human operator authorized action.",
                         "severity": "low",
+                        "action_id": payload.get("id"),
                     }
                 )
 
-            elif data == "STOP_SIMULATION":
+            elif command_type == "DENY_ACTION":
+                permission_event.clear()
+                await manager.broadcast(
+                    {
+                        "id": str(uuid.uuid4()),
+                        "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
+                        "agent": "System",
+                        "status": "denied",
+                        "message": "Human operator denied action.",
+                        "severity": "low",
+                        "action_id": payload.get("id"),
+                    }
+                )
+
+            elif command_type == "STOP_SIMULATION":
                 if current_task:
                     current_task.cancel()
                     current_task = None

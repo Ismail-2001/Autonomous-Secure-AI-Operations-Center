@@ -13,7 +13,7 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:report": "playwright show-report",
-    "generate:types": "datamodel-code_generator --input ../../src/asoc --output types/generated --output-model-type pydantic_v2.BaseModel"
+    "generate:types": "datamodel-code_generator --input ../src/asoc --output types/generated --output-model-type pydantic_v2.BaseModel"
   },
   "dependencies": {
     "@tanstack/react-query": "^5",

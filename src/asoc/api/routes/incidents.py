@@ -38,12 +38,21 @@ class ResponseActionRequest(BaseModel):
 
 @router.get("/incidents", dependencies=[Depends(require_jwt)])
 async def list_incidents(limit: int = Query(20, ge=1, le=100)):
-    from src.asoc.core.db_queries import get_incidents
-
     try:
         return await get_incidents(limit=limit)
-    except Exception:
+    except Exception as e:
         from datetime import datetime, timezone
+        from fastapi import HTTPException, status
+        from src.asoc.core.config import settings
+        from src.asoc.core.logging import get_logger
+
+        logger = get_logger("asoc.routes.incidents")
+        logger.error("list_incidents_failed", error=str(e))
+        if settings.ENVIRONMENT == "production":
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Incident retrieval service temporarily unavailable",
+            )
 
         return {
             "incidents": [

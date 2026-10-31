@@ -1,10 +1,14 @@
 """Dashboard statistics routes."""
 
-from fastapi import Depends
+from fastapi import Depends, HTTPException, status
 
 from src.asoc.core.auth import require_jwt
+from src.asoc.core.config import settings
+from src.asoc.core.logging import get_logger
 
 from . import router
+
+logger = get_logger("asoc.routes.dashboard")
 
 
 @router.get("/dashboard/stats", dependencies=[Depends(require_jwt)])
@@ -13,7 +17,13 @@ async def dashboard_stats():
 
     try:
         return await get_dashboard_stats()
-    except Exception:
+    except Exception as e:
+        logger.error("dashboard_stats_failed", error=str(e))
+        if settings.ENVIRONMENT == "production":
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Database statistics service temporarily unavailable",
+            )
         return {
             "active_threats": 3,
             "threats_neutralized": 142,
@@ -35,7 +45,13 @@ async def agents_status():
 
     try:
         return await get_agent_status()
-    except Exception:
+    except Exception as e:
+        logger.error("agent_status_failed", error=str(e))
+        if settings.ENVIRONMENT == "production":
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Agent monitoring service temporarily unavailable",
+            )
         now = datetime.now(timezone.utc).isoformat()
         return {
             "agents": [

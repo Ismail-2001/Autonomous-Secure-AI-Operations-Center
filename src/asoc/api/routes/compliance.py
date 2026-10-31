@@ -38,7 +38,18 @@ async def compliance_report():
             "manifest_sha256": package.manifest_sha256,
             "trend": "improving" if package.overall_score >= 85 else "stable",
         }
-    except Exception:
+    except Exception as e:
+        from src.asoc.core.config import settings
+        from src.asoc.core.logging import get_logger
+        from fastapi import HTTPException, status
+
+        logger = get_logger("asoc.routes.compliance")
+        logger.error("compliance_report_failed", error=str(e))
+        if settings.ENVIRONMENT == "production":
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Compliance audit engine temporarily unavailable",
+            )
         return {
             "score": 88,
             "controls": [
