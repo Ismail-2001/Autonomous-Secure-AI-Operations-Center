@@ -30,13 +30,9 @@ if ! kubectl get namespace cert-manager &> /dev/null; then
     kubectl wait --namespace cert-manager --for=condition=ready pod --selector=app.kubernetes.io/instance=cert-manager --timeout=120s
 fi
 
-# 3. Create A-SOC Namespace
-kubectl apply -f - <<EOF
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: asoc
-EOF
+# 3. Create A-SOC Namespace, Secrets & ConfigMap
+echo "📦 Configuring Namespace, Secrets & ConfigMaps..."
+kubectl apply -f k8s/namespace.yaml
 
 # 4. Create ClusterIssuer for Let's Encrypt
 kubectl apply -f - <<EOF

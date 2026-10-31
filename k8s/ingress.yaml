@@ -39,6 +39,13 @@ spec:
             name: asoc-backend
             port:
               number: 9002
+      - path: /health
+        pathType: Prefix
+        backend:
+          service:
+            name: asoc-backend
+            port:
+              number: 9002
       - path: /
         pathType: Prefix
         backend:

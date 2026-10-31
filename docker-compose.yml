@@ -136,7 +136,7 @@ services:
       AZURE_CLIENT_ID: ${AZURE_CLIENT_ID}
       AZURE_CLIENT_SECRET: ${AZURE_CLIENT_SECRET}
       AZURE_SUBSCRIPTION_ID: ${AZURE_SUBSCRIPTION_ID}
-      WS_API_TOKEN: ${WS_API_TOKEN:-prod-token-change-me}
+      WS_API_TOKEN: ${WS_API_TOKEN:-a-soc-secure-ws-token-2026}
       SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL}
       TEAMS_WEBHOOK_URL: ${TEAMS_WEBHOOK_URL}
       JIRA_URL: ${JIRA_URL}
@@ -260,9 +260,9 @@ services:
       dockerfile: Dockerfile
     container_name: asoc-dashboard
     environment:
-      NEXT_PUBLIC_API_URL: http://backend:9002
-      NEXT_PUBLIC_WS_URL: ws://backend:9002
-      WS_API_TOKEN: ${WS_API_TOKEN:-2_o5YOn3fgSO-gxB59jL9zBi1dvUCjx3}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:9002}
+      NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-ws://localhost:9002/ws/threat-feed}
+      WS_API_TOKEN: ${WS_API_TOKEN:-a-soc-secure-ws-token-2026}
     ports:
       - "3000:3000"
     depends_on:

@@ -18,11 +18,19 @@ type: Opaque
 #   postgres-password: <strong-password>
 #   hmac-secret: <random-32-char-string>
 #   ws-api-token: <random-32-char-string>
-#   openai-api-key: <your-openai-key>
+#   jwt-secret-key: <random-64-char-string>
+#   database-url: <full-postgres-connection-string>
+#   redis-url: <full-redis-connection-string>
 stringData:
   postgres-password: "CHANGE_ME_IN_PRODUCTION"
   hmac-secret: "CHANGE_ME_IN_PRODUCTION"
   ws-api-token: "CHANGE_ME_IN_PRODUCTION"
+  jwt-secret-key: "CHANGE_ME_IN_PRODUCTION"
+  database-url: "postgresql+asyncpg://asoc_user:CHANGE_ME_IN_PRODUCTION@postgres:5432/asoc_db"
+  redis-url: "redis://redis:6379/0"
+  openai-api-key: ""
+  groq-api-key: ""
+  deepseek-api-key: ""
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -30,8 +38,10 @@ metadata:
   name: asoc-config
   namespace: asoc
 data:
-  DATABASE_URL: "postgresql://asoc_user:$(POSTGRES_PASSWORD)@postgres:5432/asoc_db"
-  REDIS_URL: "redis://redis:6379/0"
   OPA_URL: "http://opa:8181"
   CORS_ORIGINS: "https://asoc.yourdomain.com"
   LOG_LEVEL: "info"
+  LLM_PROVIDER: "openai"
+  LLM_MODEL: "gpt-4"
+  DB_POOL_MIN_SIZE: "2"
+  DB_POOL_MAX_SIZE: "10"

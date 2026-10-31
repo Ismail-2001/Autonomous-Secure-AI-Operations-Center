@@ -12,4 +12,8 @@ fi
 
 mkdir -p /app/data || true
 
-exec uvicorn asoc.api.app:app --host 0.0.0.0 --port 9002 --workers 2 --limit-concurrency 100
+PORT="${PORT:-9002}"
+WORKERS="${WEB_CONCURRENCY:-2}"
+
+echo "Starting A-SOC API service on port ${PORT} with ${WORKERS} workers..."
+exec uvicorn src.asoc.api.app:app --host 0.0.0.0 --port "${PORT}" --workers "${WORKERS}" --limit-concurrency 100

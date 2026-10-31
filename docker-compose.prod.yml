@@ -57,6 +57,7 @@ services:
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      WS_API_TOKEN: ${WS_API_TOKEN}
       CORS_ORIGINS: ${CORS_ORIGINS:-https://${DOMAIN:-asoc.example.com}}
       DB_POOL_MIN_SIZE: "2"
       DB_POOL_MAX_SIZE: "10"
@@ -143,6 +144,7 @@ services:
     environment:
       NEXT_PUBLIC_API_URL: https://${DOMAIN:-asoc.example.com}
       NEXT_PUBLIC_WS_URL: wss://${DOMAIN:-asoc.example.com}/ws/threat-feed
+      WS_API_TOKEN: ${WS_API_TOKEN}
     depends_on:
       - backend
     healthcheck:

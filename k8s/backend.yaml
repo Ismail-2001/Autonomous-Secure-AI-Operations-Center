@@ -1,26 +1,18 @@
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: asoc
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: asoc-secrets
-  namespace: asoc
-  annotations:
-    sealedsecrets.bitnami.com/managed: "true"
-type: Opaque
-# Secrets are managed via SealedSecret or External Secrets Operator
-# Use kubeseal to encrypt: kubeseal < raw-secret.yaml > sealed-secret.yaml
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: asoc-backend
   namespace: asoc
+  labels:
+    app: asoc-backend
+    component: api-server
 spec:
   replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   selector:
     matchLabels:
       app: asoc-backend
@@ -29,30 +21,113 @@ spec:
       labels:
         app: asoc-backend
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
       containers:
       - name: backend
-        image: YOUR_REGISTRY/asoc-backend:latest
+        image: ghcr.io/yourorg/asoc-backend:latest
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 9002
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
         env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: asoc-secrets
+              key: database-url
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: asoc-secrets
+              key: redis-url
+        - name: HMAC_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: asoc-secrets
+              key: hmac-secret
+        - name: WS_API_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: asoc-secrets
+              key: ws-api-token
+        - name: JWT_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: asoc-secrets
+              key: jwt-secret-key
+              optional: true
         - name: OPENAI_API_KEY
           valueFrom:
             secretKeyRef:
               name: asoc-secrets
               key: openai-api-key
-        - name: DATABASE_URL
-          value: "postgresql://asoc_user:$(POSTGRES_PASSWORD)@postgres:5432/asoc_db"
-        - name: REDIS_URL
-          value: "redis://redis:6379/0"
+              optional: true
+        - name: GROQ_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: asoc-secrets
+              key: groq-api-key
+              optional: true
+        - name: DEEPSEEK_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: asoc-secrets
+              key: deepseek-api-key
+              optional: true
         - name: OPA_URL
-          value: "http://opa:8181"
+          valueFrom:
+            configMapKeyRef:
+              name: asoc-config
+              key: OPA_URL
+        - name: CORS_ORIGINS
+          valueFrom:
+            configMapKeyRef:
+              name: asoc-config
+              key: CORS_ORIGINS
+        - name: LLM_PROVIDER
+          valueFrom:
+            configMapKeyRef:
+              name: asoc-config
+              key: LLM_PROVIDER
+              optional: true
+        - name: LLM_MODEL
+          valueFrom:
+            configMapKeyRef:
+              name: asoc-config
+              key: LLM_MODEL
+              optional: true
+        - name: DB_POOL_MIN_SIZE
+          valueFrom:
+            configMapKeyRef:
+              name: asoc-config
+              key: DB_POOL_MIN_SIZE
+              optional: true
+        - name: DB_POOL_MAX_SIZE
+          valueFrom:
+            configMapKeyRef:
+              name: asoc-config
+              key: DB_POOL_MAX_SIZE
+              optional: true
         resources:
           requests:
             memory: "512Mi"
             cpu: "250m"
           limits:
             memory: "1Gi"
-            cpu: "500m"
+            cpu: "1000m"
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: data
+          mountPath: /app/data
         livenessProbe:
           httpGet:
             path: /health
@@ -65,6 +140,11 @@ spec:
             port: 9002
           initialDelaySeconds: 5
           periodSeconds: 5
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: data
+        emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
